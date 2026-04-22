@@ -99,9 +99,11 @@ async fn handle_malformed_variants() {
 }
 
 #[tokio::test]
-async fn app_limit_reached_on_21st_operator_slot() {
-    // Deploy 20 stub programs registering with the same operator, then a 21st
-    // must fail AppLimitReached.
+async fn operator_slot_griefing_resistant() {
+    // After the /review fix: `apps_by_owner[req.operator]` is no longer capped.
+    // A griefer cannot exhaust a victim's operator-slot budget by registering
+    // stub programs that name the victim as operator. `apps_by_owner` is still
+    // populated for UX lookup. Cost-to-deploy is the real anti-Sybil backstop.
     let system = init_system();
     for i in 0..25u64 {
         system.mint_to(300 + i, FUND);
@@ -109,7 +111,8 @@ async fn app_limit_reached_on_21st_operator_slot() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    for i in 0..20u64 {
+    // 21 registrations all attesting BOB as operator — none should fail.
+    for i in 0..21u64 {
         let handle = format!("app-{i:02}");
         program
             .registry()
@@ -119,25 +122,6 @@ async fn app_limit_reached_on_21st_operator_slot() {
             .unwrap()
             .unwrap();
     }
-
-    // 21st attesting BOB as operator fails.
-    let err = program
-        .registry()
-        .register_application(mk_register_req("app-20", BOB))
-        .with_actor_id((320u64).into())
-        .await
-        .unwrap()
-        .unwrap_err();
-    assert_eq!(err, RegistryError::AppLimitReached);
-
-    // 21st attesting a FRESH operator works — the cap is per-operator, not global.
-    program
-        .registry()
-        .register_application(mk_register_req("app-20", CAROL))
-        .with_actor_id((320u64).into())
-        .await
-        .unwrap()
-        .unwrap();
 }
 
 #[tokio::test]

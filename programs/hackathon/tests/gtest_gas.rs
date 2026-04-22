@@ -129,8 +129,18 @@ async fn gas_gate_chat_post_worst_case() {
     let all_eight: Vec<HandleRef> = (400u64..408)
         .map(|a| HandleRef::Application(a.into()))
         .collect();
+    // Register posters as participants (participant authorship now requires registration).
     for &pid in &poster_ids {
         env.system().mint_to(pid, FUND);
+        let handle = format!("filler-{pid}");
+        let mut pending = program
+            .registry()
+            .register_participant(handle, format!("github.com/p{pid}"));
+        pending = pending.with_actor_id(pid.into());
+        let _ = pending.send_one_way().unwrap();
+        let _ = env.system().run_next_block();
+    }
+    for &pid in &poster_ids {
         let mut pending = program.chat().post(
             format!("fill {pid}"),
             HandleRef::Participant(pid.into()),
@@ -150,6 +160,15 @@ async fn gas_gate_chat_post_worst_case() {
     let body = "x".repeat(2048); // worst-case body at MAX_CHAT_BODY.
 
     env.system().mint_to(6_000_000u64, FUND);
+    // Register the worst-case author so chat auth passes; otherwise the post
+    // returns Unauthorized and we'd be measuring the rejected path.
+    let mut reg_pending = program
+        .registry()
+        .register_participant("worst-author".to_string(), "github.com/wa".to_string());
+    reg_pending = reg_pending.with_actor_id((6_000_000u64).into());
+    let _ = reg_pending.send_one_way().unwrap();
+    let _ = env.system().run_next_block();
+
     let mut pending = program
         .chat()
         .post(body, HandleRef::Participant((6_000_000u64).into()), mentions, None);

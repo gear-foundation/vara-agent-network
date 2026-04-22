@@ -102,6 +102,13 @@ impl<'a> ChatService<'a> {
                 if *p != caller {
                     return Err(ChatError::Unauthorized);
                 }
+                // Require prior participant registration. Matches user journey
+                // spec ("agent registers as participant, then chats") and
+                // prevents unregistered-wallet chat spam.
+                let reg = self.registry.borrow();
+                if !reg.participants.contains_key(p) {
+                    return Err(ChatError::Unauthorized);
+                }
             }
             HandleRef::Application(a) => {
                 let reg = self.registry.borrow();
@@ -133,12 +140,24 @@ impl<'a> ChatService<'a> {
         // Dedup mentions preserving order.
         let dedup_mentions = dedup_preserve_order(&mentions);
 
-        // Allocate id.
-        chat.next_message_id = chat.next_message_id.saturating_add(1);
+        // Strip orphan mentions (HandleRefs not in the registry) before ring
+        // append. The MessagePosted event still carries the original mentions
+        // list for auditability; only inbox writes are filtered. This closes
+        // a DoS vector where attackers could create permanent junk inbox
+        // state for fabricated HandleRefs.
+        let registered_mentions = filter_registered_mentions(&dedup_mentions, &self.registry.borrow());
+
+        // Allocate id. `checked_add` panics on overflow → whole message
+        // reverts per Gear transaction boundary. Saturating would silently
+        // reuse u64::MAX for all future messages, breaking uniqueness.
+        chat.next_message_id = chat
+            .next_message_id
+            .checked_add(1)
+            .expect("next_message_id overflow");
         let msg_id = chat.next_message_id;
 
         let block = exec::block_height();
-        for recipient in &dedup_mentions {
+        for recipient in &registered_mentions {
             let key = recipient.encode();
             let inbox = chat.mention_inboxes.entry(key).or_default();
             inbox.latest_seq = msg_id;
@@ -198,7 +217,12 @@ impl<'a> ChatService<'a> {
             };
         };
 
-        let overflow = since_seq > 0 && since_seq < inbox.oldest_retained_seq;
+        // Off-by-one matters here. `since_seq` is "last msg_id the client saw."
+        // They want msgs where msg_id > since_seq. Overflow means we can't give
+        // them the next one after since_seq because it was evicted. That means
+        // (since_seq + 1) < oldest_retained_seq. `since_seq == oldest - 1` is
+        // NOT a gap: next msg is `oldest`, which we have.
+        let overflow = since_seq > 0 && since_seq + 1 < inbox.oldest_retained_seq;
         let headers: Vec<MentionHeader> = inbox
             .ring
             .iter()
@@ -207,10 +231,17 @@ impl<'a> ChatService<'a> {
             .cloned()
             .collect();
 
-        let next_seq = headers
-            .last()
-            .map(|h| h.msg_id)
-            .unwrap_or(inbox.latest_seq);
+        // Cursor semantics: if we returned headers, advance to last seen msg_id.
+        // If the query returned zero (limit=0 OR since_seq >= latest_seq OR no
+        // matching rows), leave the cursor at `since_seq` so clients trusting
+        // the cursor do not skip past unread mentions.
+        let next_seq = if let Some(last) = headers.last() {
+            last.msg_id
+        } else if limit == 0 {
+            since_seq
+        } else {
+            inbox.latest_seq
+        };
 
         MentionsPage {
             headers,
@@ -232,4 +263,21 @@ fn dedup_preserve_order(items: &[HandleRef]) -> Vec<HandleRef> {
         }
     }
     out
+}
+
+/// Keep only HandleRefs that refer to a registered participant or application.
+/// Spec: "Orphan mention — strip silently before insert; event still carries
+/// original list for auditability."
+fn filter_registered_mentions(
+    mentions: &[HandleRef],
+    registry: &RegistryState,
+) -> Vec<HandleRef> {
+    mentions
+        .iter()
+        .filter(|r| match r {
+            HandleRef::Participant(p) => registry.participants.contains_key(p),
+            HandleRef::Application(a) => registry.applications.contains_key(a),
+        })
+        .cloned()
+        .collect()
 }

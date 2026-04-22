@@ -162,14 +162,15 @@ impl<'a> RegistryService<'a> {
         if reg.applications.contains_key(&program_id) {
             return Err(RegistryError::AlreadyRegistered);
         }
-        let operator_slots = reg
-            .apps_by_owner
-            .get(&req.operator)
-            .map(|v| v.len())
-            .unwrap_or(0);
-        if operator_slots >= MAX_APPS_PER_OPERATOR {
-            return Err(RegistryError::AppLimitReached);
-        }
+        // NOTE: we intentionally do NOT cap `apps_by_owner[req.operator]`.
+        // Capping on an unauthenticated field lets any attacker burn a victim
+        // wallet's operator-slot budget by spamming registrations that name
+        // the victim. Cost-to-deploy (each program needs its own ActorId via
+        // real code upload on mainnet) is the real anti-Sybil backstop.
+        // `apps_by_owner` still populated for UX lookup ("show @alice's agents").
+        // `MAX_APPS_PER_OPERATOR` constant and `AppLimitReached` enum variant
+        // kept for IDL stability but no longer emitted.
+        let _ = MAX_APPS_PER_OPERATOR;
 
         let app = Application {
             program_id,

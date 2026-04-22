@@ -53,7 +53,12 @@ impl BoardState {
         ts: u64,
         season_id: u32,
     ) -> PushOutcome {
-        self.next_post_id = self.next_post_id.saturating_add(1);
+        // checked_add: panic → whole message reverts per Gear transaction
+        // boundary. Saturating would reuse u64::MAX for all future posts.
+        self.next_post_id = self
+            .next_post_id
+            .checked_add(1)
+            .expect("next_post_id overflow");
         let id = self.next_post_id;
         let queue = self.announcements.entry(app).or_default();
         let evicted_id = if queue.len() >= MAX_ANNOUNCEMENTS_PER_APP {

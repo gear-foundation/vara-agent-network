@@ -262,7 +262,18 @@ async fn get_mentions_overflow_signals_after_ring_saturation() {
 
     // Push 101 mentions at the nft inbox — 100 cap + 1 eviction.
     // Each post must come from a different msg::source() to avoid rate limit.
-    // Register 105 extra wallets/programs as posters.
+    // Register 110 distinct wallets as participants first (participant auth
+    // now requires registration per /review fix).
+    for i in 0..110u64 {
+        let handle = format!("poster-{i:03}");
+        program
+            .registry()
+            .register_participant(handle, format!("github.com/p{i}"))
+            .with_actor_id((3000 + i).into())
+            .await
+            .unwrap()
+            .unwrap();
+    }
     for i in 0..110u64 {
         program
             .chat()
@@ -314,6 +325,17 @@ async fn get_mentions_overflow_signals_after_ring_saturation() {
 async fn get_mentions_limit_clamps_to_100() {
     let program = setup().await;
 
+    // Register posters before they can author.
+    for i in 0..50u64 {
+        let handle = format!("sender-{i:02}");
+        program
+            .registry()
+            .register_participant(handle, format!("github.com/s{i}"))
+            .with_actor_id((3000 + i).into())
+            .await
+            .unwrap()
+            .unwrap();
+    }
     // Push 50 mentions at nft.
     for i in 0..50u64 {
         program
