@@ -2,7 +2,7 @@
 // only; Registration comes from Registry.ApplicationRegistered auto-announce),
 // AnnouncementEdited, AnnouncementArchived. All payloads carry full content
 // under v1.1 — no state refetch.
-import { eq, sql } from "drizzle-orm";
+import { eq } from "drizzle-orm";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import {
@@ -12,8 +12,13 @@ import {
   type AnnouncementPosted,
   type IdentityCardUpdated,
 } from "../helpers/event-payloads.js";
-import type { HandlerContext } from "./common.js";
-import { isFirstTimeEvent, makeRowId } from "./common.js";
+import {
+  bumpMetric,
+  decMetric,
+  isFirstTimeEvent,
+  makeRowId,
+  type HandlerContext,
+} from "./common.js";
 
 export async function handleIdentityCardUpdated(
   db: Db,
@@ -78,8 +83,6 @@ export async function handleAnnouncementPosted(
     })
     .onConflictDoUpdate({
       target: schema.announcements.id,
-      // Idempotent rewrite on replay — body/tags/title might have been edited
-      // later but the Posted event is the authoritative initial state.
       set: {
         title: payload.title,
         body: payload.body,
@@ -90,28 +93,8 @@ export async function handleAnnouncementPosted(
       },
     });
 
-  // postsActive metric bump — gated by isFirstTimeEvent so replay doesn't
-  // double-count (review finding #3).
-  if (!(await isFirstTimeEvent(db, `board:posted:${makeRowId(ctx)}`))) {
-    return;
-  }
-  const metricsId = `${payload.app}:${payload.season_id}`;
-  await db
-    .insert(schema.appMetrics)
-    .values({
-      id: metricsId,
-      applicationId: payload.app,
-      seasonId: payload.season_id,
-      postsActive: 1,
-      updatedAt: postedAt,
-    })
-    .onConflictDoUpdate({
-      target: schema.appMetrics.id,
-      set: {
-        postsActive: sql`${schema.appMetrics.postsActive} + 1`,
-        updatedAt: postedAt,
-      },
-    });
+  if (!(await isFirstTimeEvent(db, `board:posted:${makeRowId(ctx)}`))) return;
+  await bumpMetric(db, payload.app, payload.season_id, "postsActive", postedAt);
 }
 
 export async function handleAnnouncementEdited(
@@ -141,16 +124,6 @@ export async function handleAnnouncementArchived(
     .set({ archived: true, archivedReason: payload.reason })
     .where(eq(schema.announcements.id, id));
 
-  // postsActive metric decrement — gated by isFirstTimeEvent so replay doesn't
-  // decrement twice (review finding #3).
-  if (!(await isFirstTimeEvent(db, `board:archived:${makeRowId(ctx)}`))) {
-    return;
-  }
-  const metricsId = `${payload.app}:${payload.season_id}`;
-  await db
-    .update(schema.appMetrics)
-    .set({
-      postsActive: sql`GREATEST(${schema.appMetrics.postsActive} - 1, 0)`,
-    })
-    .where(eq(schema.appMetrics.id, metricsId));
+  if (!(await isFirstTimeEvent(db, `board:archived:${makeRowId(ctx)}`))) return;
+  await decMetric(db, payload.app, payload.season_id, "postsActive");
 }

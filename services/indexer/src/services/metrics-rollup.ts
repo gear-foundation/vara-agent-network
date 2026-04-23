@@ -1,16 +1,9 @@
 // Daily metrics rollup. Idempotent; reruns of the same date produce identical
 // rows via UPSERT on (season_id, date). Drives the stakeholder dashboard and
 // the north-star metric: extrinsics/day on hackathon programs.
-//
-// Design choice: rollup reads from append-only source tables (chat_messages,
-// announcements, interactions) + summary tables (applications). No mutation
-// of source data; the rollup is a pure derived projection.
-//
-// Replay safety: the handler-level event_processed dedup already prevents
-// double-counting upstream. The rollup itself is a set of SQL aggregates +
-// UPSERT, so running it N times for the same date yields the same answer.
 
 import { and, count, countDistinct, eq, gte, lt, sql } from "drizzle-orm";
+import { ORIGIN } from "../handlers/common.js";
 import { log } from "../helpers/logger.js";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
@@ -21,11 +14,11 @@ export type DateKey = string;
 export interface RollupWindow {
   seasonId: number;
   date: DateKey;
-  /** Inclusive lower bound: 00:00:00.000 UTC on `date`, ms since epoch. */
   startMs: bigint;
-  /** Exclusive upper bound: 00:00:00.000 UTC on `date+1`, ms since epoch. */
   endMs: bigint;
 }
+
+const DAY_MS = 86_400_000n;
 
 export function windowForDate(seasonId: number, date: DateKey): RollupWindow {
   const startMs = BigInt(Date.UTC(
@@ -33,15 +26,12 @@ export function windowForDate(seasonId: number, date: DateKey): RollupWindow {
     Number(date.slice(5, 7)) - 1,
     Number(date.slice(8, 10)),
   ));
-  const endMs = startMs + 86_400_000n;
-  return { seasonId, date, startMs, endMs };
+  return { seasonId, date, startMs, endMs: startMs + DAY_MS };
 }
 
 export function yesterdayUtc(): DateKey {
-  const d = new Date(Date.now() - 86_400_000);
-  return d.toISOString().slice(0, 10);
+  return new Date(Date.now() - Number(DAY_MS)).toISOString().slice(0, 10);
 }
-
 export function todayUtc(): DateKey {
   return new Date().toISOString().slice(0, 10);
 }
@@ -51,193 +41,155 @@ export function todayUtc(): DateKey {
 // ---------------------------------------------------------------------------
 
 export async function rollupNetworkMetrics(db: Db, w: RollupWindow): Promise<void> {
-  // extrinsicsOnHackathonPrograms: sum of ingested activity rows during the
-  // day. Each row represents one decoded on-chain action.
-  const [chatCount] = await db
-    .select({ n: count() })
-    .from(schema.chatMessages)
-    .where(and(
+  // All six aggregates are independent reads — fire them in parallel.
+  const [
+    chatCount,
+    interactionCount,
+    announcementCount,
+    deployedCount,
+    uniqueWallets,
+    progInit,
+  ] = await Promise.all([
+    db.select({ n: count() }).from(schema.chatMessages).where(and(
       eq(schema.chatMessages.seasonId, w.seasonId),
       gte(schema.chatMessages.substrateBlockTs, w.startMs),
       lt(schema.chatMessages.substrateBlockTs, w.endMs),
-    ));
-
-  const [interactionCount] = await db
-    .select({ n: count() })
-    .from(schema.interactions)
-    .where(and(
+    )).then((r) => r[0]?.n ?? 0),
+    db.select({ n: count() }).from(schema.interactions).where(and(
       eq(schema.interactions.seasonId, w.seasonId),
       gte(schema.interactions.substrateBlockTs, w.startMs),
       lt(schema.interactions.substrateBlockTs, w.endMs),
-    ));
-
-  // Announcements: posted_at is domain time (ms). Use it as the day bucket.
-  const [announcementCount] = await db
-    .select({ n: count() })
-    .from(schema.announcements)
-    .where(and(
+    )).then((r) => r[0]?.n ?? 0),
+    db.select({ n: count() }).from(schema.announcements).where(and(
       eq(schema.announcements.seasonId, w.seasonId),
       gte(schema.announcements.postedAt, w.startMs),
       lt(schema.announcements.postedAt, w.endMs),
-    ));
-
-  const extrinsics = (chatCount?.n ?? 0) + (interactionCount?.n ?? 0) + (announcementCount?.n ?? 0);
-
-  // Deployed programs, cumulative at end of day.
-  const [deployedCount] = await db
-    .select({ n: count() })
-    .from(schema.applications)
-    .where(and(
+    )).then((r) => r[0]?.n ?? 0),
+    db.select({ n: count() }).from(schema.applications).where(and(
       eq(schema.applications.seasonId, w.seasonId),
       lt(schema.applications.registeredAt, w.endMs),
-    ));
-
-  // Unique wallets: distinct `caller` from wallet_initiated interactions today.
-  const [uniqueWallets] = await db
-    .select({ n: countDistinct(schema.interactions.caller) })
-    .from(schema.interactions)
-    .where(and(
+    )).then((r) => r[0]?.n ?? 0),
+    db.select({ n: countDistinct(schema.interactions.caller) }).from(schema.interactions).where(and(
       eq(schema.interactions.seasonId, w.seasonId),
-      eq(schema.interactions.origin, "wallet_initiated"),
+      eq(schema.interactions.origin, ORIGIN.Wallet),
       gte(schema.interactions.substrateBlockTs, w.startMs),
       lt(schema.interactions.substrateBlockTs, w.endMs),
-    ));
-
-  // Cross-program call %: program_initiated / total interactions in the day.
-  const [progInit] = await db
-    .select({ n: count() })
-    .from(schema.interactions)
-    .where(and(
+    )).then((r) => r[0]?.n ?? 0),
+    db.select({ n: count() }).from(schema.interactions).where(and(
       eq(schema.interactions.seasonId, w.seasonId),
-      eq(schema.interactions.origin, "program_initiated"),
+      eq(schema.interactions.origin, ORIGIN.Program),
       gte(schema.interactions.substrateBlockTs, w.startMs),
       lt(schema.interactions.substrateBlockTs, w.endMs),
-    ));
-  const totalInteractions = interactionCount?.n ?? 0;
-  const crossPct = totalInteractions > 0
-    ? (progInit?.n ?? 0) / totalInteractions
-    : 0;
+    )).then((r) => r[0]?.n ?? 0),
+  ]);
+
+  const extrinsics = chatCount + interactionCount + announcementCount;
+  const crossPct = interactionCount > 0 ? progInit / interactionCount : 0;
 
   const id = `${w.seasonId}:${w.date}`;
   const updatedAt = BigInt(Date.now());
+  const row = {
+    extrinsicsOnHackathonPrograms: extrinsics,
+    deployedProgramCount: deployedCount,
+    uniqueWalletsCalling: uniqueWallets,
+    crossProgramCallPct: crossPct,
+    updatedAt,
+  };
   await db
     .insert(schema.networkMetrics)
-    .values({
-      id,
-      seasonId: w.seasonId,
-      date: w.date,
-      extrinsicsOnHackathonPrograms: extrinsics,
-      deployedProgramCount: deployedCount?.n ?? 0,
-      uniqueWalletsCalling: uniqueWallets?.n ?? 0,
-      crossProgramCallPct: crossPct,
-      updatedAt,
-    })
-    .onConflictDoUpdate({
-      target: schema.networkMetrics.id,
-      set: {
-        extrinsicsOnHackathonPrograms: extrinsics,
-        deployedProgramCount: deployedCount?.n ?? 0,
-        uniqueWalletsCalling: uniqueWallets?.n ?? 0,
-        crossProgramCallPct: crossPct,
-        updatedAt,
-      },
-    });
+    .values({ id, seasonId: w.seasonId, date: w.date, ...row })
+    .onConflictDoUpdate({ target: schema.networkMetrics.id, set: row });
 
   log.info("rolled up network_metrics", {
     season: w.seasonId,
     date: w.date,
     extrinsics,
-    deployed: deployedCount?.n ?? 0,
-    uniqueWallets: uniqueWallets?.n ?? 0,
+    deployed: deployedCount,
+    uniqueWallets,
     crossPct,
   });
 }
 
 // ---------------------------------------------------------------------------
 // AppMetrics rolling windows — per app, per season.
-//
-// Recomputes windowed metrics for every known application. Simple approach:
-// plain GROUP BY + SET for v1. At 1000s of apps this stays fast (≤1s total).
-// Scale out with a per-app partition or materialized view later.
 // ---------------------------------------------------------------------------
 
 export async function rollupAppMetrics(db: Db, asOfDate: DateKey, seasonId: number): Promise<void> {
-  const asOfWindow = windowForDate(seasonId, asOfDate);
-  const asOfEnd = asOfWindow.endMs;
+  const asOf = windowForDate(seasonId, asOfDate);
+  const asOfEnd = asOf.endMs;
 
-  // DAU wallet callers (last 7 days). callee-scoped count of distinct
-  // wallet_initiated callers within the window ending at asOfEnd.
-  const dauWindowStart = asOfEnd - 7n * 86_400_000n;
-  const dauRows = await db
-    .select({
-      callee: schema.interactions.callee,
-      n: countDistinct(schema.interactions.caller),
-    })
-    .from(schema.interactions)
-    .where(and(
-      eq(schema.interactions.seasonId, seasonId),
-      eq(schema.interactions.origin, "wallet_initiated"),
-      gte(schema.interactions.substrateBlockTs, dauWindowStart),
-      lt(schema.interactions.substrateBlockTs, asOfEnd),
-    ))
-    .groupBy(schema.interactions.callee);
+  // All set-based updates below derive from a CTE and apply in one round-trip
+  // per metric, independent of app count. Previous per-row loops were O(N RTT).
 
-  for (const row of dauRows) {
-    const id = `${row.callee}:${seasonId}`;
-    await db
-      .update(schema.appMetrics)
-      .set({
-        dauWalletCallers7d: row.n,
-        updatedAt: asOfEnd,
-      })
-      .where(eq(schema.appMetrics.id, id));
-  }
+  // DAU wallet callers (trailing 7d, ending at asOfEnd).
+  const dauStart = asOfEnd - 7n * DAY_MS;
+  await db.execute(sql`
+    UPDATE app_metrics m
+       SET dau_wallet_callers_7d = COALESCE(d.n, 0),
+           updated_at = ${asOfEnd}
+      FROM (
+        SELECT callee, COUNT(DISTINCT caller) AS n
+          FROM interactions
+         WHERE season_id = ${seasonId}
+           AND origin = ${ORIGIN.Wallet}
+           AND substrate_block_ts >= ${dauStart}
+           AND substrate_block_ts <  ${asOfEnd}
+         GROUP BY callee
+      ) d
+     WHERE m.season_id = ${seasonId}
+       AND m.application_id = d.callee
+  `);
 
-  // Time-to-first-integration: min(substrate_block) - applications.registered_at_block
-  // where caller = app_id. Note `registered_at` is domain time (ms), not a
-  // block number. For v1 we approximate: use min(substrate_block) absolute
-  // and store as "blocks since dawn-of-time" — useful as a comparable metric.
-  const firstIntRows = await db
-    .select({
-      caller: schema.interactions.caller,
-      firstBlock: sql<number>`min(${schema.interactions.substrateBlockNumber})`,
-    })
-    .from(schema.interactions)
-    .where(eq(schema.interactions.seasonId, seasonId))
-    .groupBy(schema.interactions.caller);
+  // First integration block per caller (absolute block, renamed from misleading
+  // "timeToFirstIntegrationBlocks" which implied a delta against registration).
+  await db.execute(sql`
+    UPDATE app_metrics m
+       SET first_integration_block = f.first_block,
+           updated_at = ${asOfEnd}
+      FROM (
+        SELECT caller, MIN(substrate_block_number) AS first_block
+          FROM interactions
+         WHERE season_id = ${seasonId}
+         GROUP BY caller
+      ) f
+     WHERE m.season_id = ${seasonId}
+       AND m.application_id = f.caller
+  `);
 
-  for (const row of firstIntRows) {
-    const id = `${row.caller}:${seasonId}`;
-    await db
-      .update(schema.appMetrics)
-      .set({
-        timeToFirstIntegrationBlocks: row.firstBlock,
-        updatedAt: asOfEnd,
-      })
-      .where(eq(schema.appMetrics.id, id));
-  }
-
-  // Call-graph density: for each app, distinct partners / (total apps in
-  // season − 1). Partners count lives in appMetrics.uniquePartners already;
-  // we compute density = uniquePartners / (n_apps - 1).
+  // Call-graph density: distinct partners / (total apps − 1). Null when
+  // there's only one app in the season (density is undefined there).
   const [{ n: totalApps } = { n: 0 }] = await db
     .select({ n: count() })
     .from(schema.applications)
     .where(eq(schema.applications.seasonId, seasonId));
-  const denom = Math.max(1, totalApps - 1);
-  await db
-    .update(schema.appMetrics)
-    .set({
-      callGraphDensity: sql`${schema.appMetrics.uniquePartners}::double precision / ${denom}`,
-      updatedAt: asOfEnd,
-    })
-    .where(eq(schema.appMetrics.seasonId, seasonId));
+  if (totalApps < 2) {
+    await db
+      .update(schema.appMetrics)
+      .set({ callGraphDensity: null, updatedAt: asOfEnd })
+      .where(eq(schema.appMetrics.seasonId, seasonId));
+  } else {
+    const denom = totalApps - 1;
+    await db
+      .update(schema.appMetrics)
+      .set({
+        callGraphDensity: sql`${schema.appMetrics.uniquePartners}::double precision / ${denom}`,
+        updatedAt: asOfEnd,
+      })
+      .where(eq(schema.appMetrics.seasonId, seasonId));
+  }
 
-  // Retention 7/14/21 — simplified definition: fraction of unique wallet
-  // callers on day D-N who also appear as callers on day D. Computed per
-  // callee (the app). Uses DISTINCT CALLER intersection.
+  // Retention 7/14/21 — fraction of wallet callers on day D-N who return on
+  // day D. Single UPDATE per window via a CTE; column mapped statically.
+  const retentionColumns = {
+    7: schema.appMetrics.retention7d,
+    14: schema.appMetrics.retention14d,
+    21: schema.appMetrics.retention21d,
+  } as const;
   for (const days of [7, 14, 21] as const) {
-    await computeRetention(db, seasonId, asOfDate, days);
+    const priorDate = new Date(Number(asOf.startMs) - days * Number(DAY_MS))
+      .toISOString().slice(0, 10);
+    const prior = windowForDate(seasonId, priorDate);
+    await computeRetention(db, seasonId, asOf, prior, retentionColumns[days].name);
   }
 
   log.info("rolled up app_metrics", { season: seasonId, asOfDate });
@@ -246,63 +198,43 @@ export async function rollupAppMetrics(db: Db, asOfDate: DateKey, seasonId: numb
 async function computeRetention(
   db: Db,
   seasonId: number,
-  asOfDate: DateKey,
-  days: 7 | 14 | 21,
+  asOf: RollupWindow,
+  prior: RollupWindow,
+  columnName: string,
 ): Promise<void> {
-  const asOf = windowForDate(seasonId, asOfDate);
-  const priorDate = new Date(Number(asOf.startMs) - days * 86_400_000).toISOString().slice(0, 10);
-  const prior = windowForDate(seasonId, priorDate);
-
-  // Per-callee: |callers on priorDay ∩ callers on asOfDay| / |callers on priorDay|.
-  // Single SQL: self-join interactions via a callee+caller keyset.
-  const column =
-    days === 7 ? "retention7d"
-    : days === 14 ? "retention14d"
-    : "retention21d";
-  const rows = await db.execute(sql`
+  // Single UPDATE joining a per-callee intersection ratio. columnName is a
+  // literal from a static mapping (7d/14d/21d) — safe to inject.
+  await db.execute(sql`
     WITH prior AS (
-      SELECT DISTINCT callee, caller
-      FROM interactions
-      WHERE season_id = ${seasonId}
-        AND origin = 'wallet_initiated'
-        AND substrate_block_ts >= ${prior.startMs}
-        AND substrate_block_ts <  ${prior.endMs}
+      SELECT DISTINCT callee, caller FROM interactions
+       WHERE season_id = ${seasonId}
+         AND origin = ${ORIGIN.Wallet}
+         AND substrate_block_ts >= ${prior.startMs}
+         AND substrate_block_ts <  ${prior.endMs}
     ),
     today AS (
-      SELECT DISTINCT callee, caller
-      FROM interactions
-      WHERE season_id = ${seasonId}
-        AND origin = 'wallet_initiated'
-        AND substrate_block_ts >= ${asOf.startMs}
-        AND substrate_block_ts <  ${asOf.endMs}
+      SELECT DISTINCT callee, caller FROM interactions
+       WHERE season_id = ${seasonId}
+         AND origin = ${ORIGIN.Wallet}
+         AND substrate_block_ts >= ${asOf.startMs}
+         AND substrate_block_ts <  ${asOf.endMs}
+    ),
+    ret AS (
+      SELECT p.callee,
+             CAST(COUNT(*) FILTER (WHERE t.caller IS NOT NULL) AS double precision)
+               / NULLIF(COUNT(*), 0) AS value
+        FROM prior p
+        LEFT JOIN today t ON t.callee = p.callee AND t.caller = p.caller
+       GROUP BY p.callee
     )
-    SELECT
-      p.callee AS callee,
-      CAST(COUNT(*) FILTER (WHERE t.caller IS NOT NULL) AS double precision) /
-        NULLIF(COUNT(*), 0) AS ret
-    FROM prior p
-    LEFT JOIN today t ON t.callee = p.callee AND t.caller = p.caller
-    GROUP BY p.callee
+    UPDATE app_metrics m
+       SET ${sql.identifier(columnName)} = COALESCE(ret.value, 0),
+           updated_at = ${asOf.endMs}
+      FROM ret
+     WHERE m.season_id = ${seasonId}
+       AND m.application_id = ret.callee
   `);
-  for (const row of rows.rows as Array<{ callee: string; ret: number | null }>) {
-    const id = `${row.callee}:${seasonId}`;
-    const ret = row.ret ?? 0;
-    await db.execute(sql`
-      UPDATE app_metrics
-         SET ${sql.identifier(camelToSnake(column))} = ${ret},
-             updated_at = ${asOf.endMs}
-       WHERE id = ${id}
-    `);
-  }
 }
-
-function camelToSnake(s: string): string {
-  return s.replace(/[A-Z]/g, (c) => `_${c.toLowerCase()}`);
-}
-
-// ---------------------------------------------------------------------------
-// Entrypoint
-// ---------------------------------------------------------------------------
 
 export async function runDailyRollup(
   db: Db,
@@ -310,6 +242,8 @@ export async function runDailyRollup(
   date: DateKey,
 ): Promise<void> {
   const window = windowForDate(seasonId, date);
-  await rollupNetworkMetrics(db, window);
-  await rollupAppMetrics(db, date, seasonId);
+  await Promise.all([
+    rollupNetworkMetrics(db, window),
+    rollupAppMetrics(db, date, seasonId),
+  ]);
 }

@@ -15,6 +15,13 @@
       "when": 1776939676972,
       "tag": "0001_daffy_lilandra",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776943501647,
+      "tag": "0002_heavy_spirit",
+      "breakpoints": true
     }
   ]
 }

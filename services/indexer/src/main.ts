@@ -39,13 +39,14 @@ async function main() {
   const processor = await createProcessor({
     onBlock: async (ctx: BlockContext) => {
       // Pass 1: Gear.MessageQueued → interactions (cross-program call log).
-      // These are raw chain-level events keyed on Gear messageId, independent
-      // of Sails event decoding. They drive the Top Integrators leaderboard.
+      // Drives the Top Integrators leaderboard.
       for (const event of ctx.events) {
         if (!isMessageQueued(event)) continue;
         await handleMessageQueued(db, {
           block: ctx,
           event,
+          extrinsicIdx: event.indexInBlock,
+          eventIdx: event.indexInBlock,
           programId: config.hackathonProgramId,
         });
       }

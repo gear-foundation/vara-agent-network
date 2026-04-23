@@ -231,8 +231,12 @@ export const appMetrics = pgTable(
     retention7d: doublePrecision("retention_7d").notNull().default(0),
     retention14d: doublePrecision("retention_14d").notNull().default(0),
     retention21d: doublePrecision("retention_21d").notNull().default(0),
-    timeToFirstIntegrationBlocks: integer("time_to_first_integration_blocks"),
-    callGraphDensity: doublePrecision("call_graph_density").notNull().default(0),
+    // Absolute substrate block number of this app's first outbound
+    // interaction. Renamed from the misleading "timeToFirst..." — this is NOT
+    // a delta against registration. A real time-to-integration metric
+    // requires joining against applications.registered_at_block.
+    firstIntegrationBlock: integer("first_integration_block"),
+    callGraphDensity: doublePrecision("call_graph_density"),
     updatedAt: bigint("updated_at", { mode: "bigint" }).notNull(),
   },
   (t) => ({
