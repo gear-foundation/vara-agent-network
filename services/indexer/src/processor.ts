@@ -11,6 +11,8 @@
 // restart, we resume from that block. Deterministic row IDs make replay
 // idempotent.
 import { ApiPromise, WsProvider } from "@polkadot/api";
+import { decodeAddress } from "@polkadot/util-crypto";
+import { u8aToHex } from "@polkadot/util";
 import { eq } from "drizzle-orm";
 import { config } from "./config.js";
 import { log } from "./helpers/logger.js";
@@ -32,6 +34,21 @@ export async function createProcessor(hooks: ProcessorHooks) {
   log.info("connected", { chain, endpoint: config.varaRpcUrl });
 
   const targetProgramIdLower = config.hackathonProgramId.toLowerCase();
+
+  // Normalize ActorId strings to lowercase hex. Gear events surface addresses
+  // in mixed formats:
+  //   Gear.MessageQueued's source is SS58 (wallet-style extrinsic origin),
+  //   destination is hex. UserMessageSent fields are all hex. Programs
+  //   sending messages also emit MessageQueued with source=hex — so we
+  //   detect SS58 by absence of '0x' prefix and decode defensively.
+  function normalizeActorId(addr: string): `0x${string}` {
+    if (addr.startsWith("0x")) return addr.toLowerCase() as `0x${string}`;
+    try {
+      return u8aToHex(decodeAddress(addr)).toLowerCase() as `0x${string}`;
+    } catch {
+      return addr.toLowerCase() as `0x${string}`;
+    }
+  }
 
   async function processBlock(blockNumber: number): Promise<void> {
     const blockHash = (await api.rpc.chain.getBlockHash(blockNumber)).toHex() as Hex;
@@ -68,40 +85,48 @@ export async function createProcessor(hooks: ProcessorHooks) {
           idx++;
           continue;
         }
-        if (stored.source.toLowerCase() !== targetProgramIdLower) {
+        const source = normalizeActorId(stored.source);
+        if (source !== targetProgramIdLower) {
           idx++;
           continue;
         }
         events.push({
           kind: "UserMessageSent",
-          messageId: (stored.id ?? "0x") as Hex,
-          source: stored.source as Hex,
-          destination: (stored.destination ?? "0x") as Hex,
+          messageId: normalizeActorId(stored.id ?? "0x"),
+          source,
+          destination: normalizeActorId(stored.destination ?? "0x"),
           payload: (stored.payload ?? "0x") as Hex,
           value: String(stored.value ?? "0"),
           hasReplyDetails: stored.details != null,
           indexInBlock: idx,
         });
       } else if (method === "MessageQueued") {
-        const tuple = Array.isArray(json) ? json : [json];
-        const msg = tuple[0] as {
-          id?: string;
-          source?: string;
-          destination?: string;
-        } | undefined;
-        if (!msg || typeof msg.source !== "string" || typeof msg.destination !== "string") {
+        // JSON shape: [messageId, source, destination, entry?] — a flat
+        // positional tuple. `source` is SS58 for wallet-originated extrinsics
+        // and hex for program-originated sends; normalizeActorId handles both.
+        if (!Array.isArray(json) || json.length < 3) {
           idx++;
           continue;
         }
+        const rawMessageId = json[0];
+        const rawSource = json[1];
+        const rawDestination = json[2];
         if (
-          msg.destination.toLowerCase() === targetProgramIdLower ||
-          msg.source.toLowerCase() === targetProgramIdLower
+          typeof rawMessageId !== "string" ||
+          typeof rawSource !== "string" ||
+          typeof rawDestination !== "string"
         ) {
+          idx++;
+          continue;
+        }
+        const source = normalizeActorId(rawSource);
+        const destination = normalizeActorId(rawDestination);
+        if (destination === targetProgramIdLower || source === targetProgramIdLower) {
           events.push({
             kind: "MessageQueued",
-            messageId: (msg.id ?? "0x") as Hex,
-            source: msg.source as Hex,
-            destination: msg.destination as Hex,
+            messageId: normalizeActorId(rawMessageId),
+            source,
+            destination,
             indexInBlock: idx,
           });
         }

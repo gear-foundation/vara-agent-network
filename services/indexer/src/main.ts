@@ -9,13 +9,19 @@ import {
 } from "./handlers/board.js";
 import { handleMessagePosted } from "./handlers/chat.js";
 import { type HandlerContext } from "./handlers/common.js";
+import { handleMessageQueued } from "./handlers/interaction.js";
 import {
   handleApplicationRegistered,
   handleApplicationUpdated,
   handleParticipantRegistered,
 } from "./handlers/registry.js";
 import { log } from "./helpers/logger.js";
-import { isSailsEvent, isUserMessageSent, type BlockContext } from "./helpers/types.js";
+import {
+  isMessageQueued,
+  isSailsEvent,
+  isUserMessageSent,
+  type BlockContext,
+} from "./helpers/types.js";
 import { db } from "./model/db.js";
 import { createProcessor } from "./processor.js";
 
@@ -30,6 +36,19 @@ async function main() {
 
   const processor = await createProcessor({
     onBlock: async (ctx: BlockContext) => {
+      // Pass 1: Gear.MessageQueued → interactions (cross-program call log).
+      // These are raw chain-level events keyed on Gear messageId, independent
+      // of Sails event decoding. They drive the Top Integrators leaderboard.
+      for (const event of ctx.events) {
+        if (!isMessageQueued(event)) continue;
+        await handleMessageQueued(db, {
+          block: ctx,
+          event,
+          programId: config.hackathonProgramId,
+        });
+      }
+
+      // Pass 2: Sails service events (Registry / Chat / Board).
       // Track per-block extrinsic position heuristically — we don't have a
       // direct extrinsic index from polkadot raw events without a deeper
       // join. Use indexInBlock as a proxy for deterministic row id purposes.
