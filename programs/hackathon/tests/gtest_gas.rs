@@ -11,10 +11,12 @@
 //! to `BlockRunMode::Manual` so that `send_one_way` stages the message
 //! without auto-executing, then run the block ourselves and inspect gas.
 //!
-//! Budget reference: Vara mainnet block gas allowance ~250B (2.5e11) gas per
-//! block. Per-message practical budget with 30% headroom ≈ 1.75e11 gas.
-//! Worst-case budget gate: 2e11 gas (generous, flags order-of-magnitude
-//! regressions without being fragile to minor churn).
+//! Budget reference: gtest 1.10 `GAS_ALLOWANCE = 1_000_000_000_000` (1T gas
+//! per block). A single message can draw most of a block; practical
+//! per-message ceiling with headroom for neighbors ≈ 700B gas. We set the
+//! gate 10x below that at **100B** so the test flags blog-post-material
+//! regressions (a 10%-of-block hot path is already worth investigating)
+//! while keeping headroom for incremental growth.
 
 mod common;
 
@@ -24,9 +26,9 @@ use sails_rs::client::*;
 use sails_rs::gtest::*;
 use sails_rs::prelude::*;
 
-/// 30%-headroom budget against Vara mainnet per-message allowance.
-/// Gate fails if any measured path exceeds this ceiling.
-const GAS_BUDGET: u64 = 200_000_000_000;
+/// 10%-of-block-allowance gate. Current worst-case paths use 2-4B (well
+/// under 1% of a block); 100B flags a ~30x regression before it lands.
+const GAS_BUDGET: u64 = 100_000_000_000;
 
 async fn setup_manual() -> (
     GtestEnv,
