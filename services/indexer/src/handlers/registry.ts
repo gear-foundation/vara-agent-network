@@ -20,16 +20,20 @@ export async function handleParticipantRegistered(
   ctx: HandlerContext,
   payload: ParticipantRegistered,
 ): Promise<void> {
+  // v1.1 ParticipantRegistered doesn't carry joined_at — fall back to the
+  // substrate block timestamp at event-processing time. Adding joined_at to
+  // the event would require a v1.2 contract bump (review finding #6).
+  const joinedAt = ctx.block.substrateBlockTs;
   await db
     .insert(schema.participants)
     .values({
       id: payload.wallet,
       handle: payload.handle,
       github: payload.github,
-      joinedAt: asBigInt(0), // not in event payload for Participant v1.1 (add in v1.2)
+      joinedAt,
       seasonId: payload.season_id,
       firstSeenSubstrateBlock: ctx.block.substrateBlockNumber,
-      firstSeenGearBlock: 0, // not directly emitted; indexer keeps 0 for participants
+      firstSeenGearBlock: 0, // participants don't carry gear block in events
     })
     .onConflictDoUpdate({
       target: schema.participants.id,
@@ -39,6 +43,7 @@ export async function handleParticipantRegistered(
       set: {
         handle: payload.handle,
         github: payload.github,
+        joinedAt,
         seasonId: payload.season_id,
         firstSeenSubstrateBlock: ctx.block.substrateBlockNumber,
       },

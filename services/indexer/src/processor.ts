@@ -183,31 +183,57 @@ export async function createProcessor(hooks: ProcessorHooks) {
     log.info("backfill done", { at: toBlock });
   }
 
+  // Single-flight guard for the finalized-head catch-up loop. Substrate
+  // finalized heads can arrive faster than we can process them; without this
+  // guard, two async callbacks would both read a stale cursor, both try to
+  // process the same blocks, and race on cursor writes. (Finding #1.)
+  let catchUpInFlight: Promise<void> | null = null;
+  async function catchUpTo(height: number): Promise<void> {
+    const resume = await clampedResumePoint(height);
+    for (let n = resume; n <= height; n++) {
+      try {
+        await processBlock(n);
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
+          log.warn("skipping pruned block", { block: n });
+          // Skipped blocks still advance the cursor to avoid infinite retry.
+          await db
+            .insert(schema.processorCursor)
+            .values({ id: "main", lastProcessedBlock: n, updatedAt: BigInt(Date.now()) })
+            .onConflictDoUpdate({
+              target: schema.processorCursor.id,
+              set: { lastProcessedBlock: n, updatedAt: BigInt(Date.now()) },
+            });
+          continue;
+        }
+        // Non-pruning error: bail without advancing so next head triggers retry.
+        throw err;
+      }
+    }
+  }
+
   async function runLive(): Promise<void> {
     log.info("subscribing to finalized heads");
     await api.rpc.chain.subscribeFinalizedHeads(async (header) => {
       const height = header.number.toNumber();
-      try {
-        const resume = await clampedResumePoint(height);
-        // Catch up if we've fallen behind finalized head.
-        for (let n = resume; n <= height; n++) {
-          try {
-            await processBlock(n);
-          } catch (err) {
-            const msg = String(err);
-            if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
-              log.warn("skipping pruned block", { block: n });
-              continue;
-            }
-            throw err;
-          }
-        }
-      } catch (err) {
-        log.error("block processing failed", {
-          block: height,
-          error: String(err),
-        });
+      if (catchUpInFlight) {
+        // A prior callback is still running. It will see the new head via its
+        // own height read on the next iteration only if we chain this one on.
+        // Simplest correct behavior: wait, then run ours; duplicates will be
+        // handled by cursor-based resume.
+        await catchUpInFlight;
       }
+      catchUpInFlight = (async () => {
+        try {
+          await catchUpTo(height);
+        } catch (err) {
+          log.error("block processing failed", { block: height, error: String(err) });
+        } finally {
+          catchUpInFlight = null;
+        }
+      })();
+      await catchUpInFlight;
     });
   }
 

@@ -13,7 +13,7 @@ import {
   type MessagePosted,
 } from "../helpers/event-payloads.js";
 import type { HandlerContext } from "./common.js";
-import { makeRowId } from "./common.js";
+import { isFirstTimeEvent, makeRowId } from "./common.js";
 
 export async function handleMessagePosted(
   db: Db,
@@ -63,8 +63,14 @@ export async function handleMessagePosted(
       .onConflictDoNothing({ target: schema.chatMentions.id });
   }
 
-  // AppMetrics rollups (partial — unique-sender dedup is maintained here,
-  // full metrics recompute happens in services/metrics-rollup.ts batch job).
+  // Metric rollups. Gated by isFirstTimeEvent so replay/concurrent-duplicate
+  // doesn't double-count (review finding #3).
+  const gateKey = `chat:msg:${rowId}`;
+  if (!(await isFirstTimeEvent(db, gateKey))) {
+    // Row inserts above are idempotent via onConflictDoNothing; skipping
+    // metric bumps on replay is the whole point.
+    return;
+  }
   if ("application" in payload.author) {
     await bumpMessagesSent(db, payload.author.application, payload.season_id, ctx);
   }

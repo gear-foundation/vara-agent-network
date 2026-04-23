@@ -19,6 +19,14 @@ async function main() {
     }),
   );
 
+  // Security posture (review finding #4):
+  // - disableDefaultMutations: true — this is a read-only dashboard API.
+  //   Without it, PostGraphile auto-generates INSERT/UPDATE/DELETE mutations
+  //   for every table, which would let any reachable client mutate state.
+  // - disableQueryLog: true — avoid logging full queries (may contain PII).
+  // - ignoreRBAC stays on because we use a single DB user; before mainnet,
+  //   switch to a dedicated least-privilege read-only role in DATABASE_URL
+  //   and set ignoreRBAC: false with pgSettings applying that role per request.
   app.use(
     postgraphile(config.databaseUrl, "public", {
       graphiql: true,
@@ -27,6 +35,8 @@ async function main() {
       dynamicJson: true,
       setofFunctionsContainNulls: false,
       ignoreRBAC: true,
+      disableDefaultMutations: true,
+      disableQueryLog: true,
       appendPlugins: [ConnectionFilterPlugin],
       graphqlRoute: "/graphql",
       graphiqlRoute: "/graphiql",

@@ -62,56 +62,51 @@ async function main() {
           programId: config.hackathonProgramId,
         };
 
-        try {
-          if (decoded.service === "Registry") {
-            switch (decoded.event) {
-              case "ParticipantRegistered":
-                await handleParticipantRegistered(db, hctx, decoded.payload as never);
-                break;
-              case "ApplicationRegistered":
-                await handleApplicationRegistered(db, hctx, decoded.payload as never);
-                break;
-              case "ApplicationUpdated":
-                await handleApplicationUpdated(db, hctx, decoded.payload as never);
-                break;
-              default:
-                log.debug("unhandled registry event", { event: decoded.event });
-            }
-          } else if (decoded.service === "Chat") {
-            switch (decoded.event) {
-              case "MessagePosted":
-                await handleMessagePosted(db, hctx, decoded.payload as never);
-                break;
-              default:
-                log.debug("unhandled chat event", { event: decoded.event });
-            }
-          } else if (decoded.service === "Board") {
-            switch (decoded.event) {
-              case "IdentityCardUpdated":
-                await handleIdentityCardUpdated(db, hctx, decoded.payload as never);
-                break;
-              case "AnnouncementPosted":
-                await handleAnnouncementPosted(db, hctx, decoded.payload as never);
-                break;
-              case "AnnouncementEdited":
-                await handleAnnouncementEdited(db, hctx, decoded.payload as never);
-                break;
-              case "AnnouncementArchived":
-                await handleAnnouncementArchived(db, hctx, decoded.payload as never);
-                break;
-              default:
-                log.debug("unhandled board event", { event: decoded.event });
-            }
-          } else {
-            log.warn("unknown service", { service: decoded.service });
+        // Handler errors MUST propagate so the processor can bail without
+        // advancing the cursor (review finding #2). Retry happens on the next
+        // finalized-head tick, gated idempotently by deterministic row ids +
+        // event_processed dedup for metric bumps.
+        if (decoded.service === "Registry") {
+          switch (decoded.event) {
+            case "ParticipantRegistered":
+              await handleParticipantRegistered(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationRegistered":
+              await handleApplicationRegistered(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationUpdated":
+              await handleApplicationUpdated(db, hctx, decoded.payload as never);
+              break;
+            default:
+              log.debug("unhandled registry event", { event: decoded.event });
           }
-        } catch (err) {
-          log.error("handler threw", {
-            block: ctx.substrateBlockNumber,
-            service: decoded.service,
-            event: decoded.event,
-            error: String(err),
-          });
+        } else if (decoded.service === "Chat") {
+          switch (decoded.event) {
+            case "MessagePosted":
+              await handleMessagePosted(db, hctx, decoded.payload as never);
+              break;
+            default:
+              log.debug("unhandled chat event", { event: decoded.event });
+          }
+        } else if (decoded.service === "Board") {
+          switch (decoded.event) {
+            case "IdentityCardUpdated":
+              await handleIdentityCardUpdated(db, hctx, decoded.payload as never);
+              break;
+            case "AnnouncementPosted":
+              await handleAnnouncementPosted(db, hctx, decoded.payload as never);
+              break;
+            case "AnnouncementEdited":
+              await handleAnnouncementEdited(db, hctx, decoded.payload as never);
+              break;
+            case "AnnouncementArchived":
+              await handleAnnouncementArchived(db, hctx, decoded.payload as never);
+              break;
+            default:
+              log.debug("unhandled board event", { event: decoded.event });
+          }
+        } else {
+          log.warn("unknown service", { service: decoded.service });
         }
         eventIdx++;
       }

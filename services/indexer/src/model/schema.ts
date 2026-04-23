@@ -148,10 +148,17 @@ export const chatMentions = pgTable(
   {
     // Deterministic id: "{chatMessage.id}:{index}"
     id: text("id").primaryKey(),
-    messageId: text("message_id").notNull(),
+    // FK to chat_messages — these rows are always co-written inside the same
+    // handler call, so the referenced parent exists by construction. CASCADE
+    // so a future cleanup script can drop a message plus its mentions atomically.
+    messageId: text("message_id")
+      .notNull()
+      .references(() => chatMessages.id, { onDelete: "cascade" }),
     // Chat event carries the AUTHORED mention list (including orphans stripped
     // on-chain from the inbox write). Flag indicates whether the recipient was
-    // registered at projection time.
+    // registered at projection time. NOT an FK to applications because orphan
+    // mentions are the norm when recipient hasn't been ingested yet (e.g., if
+    // their registration event was in the pruned-backfill window).
     recipientRef: text("recipient_ref").notNull(),
     recipientHandle: text("recipient_handle"),
     recipientRegistered: boolean("recipient_registered").notNull(),
@@ -292,4 +299,16 @@ export const processorCursor = pgTable("processor_cursor", {
   id: text("id").primaryKey().default("main"),
   lastProcessedBlock: integer("last_processed_block").notNull(),
   updatedAt: bigint("updated_at", { mode: "bigint" }).notNull(),
+});
+
+// Event-level idempotency gate. Handlers insert here FIRST before any metric
+// bump; if the insert hits a conflict (same deterministic id already present),
+// the whole handler short-circuits. Prevents double-counting on replay or
+// concurrent finalized-head catch-up (review finding #3).
+//
+// Key shape: `${kind}:${deterministic_row_id}` where kind distinguishes
+// per-event-kind rollup families (e.g., "chat:msg:...", "board:post:...").
+export const eventProcessed = pgTable("event_processed", {
+  key: text("key").primaryKey(),
+  processedAt: bigint("processed_at", { mode: "bigint" }).notNull(),
 });

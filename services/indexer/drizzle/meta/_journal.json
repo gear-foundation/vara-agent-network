@@ -8,6 +8,13 @@
       "when": 1776938493021,
       "tag": "0000_normal_kylun",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1776939676972,
+      "tag": "0001_daffy_lilandra",
+      "breakpoints": true
     }
   ]
 }

@@ -13,6 +13,7 @@ import {
   type IdentityCardUpdated,
 } from "../helpers/event-payloads.js";
 import type { HandlerContext } from "./common.js";
+import { isFirstTimeEvent, makeRowId } from "./common.js";
 
 export async function handleIdentityCardUpdated(
   db: Db,
@@ -55,7 +56,7 @@ export async function handleIdentityCardUpdated(
 
 export async function handleAnnouncementPosted(
   db: Db,
-  _ctx: HandlerContext,
+  ctx: HandlerContext,
   payload: AnnouncementPosted,
 ): Promise<void> {
   const postedAt = asBigInt(payload.ts);
@@ -89,7 +90,11 @@ export async function handleAnnouncementPosted(
       },
     });
 
-  // postsActive metric bump.
+  // postsActive metric bump — gated by isFirstTimeEvent so replay doesn't
+  // double-count (review finding #3).
+  if (!(await isFirstTimeEvent(db, `board:posted:${makeRowId(ctx)}`))) {
+    return;
+  }
   const metricsId = `${payload.app}:${payload.season_id}`;
   await db
     .insert(schema.appMetrics)
@@ -127,7 +132,7 @@ export async function handleAnnouncementEdited(
 
 export async function handleAnnouncementArchived(
   db: Db,
-  _ctx: HandlerContext,
+  ctx: HandlerContext,
   payload: AnnouncementArchived,
 ): Promise<void> {
   const id = `${payload.app}:${asBigInt(payload.id)}`;
@@ -136,7 +141,11 @@ export async function handleAnnouncementArchived(
     .set({ archived: true, archivedReason: payload.reason })
     .where(eq(schema.announcements.id, id));
 
-  // postsActive metric decrement.
+  // postsActive metric decrement — gated by isFirstTimeEvent so replay doesn't
+  // decrement twice (review finding #3).
+  if (!(await isFirstTimeEvent(db, `board:archived:${makeRowId(ctx)}`))) {
+    return;
+  }
   const metricsId = `${payload.app}:${payload.season_id}`;
   await db
     .update(schema.appMetrics)
