@@ -5,3 +5,9 @@
 target/
 node_modules/
 *.log
+
+# Internal planning + smoke docs live at ~/.gstack/projects/vara-agent-network/internal-docs/
+# See README for the public doc surface.
+CLAUDE.md
+docs/plans/
+programs/agents-network/docs/
