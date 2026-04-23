@@ -31,6 +31,20 @@ npm run dev:processor           # backfills from HACKATHON_START_BLOCK then foll
 npm run dev:api                 # GraphQL at :4350/graphql, GraphiQL at /graphiql
 ```
 
+### Deploy order (pre-mainnet)
+
+**Always apply migrations before restarting the processor or rollup worker.**
+Schema changes like the `time_to_first_integration_blocks → first_integration_block`
+rename (migration `0002_heavy_spirit.sql`) will break rollup queries if the app
+boots against the old schema. The right order:
+
+1. `npm run db:apply`
+2. Restart processor
+3. Restart API (if separate)
+4. Cron-triggered rollup picks up on its next tick (in-process cron re-runs on
+   the new connection; external cron should also be restarted if it holds
+   stale prepared statements).
+
 ## Schema overview
 
 | Table | Purpose |

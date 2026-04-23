@@ -180,6 +180,8 @@ export async function rollupAppMetrics(db: Db, asOfDate: DateKey, seasonId: numb
 
   // Retention 7/14/21 — fraction of wallet callers on day D-N who return on
   // day D. Single UPDATE per window via a CTE; column mapped statically.
+  // NOTE: relies on Drizzle's PgColumn.name exposing the snake-case SQL
+  // column identifier. Stable on drizzle-orm 0.36.x; pin-check on upgrade.
   const retentionColumns = {
     7: schema.appMetrics.retention7d,
     14: schema.appMetrics.retention14d,
@@ -202,8 +204,12 @@ async function computeRetention(
   prior: RollupWindow,
   columnName: string,
 ): Promise<void> {
-  // Single UPDATE joining a per-callee intersection ratio. columnName is a
-  // literal from a static mapping (7d/14d/21d) — safe to inject.
+  // Broad UPDATE: every app_metrics row in the season is reset based on
+  // whether the callee appears in `ret`. Apps with no prior-day cohort go
+  // to 0 (not left at their stale previous value — review finding #1).
+  // `columnName` is a literal from a static mapping of Drizzle columns
+  // (retention7d/14d/21d) via column.name, never user input — safe to inject
+  // through sql.identifier.
   await db.execute(sql`
     WITH prior AS (
       SELECT DISTINCT callee, caller FROM interactions
@@ -230,9 +236,11 @@ async function computeRetention(
     UPDATE app_metrics m
        SET ${sql.identifier(columnName)} = COALESCE(ret.value, 0),
            updated_at = ${asOf.endMs}
-      FROM ret
-     WHERE m.season_id = ${seasonId}
-       AND m.application_id = ret.callee
+      FROM applications a
+      LEFT JOIN ret ON ret.callee = a.id
+     WHERE a.season_id = ${seasonId}
+       AND m.season_id = ${seasonId}
+       AND m.application_id = a.id
   `);
 }
 

@@ -62,6 +62,13 @@ export type InteractionKind = typeof INTERACTION_KIND[keyof typeof INTERACTION_K
  * Classify a caller. A wallet-agent (ActorId registered as BOTH Participant
  * AND Application) maps to `wallet_initiated` — the human IS driving the
  * call, even though their wallet is also registered as an app.
+ *
+ * TODO(v2): the hackathon program's own outbound msg::send() calls surface
+ * as MessageQueued with source = hackathon_program_id. That ActorId isn't
+ * in the `applications` table, so it'll fall into the wallet_initiated
+ * branch here — wrong label. Not exercised in v1 (the contract makes no
+ * outbound calls), but once ControlPlaneService lands, pass a set of
+ * "known program ActorIds" through and treat those as program_initiated.
  */
 export function classifyCaller(
   callerApp: { handle: string } | null | undefined,
