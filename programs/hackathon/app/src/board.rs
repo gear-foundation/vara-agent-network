@@ -91,23 +91,31 @@ impl BoardState {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum BoardEvent {
+    /// v1.1 enrichment: carries the full `IdentityCard`. `updated_at` and
+    /// `season_id` are inside the card itself (no duplication). Indexer
+    /// projects directly — no state refetch.
     IdentityCardUpdated {
         app: ActorId,
-        updated_at: u64,
-        season_id: u32,
+        card: IdentityCard,
     },
+    /// v1.1 enrichment: adds `body` so indexer can project the full
+    /// Announcement row from this event alone.
     AnnouncementPosted {
         app: ActorId,
         id: PostId,
         kind: AnnouncementKind,
         title: String,
+        body: String,
         tags: Vec<String>,
         ts: u64,
         season_id: u32,
     },
+    /// v1.1 enrichment: carries the new `AnnouncementReq` (title + body +
+    /// tags) so the indexer overwrites the row without refetching.
     AnnouncementEdited {
         app: ActorId,
         id: PostId,
+        req: AnnouncementReq,
         ts: u64,
         season_id: u32,
     },
@@ -173,28 +181,23 @@ impl<'a> BoardService<'a> {
         let now = exec::block_timestamp();
         let season_id = self.current_season;
 
-        {
-            let mut board = self.board.borrow_mut();
-            board.identity_cards.insert(
-                app,
-                IdentityCard {
-                    who_i_am: req.who_i_am,
-                    what_i_do: req.what_i_do,
-                    how_to_interact: req.how_to_interact,
-                    what_i_offer: req.what_i_offer,
-                    tags: req.tags,
-                    updated_at: now,
-                    season_id,
-                },
-            );
-        }
-
-        self.emit_event(BoardEvent::IdentityCardUpdated {
-            app,
+        let card = IdentityCard {
+            who_i_am: req.who_i_am,
+            what_i_do: req.what_i_do,
+            how_to_interact: req.how_to_interact,
+            what_i_offer: req.what_i_offer,
+            tags: req.tags,
             updated_at: now,
             season_id,
-        })
-        .expect("emit IdentityCardUpdated failed");
+        };
+
+        {
+            let mut board = self.board.borrow_mut();
+            board.identity_cards.insert(app, card.clone());
+        }
+
+        self.emit_event(BoardEvent::IdentityCardUpdated { app, card })
+            .expect("emit IdentityCardUpdated failed");
 
         Ok(())
     }
@@ -228,7 +231,7 @@ impl<'a> BoardService<'a> {
                 app,
                 AnnouncementKind::Invitation,
                 req.title.clone(),
-                req.body,
+                req.body.clone(),
                 req.tags.clone(),
                 now,
                 season_id,
@@ -250,6 +253,7 @@ impl<'a> BoardService<'a> {
             id: outcome.new_id,
             kind: AnnouncementKind::Invitation,
             title: req.title,
+            body: req.body,
             tags: req.tags,
             ts: now,
             season_id,
@@ -282,14 +286,15 @@ impl<'a> BoardService<'a> {
                 .iter_mut()
                 .find(|a| a.id == id)
                 .ok_or(BoardError::UnknownAnnouncement)?;
-            entry.title = req.title;
-            entry.body = req.body;
-            entry.tags = req.tags;
+            entry.title = req.title.clone();
+            entry.body = req.body.clone();
+            entry.tags = req.tags.clone();
         }
 
         self.emit_event(BoardEvent::AnnouncementEdited {
             app,
             id,
+            req,
             ts: now,
             season_id,
         })

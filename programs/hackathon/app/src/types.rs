@@ -65,18 +65,11 @@ pub enum ArchiveReason {
     Manual,
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum FieldTag {
-    Description,
-    SkillsHash,
-    SkillsUrl,
-    IdlHash,
-    IdlUrl,
-    XAccount,
-    Status,
-}
+// FieldTag removed at v1.1 (protocol_version = 2). Update events now carry
+// the applied `ApplicationPatch` directly, so FieldTag's only use (listing
+// which fields changed) is subsumed: non-None arms on the emitted patch IS
+// the change set. Kept out of the IDL entirely — this is a wire reset, not
+// an additive migration.
 
 // ---------------------------------------------------------------------------
 // Error enums (each route returns Result<T, E>)

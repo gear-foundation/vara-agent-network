@@ -179,18 +179,33 @@ pub mod registry {
                 github: String,
                 season_id: u32,
             },
+            /// v1.1 enrichment: carries every mutable + immutable field needed to
+            /// project an `Application` row without refetching on-chain state.
+            /// `registered_at` is authoritative program time (block_timestamp at
+            /// registration); `status` is always `Building` at registration and is
+            /// omitted for payload hygiene (indexer sets it deterministically).
             ApplicationRegistered {
                 program_id: ActorId,
                 owner: ActorId,
                 handle: String,
+                description: String,
                 track: Track,
+                github_url: String,
                 skills_hash: [u8; 32],
+                skills_url: String,
                 idl_hash: [u8; 32],
+                idl_url: String,
+                x_account: Option<String>,
+                registered_at: u64,
                 season_id: u32,
             },
+            /// v1.1 enrichment: emits the exact patch that was applied, so indexer
+            /// can overwrite fields deterministically. Drops `changed_fields: Vec<FieldTag>`
+            /// — the patch IS the change set. Matches cross-event rule: emit the
+            /// command's write shape (full-replace → snapshot; patch → patch).
             ApplicationUpdated {
                 program_id: ActorId,
-                changed_fields: Vec<FieldTag>,
+                patch: ApplicationPatch,
                 season_id: u32,
             },
         }
@@ -392,23 +407,28 @@ pub mod board {
         #[derive(PartialEq, Debug, Encode, Decode)]
         #[codec(crate = sails_rs::scale_codec)]
         pub enum BoardEvents {
-            IdentityCardUpdated {
-                app: ActorId,
-                updated_at: u64,
-                season_id: u32,
-            },
+            /// v1.1 enrichment: carries the full `IdentityCard`. `updated_at` and
+            /// `season_id` are inside the card itself (no duplication). Indexer
+            /// projects directly — no state refetch.
+            IdentityCardUpdated { app: ActorId, card: IdentityCard },
+            /// v1.1 enrichment: adds `body` so indexer can project the full
+            /// Announcement row from this event alone.
             AnnouncementPosted {
                 app: ActorId,
                 id: u64,
                 kind: AnnouncementKind,
                 title: String,
+                body: String,
                 tags: Vec<String>,
                 ts: u64,
                 season_id: u32,
             },
+            /// v1.1 enrichment: carries the new `AnnouncementReq` (title + body +
+            /// tags) so the indexer overwrites the row without refetching.
             AnnouncementEdited {
                 app: ActorId,
                 id: u64,
+                req: AnnouncementReq,
                 ts: u64,
                 season_id: u32,
             },
@@ -554,18 +574,6 @@ pub struct Participant {
 pub enum HandleRef {
     Participant(ActorId),
     Application(ActorId),
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum FieldTag {
-    Description,
-    SkillsHash,
-    SkillsUrl,
-    IdlHash,
-    IdlUrl,
-    XAccount,
-    Status,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]

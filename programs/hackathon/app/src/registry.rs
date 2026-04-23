@@ -41,18 +41,33 @@ pub enum RegistryEvent {
         github: String,
         season_id: u32,
     },
+    /// v1.1 enrichment: carries every mutable + immutable field needed to
+    /// project an `Application` row without refetching on-chain state.
+    /// `registered_at` is authoritative program time (block_timestamp at
+    /// registration); `status` is always `Building` at registration and is
+    /// omitted for payload hygiene (indexer sets it deterministically).
     ApplicationRegistered {
         program_id: ActorId,
         owner: ActorId,
         handle: Handle,
+        description: String,
         track: Track,
+        github_url: String,
         skills_hash: ContentHash,
+        skills_url: String,
         idl_hash: ContentHash,
+        idl_url: String,
+        x_account: Option<String>,
+        registered_at: u64,
         season_id: u32,
     },
+    /// v1.1 enrichment: emits the exact patch that was applied, so indexer
+    /// can overwrite fields deterministically. Drops `changed_fields: Vec<FieldTag>`
+    /// — the patch IS the change set. Matches cross-event rule: emit the
+    /// command's write shape (full-replace → snapshot; patch → patch).
     ApplicationUpdated {
         program_id: ActorId,
-        changed_fields: Vec<FieldTag>,
+        patch: ApplicationPatch,
         season_id: u32,
     },
 }
@@ -200,8 +215,9 @@ impl<'a> RegistryService<'a> {
             .push(program_id);
 
         // Shared helper — writes state, emits no events. RegistryService emits
-        // only ApplicationRegistered; indexer projects the kind=Registration
-        // announcement from that event + announcements state diff.
+        // the enriched `ApplicationRegistered`; indexer projects BOTH the
+        // `Application` row AND the kind=Registration announcement from that
+        // single event (body = description, title = "@{handle} registered").
         board.push_announcement(
             program_id,
             AnnouncementKind::Registration,
@@ -219,9 +235,15 @@ impl<'a> RegistryService<'a> {
             program_id,
             owner: req.operator,
             handle: req.handle,
+            description: req.description,
             track: req.track,
+            github_url: req.github_url,
             skills_hash: req.skills_hash,
+            skills_url: req.skills_url,
             idl_hash: req.idl_hash,
+            idl_url: req.idl_url,
+            x_account: req.x_account,
+            registered_at: now,
             season_id,
         })
         .expect("emit ApplicationRegistered failed");
@@ -250,34 +272,38 @@ impl<'a> RegistryService<'a> {
             return Err(RegistryError::NotOwner);
         }
 
-        let mut changed = Vec::new();
+        // Apply each Some(_) arm and build the `applied` patch we emit.
+        // `applied` mirrors `patch` but only contains arms that actually
+        // hit state; None arms stay None so the indexer knows which fields
+        // didn't change on this call.
+        let mut applied = ApplicationPatch::default();
         if let Some(d) = patch.description {
-            app.description = d;
-            changed.push(FieldTag::Description);
+            app.description = d.clone();
+            applied.description = Some(d);
         }
         if let Some(h) = patch.skills_hash {
             app.skills_hash = h;
-            changed.push(FieldTag::SkillsHash);
+            applied.skills_hash = Some(h);
         }
         if let Some(u) = patch.skills_url {
-            app.skills_url = u;
-            changed.push(FieldTag::SkillsUrl);
+            app.skills_url = u.clone();
+            applied.skills_url = Some(u);
         }
         if let Some(h) = patch.idl_hash {
             app.idl_hash = h;
-            changed.push(FieldTag::IdlHash);
+            applied.idl_hash = Some(h);
         }
         if let Some(u) = patch.idl_url {
-            app.idl_url = u;
-            changed.push(FieldTag::IdlUrl);
+            app.idl_url = u.clone();
+            applied.idl_url = Some(u);
         }
         if let Some(x) = patch.x_account {
-            app.x_account = x;
-            changed.push(FieldTag::XAccount);
+            app.x_account = x.clone();
+            applied.x_account = Some(x);
         }
         if let Some(s) = patch.status {
             app.status = s;
-            changed.push(FieldTag::Status);
+            applied.status = Some(s);
         }
 
         let season_id = self.current_season;
@@ -285,7 +311,7 @@ impl<'a> RegistryService<'a> {
 
         self.emit_event(RegistryEvent::ApplicationUpdated {
             program_id,
-            changed_fields: changed,
+            patch: applied,
             season_id,
         })
         .expect("emit ApplicationUpdated failed");
@@ -344,7 +370,13 @@ impl<'a> RegistryService<'a> {
 
     #[export]
     pub fn protocol_version(&self) -> u32 {
-        1
+        // v2: event enrichment for deterministic indexer replay.
+        // ApplicationRegistered now carries all projectable fields;
+        // ApplicationUpdated carries the applied patch (FieldTag removed);
+        // IdentityCardUpdated carries the full card;
+        // AnnouncementPosted / AnnouncementEdited carry body + tags.
+        // Handlers are pure event→projection, no state refetch.
+        2
     }
 }
 

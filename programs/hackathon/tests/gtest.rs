@@ -103,13 +103,16 @@ async fn happy_path_end_to_end() {
 }
 
 #[tokio::test]
-async fn protocol_version_returns_1() {
+async fn protocol_version_returns_2() {
+    // v2: event-enrichment release. ApplicationRegistered/Updated +
+    // IdentityCardUpdated + AnnouncementPosted/Edited now carry payloads
+    // sufficient for deterministic indexer replay without state refetch.
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
     let v = program.registry().protocol_version().await.unwrap();
-    assert_eq!(v, 1);
+    assert_eq!(v, 2);
 }
 
 #[tokio::test]
