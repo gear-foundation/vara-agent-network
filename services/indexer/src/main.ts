@@ -1,4 +1,5 @@
 // Processor entrypoint. Wires config → decoder → processor → handlers.
+import cron from "node-cron";
 import { config } from "./config.js";
 import { SailsDecoder } from "./decoder/sails-decoder.js";
 import {
@@ -24,6 +25,7 @@ import {
 } from "./helpers/types.js";
 import { db } from "./model/db.js";
 import { createProcessor } from "./processor.js";
+import { runDailyRollup, todayUtc, yesterdayUtc } from "./services/metrics-rollup.js";
 
 async function main() {
   log.info("boot", {
@@ -140,6 +142,34 @@ async function main() {
 
   await processor.runBackfill(latestHeight);
   await processor.runLive();
+
+  // Schedule daily metrics rollup at 00:05 UTC. Covers the day that just
+  // ended (yesterday UTC). Also runs a "today-so-far" rollup once per hour
+  // so the stakeholder dashboard has fresh numbers throughout the day.
+  // Set ENABLE_INLINE_ROLLUP_CRON=false to turn off (e.g., when using an
+  // external cron / k8s CronJob instead).
+  if (process.env.ENABLE_INLINE_ROLLUP_CRON !== "false") {
+    cron.schedule("5 0 * * *", async () => {
+      const date = yesterdayUtc();
+      log.info("cron: daily rollup firing", { date });
+      try {
+        await runDailyRollup(db, config.hackathonSeasonId, date);
+      } catch (err) {
+        log.error("cron: daily rollup failed", { date, error: String(err) });
+      }
+    }, { timezone: "UTC" });
+    cron.schedule("*/15 * * * *", async () => {
+      // Refresh today's rollup every 15 minutes so the live dashboard tracks
+      // extrinsics/day with sub-hour latency. Idempotent.
+      const date = todayUtc();
+      try {
+        await runDailyRollup(db, config.hackathonSeasonId, date);
+      } catch (err) {
+        log.error("cron: hourly refresh failed", { date, error: String(err) });
+      }
+    }, { timezone: "UTC" });
+    log.info("rollup crons scheduled", { daily: "5 0 * * * UTC", refresh: "*/15 * * * *" });
+  }
 
   // Graceful shutdown.
   const onExit = async () => {

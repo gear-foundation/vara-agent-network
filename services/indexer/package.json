@@ -16,8 +16,10 @@
     "db:studio": "drizzle-kit studio",
     "dev:processor": "tsx watch src/main.ts",
     "dev:api": "tsx watch src/api/main.ts",
+    "dev:rollup": "tsx src/rollup-main.ts",
     "start:processor": "node lib/main.js",
     "start:api": "node lib/api/main.js",
+    "start:rollup": "node lib/rollup-main.js",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {
@@ -26,10 +28,12 @@
     "@polkadot/types": "^16.4.1",
     "@polkadot/util": "^13.5.1",
     "@polkadot/util-crypto": "^13.5.1",
+    "@types/node-cron": "^3.0.11",
     "cors": "^2.8.0",
     "dotenv": "^16.0.0",
     "drizzle-orm": "^0.36.0",
     "express": "^4.21.0",
+    "node-cron": "^3.0.3",
     "pg": "^8.13.0",
     "postgraphile": "^4.14.0",
     "postgraphile-plugin-connection-filter": "^2.3.0",
