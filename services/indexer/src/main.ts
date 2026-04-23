@@ -1,0 +1,143 @@
+// Processor entrypoint. Wires config → decoder → processor → handlers.
+import { config } from "./config.js";
+import { SailsDecoder } from "./decoder/sails-decoder.js";
+import {
+  handleAnnouncementArchived,
+  handleAnnouncementEdited,
+  handleAnnouncementPosted,
+  handleIdentityCardUpdated,
+} from "./handlers/board.js";
+import { handleMessagePosted } from "./handlers/chat.js";
+import { type HandlerContext } from "./handlers/common.js";
+import {
+  handleApplicationRegistered,
+  handleApplicationUpdated,
+  handleParticipantRegistered,
+} from "./handlers/registry.js";
+import { log } from "./helpers/logger.js";
+import { isSailsEvent, isUserMessageSent, type BlockContext } from "./helpers/types.js";
+import { db } from "./model/db.js";
+import { createProcessor } from "./processor.js";
+
+async function main() {
+  log.info("boot", {
+    programId: config.hackathonProgramId,
+    startBlock: config.hackathonStartBlock,
+    season: config.hackathonSeasonId,
+  });
+
+  const decoder = await SailsDecoder.fromIdlFile(config.hackathonIdlPath);
+
+  const processor = await createProcessor({
+    onBlock: async (ctx: BlockContext) => {
+      // Track per-block extrinsic position heuristically — we don't have a
+      // direct extrinsic index from polkadot raw events without a deeper
+      // join. Use indexInBlock as a proxy for deterministic row id purposes.
+      let eventIdx = 0;
+      for (const event of ctx.events) {
+        if (!isUserMessageSent(event)) {
+          eventIdx++;
+          continue;
+        }
+        if (!isSailsEvent(event)) {
+          eventIdx++;
+          continue;
+        }
+        const decoded = decoder.decodeEvent(event);
+        if (!decoded) {
+          log.warn("undecodable sails event", {
+            block: ctx.substrateBlockNumber,
+            msg: event.messageId,
+          });
+          eventIdx++;
+          continue;
+        }
+
+        const hctx: HandlerContext = {
+          block: ctx,
+          event,
+          // Proxy for extrinsic idx (no direct mapping at this adapter layer).
+          extrinsicIdx: event.indexInBlock,
+          eventIdx,
+          programId: config.hackathonProgramId,
+        };
+
+        try {
+          if (decoded.service === "Registry") {
+            switch (decoded.event) {
+              case "ParticipantRegistered":
+                await handleParticipantRegistered(db, hctx, decoded.payload as never);
+                break;
+              case "ApplicationRegistered":
+                await handleApplicationRegistered(db, hctx, decoded.payload as never);
+                break;
+              case "ApplicationUpdated":
+                await handleApplicationUpdated(db, hctx, decoded.payload as never);
+                break;
+              default:
+                log.debug("unhandled registry event", { event: decoded.event });
+            }
+          } else if (decoded.service === "Chat") {
+            switch (decoded.event) {
+              case "MessagePosted":
+                await handleMessagePosted(db, hctx, decoded.payload as never);
+                break;
+              default:
+                log.debug("unhandled chat event", { event: decoded.event });
+            }
+          } else if (decoded.service === "Board") {
+            switch (decoded.event) {
+              case "IdentityCardUpdated":
+                await handleIdentityCardUpdated(db, hctx, decoded.payload as never);
+                break;
+              case "AnnouncementPosted":
+                await handleAnnouncementPosted(db, hctx, decoded.payload as never);
+                break;
+              case "AnnouncementEdited":
+                await handleAnnouncementEdited(db, hctx, decoded.payload as never);
+                break;
+              case "AnnouncementArchived":
+                await handleAnnouncementArchived(db, hctx, decoded.payload as never);
+                break;
+              default:
+                log.debug("unhandled board event", { event: decoded.event });
+            }
+          } else {
+            log.warn("unknown service", { service: decoded.service });
+          }
+        } catch (err) {
+          log.error("handler threw", {
+            block: ctx.substrateBlockNumber,
+            service: decoded.service,
+            event: decoded.event,
+            error: String(err),
+          });
+        }
+        eventIdx++;
+      }
+    },
+  });
+
+  const finalizedHead = (await processor.api.rpc.chain.getFinalizedHead()).toHex();
+  const latestHeader = await processor.api.rpc.chain.getHeader(finalizedHead);
+  const latestHeight = latestHeader.number.toNumber();
+
+  log.info("finalized head", { height: latestHeight });
+
+  await processor.runBackfill(latestHeight);
+  await processor.runLive();
+
+  // Graceful shutdown.
+  const onExit = async () => {
+    log.info("shutting down");
+    await processor.stop();
+    process.exit(0);
+  };
+  process.on("SIGINT", onExit);
+  process.on("SIGTERM", onExit);
+}
+
+main().catch((err) => {
+  log.error("fatal", { error: String(err) });
+  process.exit(1);
+});

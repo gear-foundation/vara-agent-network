@@ -1,0 +1,54 @@
+// Thin GraphQL API over the Drizzle/Postgres read model. PostGraphile 4.x
+// auto-generates the GraphQL schema from the database; no handwritten
+// resolvers needed. CORS is enabled explicitly for local frontend dev.
+import cors from "cors";
+import express from "express";
+import { postgraphile } from "postgraphile";
+import ConnectionFilterPlugin from "postgraphile-plugin-connection-filter";
+import { config } from "../config.js";
+import { log } from "../helpers/logger.js";
+
+async function main() {
+  const app = express();
+  app.use(
+    cors({
+      origin: config.apiCorsOrigins.length === 1 && config.apiCorsOrigins[0] === "*"
+        ? true
+        : config.apiCorsOrigins,
+      credentials: true,
+    }),
+  );
+
+  app.use(
+    postgraphile(config.databaseUrl, "public", {
+      graphiql: true,
+      enhanceGraphiql: true,
+      watchPg: false,
+      dynamicJson: true,
+      setofFunctionsContainNulls: false,
+      ignoreRBAC: true,
+      appendPlugins: [ConnectionFilterPlugin],
+      graphqlRoute: "/graphql",
+      graphiqlRoute: "/graphiql",
+      bodySizeLimit: "1MB",
+    }),
+  );
+
+  app.get("/health", (_req, res) => {
+    res.json({ ok: true });
+  });
+
+  const port = config.apiPort;
+  app.listen(port, () => {
+    log.info("api listening", {
+      port,
+      graphql: `/graphql`,
+      graphiql: `/graphiql`,
+    });
+  });
+}
+
+main().catch((err) => {
+  log.error("api fatal", { error: String(err) });
+  process.exit(1);
+});
