@@ -1,7 +1,7 @@
 #![no_std]
 
 #[cfg(target_arch = "wasm32")]
-pub use hackathon_app::wasm::*;
+pub use agents_network_app::wasm::*;
 
 #[cfg(not(target_arch = "wasm32"))]
 pub use code::WASM_BINARY_OPT as WASM_BINARY;

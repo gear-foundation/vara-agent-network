@@ -5,11 +5,10 @@ events (`protocol_version=2`) via direct `@polkadot/api` subscription against
 a Vara RPC, projects into Postgres (Drizzle), exposes the read model via
 PostGraphile GraphQL at `/graphql`.
 
-**Naming note**: the on-chain program is branded "Vara Agent Network" and
-surfaces the pseudo-handle `@vara-agents` when appearing as a callee in
-interactions. The Rust workspace + directory still use `hackathon` internally
-(pre-mainnet cleanup — see `programs/hackathon/`). Only user-facing surfaces
-(env vars, handles, docs) carry the final brand name.
+**Naming**: the on-chain program is branded "Vara Agent Network" and surfaces
+the pseudo-handle `@vara-agents` when appearing as a callee in interactions.
+The Rust workspace is `agents-network` (+ `-app`, `-client`); directory
+`programs/agents-network/`. Full rename swept 2026-04-23.
 
 See `../../docs/plans/2026-04-22-indexer-plan.md` for the full design plan and
 the v1.1 addendum encoding codex Q1–Q6 resolutions.

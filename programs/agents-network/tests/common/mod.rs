@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use hackathon_client::{HackathonClient, HackathonClientCtors, HackathonClientProgram};
+use agents_network_client::{AgentsNetworkClient, AgentsNetworkClientCtors, AgentsNetworkClientProgram};
 use sails_rs::client::*;
 use sails_rs::gtest::*;
 use sails_rs::prelude::*;
@@ -47,22 +47,22 @@ pub fn init_system() -> System {
     system
 }
 
-/// Deploy the hackathon program, return an `Actor` handle bound to
+/// Deploy the Vara Agent Network program, return an `Actor` handle bound to
 /// `DEPLOYER`. Tests flip the caller per call with `.with_actor_id(...)`.
 pub async fn deploy(
     env: &GtestEnv,
-) -> sails_rs::client::Actor<hackathon_client::HackathonClientProgram, GtestEnv> {
-    let code_id = env.system().submit_code(hackathon::WASM_BINARY);
+) -> sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv> {
+    let code_id = env.system().submit_code(agents_network::WASM_BINARY);
     env.clone()
-        .deploy::<hackathon_client::HackathonClientProgram>(code_id, b"salt".to_vec())
+        .deploy::<agents_network_client::AgentsNetworkClientProgram>(code_id, b"salt".to_vec())
         .new(1) // initial_season = 1 (Season 1)
         .await
         .unwrap()
 }
 
 /// Convenience helper: build a `RegisterAppReq` with harmless defaults.
-pub fn mk_register_req(handle: &str, operator: u64) -> hackathon_client::RegisterAppReq {
-    use hackathon_client::{RegisterAppReq, Track};
+pub fn mk_register_req(handle: &str, operator: u64) -> agents_network_client::RegisterAppReq {
+    use agents_network_client::{RegisterAppReq, Track};
     RegisterAppReq {
         handle: handle.to_string(),
         operator: ActorId::from(operator),
@@ -77,8 +77,8 @@ pub fn mk_register_req(handle: &str, operator: u64) -> hackathon_client::Registe
     }
 }
 
-pub fn mk_identity_card_req() -> hackathon_client::IdentityCardReq {
-    use hackathon_client::IdentityCardReq;
+pub fn mk_identity_card_req() -> agents_network_client::IdentityCardReq {
+    use agents_network_client::IdentityCardReq;
     IdentityCardReq {
         who_i_am: "I am a bot".to_string(),
         what_i_do: "I do things".to_string(),
@@ -88,8 +88,8 @@ pub fn mk_identity_card_req() -> hackathon_client::IdentityCardReq {
     }
 }
 
-pub fn mk_announcement_req(title: &str) -> hackathon_client::AnnouncementReq {
-    use hackathon_client::AnnouncementReq;
+pub fn mk_announcement_req(title: &str) -> agents_network_client::AnnouncementReq {
+    use agents_network_client::AnnouncementReq;
     AnnouncementReq {
         title: title.to_string(),
         body: format!("body of {title}"),
@@ -97,8 +97,8 @@ pub fn mk_announcement_req(title: &str) -> hackathon_client::AnnouncementReq {
     }
 }
 
-pub fn empty_patch() -> hackathon_client::ApplicationPatch {
-    use hackathon_client::ApplicationPatch;
+pub fn empty_patch() -> agents_network_client::ApplicationPatch {
+    use agents_network_client::ApplicationPatch;
     ApplicationPatch {
         description: None,
         skills_hash: None,
@@ -110,8 +110,8 @@ pub fn empty_patch() -> hackathon_client::ApplicationPatch {
     }
 }
 
-pub fn empty_filter() -> hackathon_client::DiscoveryFilter {
-    use hackathon_client::DiscoveryFilter;
+pub fn empty_filter() -> agents_network_client::DiscoveryFilter {
+    use agents_network_client::DiscoveryFilter;
     DiscoveryFilter {
         track: None,
         status: None,

@@ -3,14 +3,14 @@
 mod common;
 
 use common::*;
-use hackathon_client::{
-    AnnouncementKind, BoardError, HackathonClient, board::Board, registry::Registry,
+use agents_network_client::{
+    AnnouncementKind, BoardError, AgentsNetworkClient, board::Board, registry::Registry,
 };
 use sails_rs::client::*;
 use sails_rs::gtest::*;
 use sails_rs::prelude::*;
 
-async fn setup() -> sails_rs::client::Actor<hackathon_client::HackathonClientProgram, GtestEnv> {
+async fn setup() -> sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv> {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;

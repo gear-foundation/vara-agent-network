@@ -21,7 +21,7 @@
 mod common;
 
 use common::*;
-use hackathon_client::{HackathonClient, HandleRef, chat::Chat, registry::Registry};
+use agents_network_client::{AgentsNetworkClient, HandleRef, chat::Chat, registry::Registry};
 use sails_rs::client::*;
 use sails_rs::gtest::*;
 use sails_rs::prelude::*;
@@ -32,7 +32,7 @@ const GAS_BUDGET: u64 = 100_000_000_000;
 
 async fn setup_manual() -> (
     GtestEnv,
-    sails_rs::client::Actor<hackathon_client::HackathonClientProgram, GtestEnv>,
+    sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
 ) {
     let system = init_system();
     // Deploy in default Auto mode so the constructor's reply comes back;

@@ -56,6 +56,31 @@ dependencies = [
 ]
 
 [[package]]
+name = "agents-network"
+version = "0.1.0"
+dependencies = [
+ "agents-network-app",
+ "agents-network-client",
+ "sails-rs",
+ "tokio",
+]
+
+[[package]]
+name = "agents-network-app"
+version = "0.1.0"
+dependencies = [
+ "sails-rs",
+]
+
+[[package]]
+name = "agents-network-client"
+version = "0.1.0"
+dependencies = [
+ "agents-network-app",
+ "sails-rs",
+]
+
+[[package]]
 name = "ahash"
 version = "0.8.12"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3010,31 +3035,6 @@ dependencies = [
  "tokio",
  "tokio-util",
  "tracing",
-]
-
-[[package]]
-name = "hackathon"
-version = "0.1.0"
-dependencies = [
- "hackathon-app",
- "hackathon-client",
- "sails-rs",
- "tokio",
-]
-
-[[package]]
-name = "hackathon-app"
-version = "0.1.0"
-dependencies = [
- "sails-rs",
-]
-
-[[package]]
-name = "hackathon-client"
-version = "0.1.0"
-dependencies = [
- "hackathon-app",
- "sails-rs",
 ]
 
 [[package]]

@@ -3,7 +3,7 @@
 mod common;
 
 use common::*;
-use hackathon_client::{HackathonClient, HandleRef, RegistryError, Track, registry::Registry};
+use agents_network_client::{AgentsNetworkClient, HandleRef, RegistryError, Track, registry::Registry};
 use sails_rs::client::*;
 use sails_rs::gtest::*;
 use sails_rs::prelude::*;
@@ -274,7 +274,7 @@ async fn discover_track_filter() {
     let page = program
         .registry()
         .discover(
-            hackathon_client::DiscoveryFilter {
+            agents_network_client::DiscoveryFilter {
                 track: Some(Track::Services),
                 status: None,
             },

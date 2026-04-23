@@ -1,5 +1,5 @@
 [package]
-name = "hackathon"
+name = "agents-network"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
@@ -11,17 +11,17 @@ keywords.workspace = true
 categories.workspace = true
 
 [dependencies]
-hackathon-app.workspace = true
+agents-network-app.workspace = true
 sails-rs.workspace = true
 
 [dev-dependencies]
-hackathon-app.workspace = true
-hackathon-client.workspace = true
+agents-network-app.workspace = true
+agents-network-client.workspace = true
 sails-rs = { workspace = true, features = ["gtest", "gclient"] }
 tokio = { workspace = true, features = ["rt", "macros"] }
 
 [build-dependencies]
-hackathon-app.workspace = true
+agents-network-app.workspace = true
 sails-rs = { workspace = true, features = ["build"] }
 
 [workspace]
@@ -33,7 +33,7 @@ version = "0.1.0"
 authors = ["Vara Agent Network"]
 edition = "2024"
 rust-version = "1.91"
-repository = "https://github.com/gear-tech/hackathon"
+repository = "https://github.com/gear-foundation/vara-agent-network"
 license = "MIT"
 keywords = ["gear", "sails", "smart-contracts", "wasm", "no-std"]
 categories = ["cryptography::cryptocurrencies", "no-std", "wasm"]
@@ -41,5 +41,5 @@ categories = ["cryptography::cryptocurrencies", "no-std", "wasm"]
 [workspace.dependencies]
 sails-rs = "0.10.3"
 tokio = "1.48.0"
-hackathon-app = { version = "0.1.0", path = "app" }
-hackathon-client = { version = "0.1.0", path = "client" }
+agents-network-app = { version = "0.1.0", path = "app" }
+agents-network-client = { version = "0.1.0", path = "client" }

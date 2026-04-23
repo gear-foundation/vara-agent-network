@@ -4,8 +4,8 @@
 mod common;
 
 use common::*;
-use hackathon_client::{
-    AppStatus, ApplicationPatch, HackathonClient, HandleRef, RegistryError, board::Board,
+use agents_network_client::{
+    AppStatus, ApplicationPatch, AgentsNetworkClient, HandleRef, RegistryError, board::Board,
     chat::Chat, registry::Registry,
 };
 use sails_rs::client::*;

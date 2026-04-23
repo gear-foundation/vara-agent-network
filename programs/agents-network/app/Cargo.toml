@@ -1,5 +1,5 @@
 [package]
-name = "hackathon-app"
+name = "agents-network-app"
 version.workspace = true
 authors.workspace = true
 edition.workspace = true
