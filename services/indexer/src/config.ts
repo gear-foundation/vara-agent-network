@@ -1,19 +1,24 @@
 // Environment contract. Read once at boot; downstream modules import typed
 // values rather than re-reading process.env.
+//
+// Indexed program: the Vara Agent Network registry (Registry + Chat + Board).
+// Env vars use the VARA_AGENTS_* prefix; the "HACKATHON_*" names from the
+// pre-rename era are accepted as fallbacks so in-flight .env files keep
+// working during the rename window.
 import "dotenv/config";
 
-function required(key: string): string {
-  const v = process.env[key];
+function required(key: string, fallbackKey?: string): string {
+  const v = process.env[key] ?? (fallbackKey ? process.env[fallbackKey] : undefined);
   if (!v) throw new Error(`missing required env: ${key}`);
   return v;
 }
 
-function optional(key: string, fallback = ""): string {
-  return process.env[key] ?? fallback;
+function optional(key: string, fallback = "", fallbackKey?: string): string {
+  return process.env[key] ?? (fallbackKey ? process.env[fallbackKey] : undefined) ?? fallback;
 }
 
-function optionalInt(key: string, fallback: number): number {
-  const v = process.env[key];
+function optionalInt(key: string, fallback: number, fallbackKey?: string): number {
+  const v = process.env[key] ?? (fallbackKey ? process.env[fallbackKey] : undefined);
   if (!v) return fallback;
   const n = Number.parseInt(v, 10);
   if (Number.isNaN(n)) throw new Error(`env ${key} is not an integer: ${v}`);
@@ -21,10 +26,10 @@ function optionalInt(key: string, fallback: number): number {
 }
 
 export const config = {
-  hackathonProgramId: required("HACKATHON_PROGRAM_ID"),
-  hackathonIdlPath: required("HACKATHON_IDL_PATH"),
-  hackathonStartBlock: optionalInt("HACKATHON_START_BLOCK", 0),
-  hackathonSeasonId: optionalInt("HACKATHON_SEASON_ID", 1),
+  programId: required("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID"),
+  idlPath: required("VARA_AGENTS_IDL_PATH", "HACKATHON_IDL_PATH"),
+  startBlock: optionalInt("VARA_AGENTS_START_BLOCK", 0, "HACKATHON_START_BLOCK"),
+  seasonId: optionalInt("VARA_AGENTS_SEASON_ID", 1, "HACKATHON_SEASON_ID"),
   varaArchiveUrl: optional("VARA_ARCHIVE_URL"),
   varaRpcUrl: required("VARA_RPC_URL"),
   databaseUrl: required("DATABASE_URL"),

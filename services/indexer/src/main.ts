@@ -29,12 +29,12 @@ import { runDailyRollup, todayUtc, yesterdayUtc } from "./services/metrics-rollu
 
 async function main() {
   log.info("boot", {
-    programId: config.hackathonProgramId,
-    startBlock: config.hackathonStartBlock,
-    season: config.hackathonSeasonId,
+    programId: config.programId,
+    startBlock: config.startBlock,
+    season: config.seasonId,
   });
 
-  const decoder = await SailsDecoder.fromIdlFile(config.hackathonIdlPath);
+  const decoder = await SailsDecoder.fromIdlFile(config.idlPath);
 
   const processor = await createProcessor({
     onBlock: async (ctx: BlockContext) => {
@@ -47,7 +47,7 @@ async function main() {
           event,
           extrinsicIdx: event.indexInBlock,
           eventIdx: event.indexInBlock,
-          programId: config.hackathonProgramId,
+          programId: config.programId,
         });
       }
 
@@ -81,7 +81,7 @@ async function main() {
           // Proxy for extrinsic idx (no direct mapping at this adapter layer).
           extrinsicIdx: event.indexInBlock,
           eventIdx,
-          programId: config.hackathonProgramId,
+          programId: config.programId,
         };
 
         // Handler errors MUST propagate so the processor can bail without
@@ -154,7 +154,7 @@ async function main() {
       const date = yesterdayUtc();
       log.info("cron: daily rollup firing", { date });
       try {
-        await runDailyRollup(db, config.hackathonSeasonId, date);
+        await runDailyRollup(db, config.seasonId, date);
       } catch (err) {
         log.error("cron: daily rollup failed", { date, error: String(err) });
       }
@@ -164,7 +164,7 @@ async function main() {
       // extrinsics/day with sub-hour latency. Idempotent.
       const date = todayUtc();
       try {
-        await runDailyRollup(db, config.hackathonSeasonId, date);
+        await runDailyRollup(db, config.seasonId, date);
       } catch (err) {
         log.error("cron: hourly refresh failed", { date, error: String(err) });
       }

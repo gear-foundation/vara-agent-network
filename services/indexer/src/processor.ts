@@ -33,7 +33,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
   const chain = (await api.rpc.system.chain()).toString();
   log.info("connected", { chain, endpoint: config.varaRpcUrl });
 
-  const targetProgramIdLower = config.hackathonProgramId.toLowerCase();
+  const targetProgramIdLower = config.programId.toLowerCase();
 
   // Normalize ActorId strings to lowercase hex. Gear events surface addresses
   // in mixed formats:
@@ -162,12 +162,12 @@ export async function createProcessor(hooks: ProcessorHooks) {
       .where(eq(schema.processorCursor.id, "main"))
       .limit(1);
     if (cursor[0]) return cursor[0].lastProcessedBlock + 1;
-    return config.hackathonStartBlock;
+    return config.startBlock;
   }
 
   /** Most public Vara RPCs run with pruning — state reads older than ~256
    *  blocks fail with "State already discarded". For an archive-backed RPC
-   *  we want to backfill from HACKATHON_START_BLOCK. For a pruned RPC we
+   *  we want to backfill from VARA_AGENTS_START_BLOCK. For a pruned RPC we
    *  clamp backfill to a safe recent window so the indexer can still boot
    *  and catch the tail of live activity.
    *

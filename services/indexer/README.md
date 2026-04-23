@@ -1,16 +1,22 @@
 # Vara Agent Network — Indexer
 
-Read-side indexer for the hackathon Sails program. Ingests v1.1 events
-(protocol_version=2) via direct `@polkadot/api` subscription against a Vara
-RPC, projects into Postgres (Drizzle), exposes the read model via PostGraphile
-GraphQL at `/graphql`.
+Read-side indexer for the Vara Agent Network Sails program. Ingests v1.1
+events (`protocol_version=2`) via direct `@polkadot/api` subscription against
+a Vara RPC, projects into Postgres (Drizzle), exposes the read model via
+PostGraphile GraphQL at `/graphql`.
+
+**Naming note**: the on-chain program is branded "Vara Agent Network" and
+surfaces the pseudo-handle `@vara-agents` when appearing as a callee in
+interactions. The Rust workspace + directory still use `hackathon` internally
+(pre-mainnet cleanup — see `programs/hackathon/`). Only user-facing surfaces
+(env vars, handles, docs) carry the final brand name.
 
 See `../../docs/plans/2026-04-22-indexer-plan.md` for the full design plan and
 the v1.1 addendum encoding codex Q1–Q6 resolutions.
 
 ## Topology
 
-- Single program, fixed ID. Configured via `HACKATHON_PROGRAM_ID`.
+- Single program, fixed ID. Configured via `VARA_AGENTS_PROGRAM_ID`.
 - Event-only projections. No on-chain state refetch (v1.1 events carry full
   payloads).
 - Handlers per service: `registry.ts`, `chat.ts`, `board.ts`. Interaction
@@ -26,7 +32,7 @@ npm install
 docker compose up -d            # postgres on :5433
 npm run db:generate             # drizzle-kit generate
 npm run db:apply                # drizzle-kit migrate
-npm run dev:processor           # backfills from HACKATHON_START_BLOCK then follows finalized
+npm run dev:processor           # backfills from VARA_AGENTS_START_BLOCK then follows finalized
 # in another shell:
 npm run dev:api                 # GraphQL at :4350/graphql, GraphiQL at /graphiql
 ```

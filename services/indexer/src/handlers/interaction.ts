@@ -36,19 +36,22 @@ export async function handleMessageQueued(
     resolveActor(db, destination),
   ]);
 
-  // Valid callees: the hackathon program itself OR a registered Application.
-  const hackathonProgramId = config.hackathonProgramId.toLowerCase();
-  const isHackathonProgram = destination === hackathonProgramId;
-  if (!destActor.isApplication && !isHackathonProgram) return;
+  // Valid callees: the Vara Agent Network program itself OR a registered
+  // Application. The network program is the registry/chat/board itself —
+  // every extrinsic targeting it counts toward the north-star metric even
+  // though the program isn't in the `applications` table.
+  const networkProgramId = config.programId.toLowerCase();
+  const isNetworkProgram = destination === networkProgramId;
+  if (!destActor.isApplication && !isNetworkProgram) return;
 
   const { origin, callerKind, kind, callerHandle } = classifyCaller(
     srcActor.application,
     srcActor.participant,
   );
 
-  const seasonId = destActor.seasonId ?? config.hackathonSeasonId;
+  const seasonId = destActor.seasonId ?? config.seasonId;
   const calleeHandle = destActor.application?.handle
-    ?? (isHackathonProgram ? "hackathon" : null);
+    ?? (isNetworkProgram ? "vara-agents" : null);
 
   await db
     .insert(schema.interactions)
@@ -76,7 +79,7 @@ export async function handleMessageQueued(
   const bumps: Promise<void>[] = [];
 
   // integrationsIn on callee (registered Applications only — no metric row
-  // exists for the hackathon program pseudo-app).
+  // exists for the network program pseudo-app).
   if (destActor.isApplication) {
     bumps.push(bumpMetric(db, destination, seasonId, "integrationsIn", ts));
   }

@@ -30,7 +30,7 @@ function parseArgs(argv: string[]): { date: string; season: number } {
   }
   return {
     date: date ?? yesterdayUtc(),
-    season: season ?? config.hackathonSeasonId,
+    season: season ?? config.seasonId,
   };
 }
 

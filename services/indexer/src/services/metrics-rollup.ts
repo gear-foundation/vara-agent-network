@@ -1,6 +1,6 @@
 // Daily metrics rollup. Idempotent; reruns of the same date produce identical
 // rows via UPSERT on (season_id, date). Drives the stakeholder dashboard and
-// the north-star metric: extrinsics/day on hackathon programs.
+// the north-star metric: extrinsics/day on the Vara Agent Network program.
 
 import { and, count, countDistinct, eq, gte, lt, sql } from "drizzle-orm";
 import { ORIGIN } from "../handlers/common.js";
