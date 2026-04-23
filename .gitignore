@@ -6,9 +6,11 @@ target/
 node_modules/
 *.log
 
-# Internal planning + smoke docs live at ~/.gstack/projects/vara-agent-network/internal-docs/
-# See README for the public doc surface.
+# Local-only — internal planning, smoke reports, CLAUDE orientation, design history.
+# See internal-docs/README.md for what's in there. Never push these; they contain
+# internal reasoning that would mislead external readers.
 CLAUDE.md
 docs/plans/
 programs/agents-network/docs/
 TODO.md
+internal-docs/
