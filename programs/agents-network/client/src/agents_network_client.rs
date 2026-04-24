@@ -5,6 +5,7 @@ pub struct AgentsNetworkClientProgram;
 impl sails_rs::client::Program for AgentsNetworkClientProgram {}
 pub trait AgentsNetworkClient {
     type Env: sails_rs::client::GearEnv;
+    fn admin(&self) -> sails_rs::client::Service<admin::AdminImpl, Self::Env>;
     fn registry(&self) -> sails_rs::client::Service<registry::RegistryImpl, Self::Env>;
     fn chat(&self) -> sails_rs::client::Service<chat::ChatImpl, Self::Env>;
     fn board(&self) -> sails_rs::client::Service<board::BoardImpl, Self::Env>;
@@ -13,6 +14,9 @@ impl<E: sails_rs::client::GearEnv> AgentsNetworkClient
     for sails_rs::client::Actor<AgentsNetworkClientProgram, E>
 {
     type Env = E;
+    fn admin(&self) -> sails_rs::client::Service<admin::AdminImpl, Self::Env> {
+        self.service(stringify!(Admin))
+    }
     fn registry(&self) -> sails_rs::client::Service<registry::RegistryImpl, Self::Env> {
         self.service(stringify!(Registry))
     }
@@ -25,13 +29,13 @@ impl<E: sails_rs::client::GearEnv> AgentsNetworkClient
 }
 pub trait AgentsNetworkClientCtors {
     type Env: sails_rs::client::GearEnv;
-    /// Construct a fresh program. `initial_season` is stamped on every event
-    /// and state row; v2 rollover deploys a new program with
-    /// `initial_season += 1`.
+    /// Construct a fresh program. `admin` controls config/pause/readonly.
+    /// `initial_season` is stamped on every event and state row.
     #[allow(clippy::new_ret_no_self)]
     #[allow(clippy::wrong_self_convention)]
     fn new(
         self,
+        admin: ActorId,
         initial_season: u32,
     ) -> sails_rs::client::PendingCtor<AgentsNetworkClientProgram, io::New, Self::Env>;
 }
@@ -41,15 +45,117 @@ impl<E: sails_rs::client::GearEnv> AgentsNetworkClientCtors
     type Env = E;
     fn new(
         self,
+        admin: ActorId,
         initial_season: u32,
     ) -> sails_rs::client::PendingCtor<AgentsNetworkClientProgram, io::New, Self::Env> {
-        self.pending_ctor((initial_season,))
+        self.pending_ctor((admin, initial_season))
     }
 }
 
 pub mod io {
     use super::*;
-    sails_rs::io_struct_impl!(New (initial_season: u32) -> ());
+    sails_rs::io_struct_impl!(New (admin: ActorId, initial_season: u32) -> ());
+}
+
+pub mod admin {
+    use super::*;
+    pub trait Admin {
+        type Env: sails_rs::client::GearEnv;
+        fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env>;
+        fn set_readonly(
+            &mut self,
+            readonly: bool,
+        ) -> sails_rs::client::PendingCall<io::SetReadonly, Self::Env>;
+        fn transfer_admin(
+            &mut self,
+            new_admin: ActorId,
+        ) -> sails_rs::client::PendingCall<io::TransferAdmin, Self::Env>;
+        fn unpause(&mut self) -> sails_rs::client::PendingCall<io::Unpause, Self::Env>;
+        fn update_config(
+            &mut self,
+            new_config: Config,
+        ) -> sails_rs::client::PendingCall<io::UpdateConfig, Self::Env>;
+        fn get_admin(&self) -> sails_rs::client::PendingCall<io::GetAdmin, Self::Env>;
+        fn get_config(&self) -> sails_rs::client::PendingCall<io::GetConfig, Self::Env>;
+    }
+    pub struct AdminImpl;
+    impl<E: sails_rs::client::GearEnv> Admin for sails_rs::client::Service<AdminImpl, E> {
+        type Env = E;
+        fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env> {
+            self.pending_call(())
+        }
+        fn set_readonly(
+            &mut self,
+            readonly: bool,
+        ) -> sails_rs::client::PendingCall<io::SetReadonly, Self::Env> {
+            self.pending_call((readonly,))
+        }
+        fn transfer_admin(
+            &mut self,
+            new_admin: ActorId,
+        ) -> sails_rs::client::PendingCall<io::TransferAdmin, Self::Env> {
+            self.pending_call((new_admin,))
+        }
+        fn unpause(&mut self) -> sails_rs::client::PendingCall<io::Unpause, Self::Env> {
+            self.pending_call(())
+        }
+        fn update_config(
+            &mut self,
+            new_config: Config,
+        ) -> sails_rs::client::PendingCall<io::UpdateConfig, Self::Env> {
+            self.pending_call((new_config,))
+        }
+        fn get_admin(&self) -> sails_rs::client::PendingCall<io::GetAdmin, Self::Env> {
+            self.pending_call(())
+        }
+        fn get_config(&self) -> sails_rs::client::PendingCall<io::GetConfig, Self::Env> {
+            self.pending_call(())
+        }
+    }
+
+    pub mod io {
+        use super::*;
+        sails_rs::io_struct_impl!(Pause () -> ());
+        sails_rs::io_struct_impl!(SetReadonly (readonly: bool) -> ());
+        sails_rs::io_struct_impl!(TransferAdmin (new_admin: ActorId) -> ());
+        sails_rs::io_struct_impl!(Unpause () -> ());
+        sails_rs::io_struct_impl!(UpdateConfig (new_config: super::Config) -> ());
+        sails_rs::io_struct_impl!(GetAdmin () -> ActorId);
+        sails_rs::io_struct_impl!(GetConfig () -> super::Config);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub mod events {
+        use super::*;
+        #[derive(PartialEq, Debug, Encode, Decode)]
+        #[codec(crate = sails_rs::scale_codec)]
+        pub enum AdminEvents {
+            AdminTransferred {
+                old_admin: ActorId,
+                new_admin: ActorId,
+            },
+            ConfigUpdated {
+                config: Config,
+            },
+            Paused,
+            Unpaused,
+            ReadonlyChanged {
+                readonly: bool,
+            },
+        }
+        impl sails_rs::client::Event for AdminEvents {
+            const EVENT_NAMES: &'static [Route] = &[
+                "AdminTransferred",
+                "ConfigUpdated",
+                "Paused",
+                "Unpaused",
+                "ReadonlyChanged",
+            ];
+        }
+        impl sails_rs::client::ServiceWithEvents for AdminImpl {
+            type Event = AdminEvents;
+        }
+    }
 }
 
 pub mod registry {
@@ -157,9 +263,9 @@ pub mod registry {
 
     pub mod io {
         use super::*;
-        sails_rs::io_struct_impl!(RegisterApplication (req: super::RegisterAppReq) -> Result<(), super::RegistryError>);
-        sails_rs::io_struct_impl!(RegisterParticipant (handle: String, github: String) -> Result<(), super::RegistryError>);
-        sails_rs::io_struct_impl!(UpdateApplication (program_id: ActorId, patch: super::ApplicationPatch) -> Result<(), super::RegistryError>);
+        sails_rs::io_struct_impl!(RegisterApplication (req: super::RegisterAppReq) -> ());
+        sails_rs::io_struct_impl!(RegisterParticipant (handle: String, github: String) -> ());
+        sails_rs::io_struct_impl!(UpdateApplication (program_id: ActorId, patch: super::ApplicationPatch) -> ());
         sails_rs::io_struct_impl!(Discover (filter: super::DiscoveryFilter, cursor: Option<ActorId>, limit: u32) -> super::ApplicationPage);
         sails_rs::io_struct_impl!(GetApplication (id: ActorId) -> Option<super::Application>);
         sails_rs::io_struct_impl!(GetParticipant (wallet: ActorId) -> Option<super::Participant>);
@@ -276,7 +382,7 @@ pub mod chat {
 
     pub mod io {
         use super::*;
-        sails_rs::io_struct_impl!(Post (body: String, author: super::HandleRef, mentions: Vec<super::HandleRef>, reply_to: Option<u64>) -> Result<u64, super::ChatError>);
+        sails_rs::io_struct_impl!(Post (body: String, author: super::HandleRef, mentions: Vec<super::HandleRef>, reply_to: Option<u64>) -> u64);
         sails_rs::io_struct_impl!(GetMentions (recipient: super::HandleRef, since_seq: u64, limit: u32) -> super::MentionsPage);
     }
 
@@ -393,10 +499,10 @@ pub mod board {
 
     pub mod io {
         use super::*;
-        sails_rs::io_struct_impl!(ArchiveAnnouncement (app: ActorId, id: u64) -> Result<(), super::BoardError>);
-        sails_rs::io_struct_impl!(EditAnnouncement (app: ActorId, id: u64, req: super::AnnouncementReq) -> Result<(), super::BoardError>);
-        sails_rs::io_struct_impl!(PostAnnouncement (app: ActorId, req: super::AnnouncementReq) -> Result<u64, super::BoardError>);
-        sails_rs::io_struct_impl!(SetIdentityCard (app: ActorId, req: super::IdentityCardReq) -> Result<(), super::BoardError>);
+        sails_rs::io_struct_impl!(ArchiveAnnouncement (app: ActorId, id: u64) -> ());
+        sails_rs::io_struct_impl!(EditAnnouncement (app: ActorId, id: u64, req: super::AnnouncementReq) -> ());
+        sails_rs::io_struct_impl!(PostAnnouncement (app: ActorId, req: super::AnnouncementReq) -> u64);
+        sails_rs::io_struct_impl!(SetIdentityCard (app: ActorId, req: super::IdentityCardReq) -> ());
         sails_rs::io_struct_impl!(ListAnnouncements (cursor: Option<u64>, limit: u32) -> super::AnnouncementPage);
         sails_rs::io_struct_impl!(ListIdentityCards (cursor: Option<ActorId>, limit: u32) -> super::IdentityCardPage);
     }
@@ -452,6 +558,23 @@ pub mod board {
         }
     }
 }
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct Config {
+    pub paused: bool,
+    pub readonly: bool,
+    pub allow_participant_registration: bool,
+    pub allow_application_registration: bool,
+    pub allow_chat: bool,
+    pub allow_board_updates: bool,
+    pub max_chat_body: u32,
+    pub max_mentions_per_post: u32,
+    pub mention_inbox_cap: u32,
+    pub max_announcements_per_app: u32,
+    pub chat_rate_limit_ms: u64,
+    pub board_rate_limit_ms: u64,
+}
 /// Option A: caller MUST be the program being registered. Registry keys on
 /// `msg::source()`; `program_id` is not accepted in the request.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
@@ -479,27 +602,6 @@ pub enum Track {
     Social,
     Economy,
     Open,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum RegistryError {
-    HandleTaken,
-    HandleMalformed,
-    /// `apps_by_owner[req.operator].len() >= 20`. Rotate to a fresh operator
-    /// wallet if the slot budget is exhausted (starter-kit mints per-program
-    /// operator keys by default).
-    AppLimitReached,
-    NotOwner,
-    UnknownApplication,
-    UnknownParticipant,
-    /// Propagated when `BoardState::push_announcement` fails inside
-    /// `registerApplication`; the whole message rolls back.
-    AutoAnnounceFailed,
-    /// Any string field exceeds its cap (see `guards.rs`).
-    FieldTooLarge,
-    /// A participant with `msg::source()` already exists at `registerParticipant`.
-    AlreadyRegistered,
 }
 /// Handle + program_id + owner + registered_at + season_id are immutable.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
@@ -578,19 +680,6 @@ pub enum HandleRef {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub enum ChatError {
-    RateLimited,
-    /// `msg::source()` does not own the `author` HandleRef.
-    Unauthorized,
-    BodyTooLarge,
-    TooManyMentions,
-    EmptyBody,
-    /// `author = Application(a)` where `applications[a]` does not exist.
-    UnknownApplication,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
 pub struct MentionsPage {
     pub headers: Vec<MentionHeader>,
     /// `true` iff the caller's `since_seq < oldest_retained_seq` — agent must
@@ -608,16 +697,6 @@ pub struct MentionHeader {
     pub msg_id: u64,
     pub block: u32,
     pub author: HandleRef,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum BoardError {
-    RateLimited,
-    Unauthorized,
-    FieldTooLarge,
-    UnknownApplication,
-    UnknownAnnouncement,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]

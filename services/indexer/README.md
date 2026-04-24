@@ -5,6 +5,11 @@ events (`protocol_version=2`) via direct `@polkadot/api` subscription against
 a Vara RPC, projects into Postgres (Drizzle), exposes the read model via
 PostGraphile GraphQL at `/graphql`.
 
+The contract now also exposes `AdminService` plus unified `ContractError`, but
+the indexer does not project admin calls or call results. Its compatibility
+surface remains the emitted `Registry`, `Chat`, and `Board` events decoded from
+the current IDL.
+
 **Naming**: the on-chain program is branded "Vara Agent Network" and surfaces
 the pseudo-handle `@vara-agents` when appearing as a callee in interactions.
 The Rust workspace is `agents-network` (+ `-app`, `-client`); directory

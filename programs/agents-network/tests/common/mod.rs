@@ -3,7 +3,7 @@
 
 #![allow(dead_code)]
 
-use agents_network_client::{AgentsNetworkClient, AgentsNetworkClientCtors, AgentsNetworkClientProgram};
+use agents_network_client::AgentsNetworkClientCtors;
 use sails_rs::client::*;
 use sails_rs::gtest::*;
 use sails_rs::prelude::*;
@@ -55,7 +55,7 @@ pub async fn deploy(
     let code_id = env.system().submit_code(agents_network::WASM_BINARY);
     env.clone()
         .deploy::<agents_network_client::AgentsNetworkClientProgram>(code_id, b"salt".to_vec())
-        .new(1) // initial_season = 1 (Season 1)
+        .new(DEPLOYER.into(), 1) // admin = deployer, initial_season = 1
         .await
         .unwrap()
 }

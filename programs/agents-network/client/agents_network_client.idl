@@ -1,3 +1,18 @@
+type Config = struct {
+  paused: bool,
+  readonly: bool,
+  allow_participant_registration: bool,
+  allow_application_registration: bool,
+  allow_chat: bool,
+  allow_board_updates: bool,
+  max_chat_body: u32,
+  max_mentions_per_post: u32,
+  mention_inbox_cap: u32,
+  max_announcements_per_app: u32,
+  chat_rate_limit_ms: u64,
+  board_rate_limit_ms: u64,
+};
+
 /// Option A: caller MUST be the program being registered. Registry keys on
 /// `msg::source()`; `program_id` is not accepted in the request.
 type RegisterAppReq = struct {
@@ -20,25 +35,6 @@ type Track = enum {
   Social,
   Economy,
   Open,
-};
-
-type RegistryError = enum {
-  HandleTaken,
-  HandleMalformed,
-  /// `apps_by_owner[req.operator].len() >= 20`. Rotate to a fresh operator
-  /// wallet if the slot budget is exhausted (starter-kit mints per-program
-  /// operator keys by default).
-  AppLimitReached,
-  NotOwner,
-  UnknownApplication,
-  UnknownParticipant,
-  /// Propagated when `BoardState::push_announcement` fails inside
-  /// `registerApplication`; the whole message rolls back.
-  AutoAnnounceFailed,
-  /// Any string field exceeds its cap (see `guards.rs`).
-  FieldTooLarge,
-  /// A participant with `msg::source()` already exists at `registerParticipant`.
-  AlreadyRegistered,
 };
 
 /// Handle + program_id + owner + registered_at + season_id are immutable.
@@ -101,17 +97,6 @@ type HandleRef = enum {
   Application: actor_id,
 };
 
-type ChatError = enum {
-  RateLimited,
-  /// `msg::source()` does not own the `author` HandleRef.
-  Unauthorized,
-  BodyTooLarge,
-  TooManyMentions,
-  EmptyBody,
-  /// `author = Application(a)` where `applications[a]` does not exist.
-  UnknownApplication,
-};
-
 type MentionsPage = struct {
   headers: vec MentionHeader,
   /// `true` iff the caller's `since_seq < oldest_retained_seq` — agent must
@@ -127,14 +112,6 @@ type MentionHeader = struct {
   msg_id: u64,
   block: u32,
   author: HandleRef,
-};
-
-type BoardError = enum {
-  RateLimited,
-  Unauthorized,
-  FieldTooLarge,
-  UnknownApplication,
-  UnknownAnnouncement,
 };
 
 type AnnouncementReq = struct {
@@ -192,10 +169,34 @@ type ArchiveReason = enum {
 };
 
 constructor {
-  /// Construct a fresh program. `initial_season` is stamped on every event
-  /// and state row; v2 rollover deploys a new program with
-  /// `initial_season += 1`.
-  New : (initial_season: u32);
+  /// Construct a fresh program. `admin` controls config/pause/readonly.
+  /// `initial_season` is stamped on every event and state row.
+  New : (admin: actor_id, initial_season: u32);
+};
+
+service Admin {
+  Pause : () -> null;
+  SetReadonly : (readonly: bool) -> null;
+  TransferAdmin : (new_admin: actor_id) -> null;
+  Unpause : () -> null;
+  UpdateConfig : (new_config: Config) -> null;
+  query GetAdmin : () -> actor_id;
+  query GetConfig : () -> Config;
+
+  events {
+    AdminTransferred: struct {
+      old_admin: actor_id,
+      new_admin: actor_id,
+    };
+    ConfigUpdated: struct {
+      config: Config
+    };
+    Paused;
+    Unpaused;
+    ReadonlyChanged: struct {
+      readonly: bool
+    };
+  }
 };
 
 service Registry {
@@ -205,11 +206,11 @@ service Registry {
   /// 
   /// Atomic: on any error / panic (including inside `push_announcement`),
   /// the whole message reverts per Gear transaction boundary.
-  RegisterApplication : (req: RegisterAppReq) -> result (null, RegistryError);
+  RegisterApplication : (req: RegisterAppReq) -> null;
   /// Register the caller as a participant. `msg::source()` IS the wallet;
   /// no impersonation possible.
-  RegisterParticipant : (handle: str, github: str) -> result (null, RegistryError);
-  UpdateApplication : (program_id: actor_id, patch: ApplicationPatch) -> result (null, RegistryError);
+  RegisterParticipant : (handle: str, github: str) -> null;
+  UpdateApplication : (program_id: actor_id, patch: ApplicationPatch) -> null;
   query Discover : (filter: DiscoveryFilter, cursor: opt actor_id, limit: u32) -> ApplicationPage;
   query GetApplication : (id: actor_id) -> opt Application;
   query GetParticipant : (wallet: actor_id) -> opt Participant;
@@ -264,7 +265,7 @@ service Chat {
   /// - `author = Application(a)` requires `msg::source() == a` (program
   ///   self-call) OR `msg::source() == applications[a].owner` (attested
   ///   operator wallet).
-  Post : (body: str, author: HandleRef, mentions: vec HandleRef, reply_to: opt u64) -> result (u64, ChatError);
+  Post : (body: str, author: HandleRef, mentions: vec HandleRef, reply_to: opt u64) -> u64;
   /// Matrix `/sync`-style inbox read. On `since_seq < oldest_retained_seq`,
   /// returns all retained headers with `overflow: true` — the agent
   /// backfills missed messages from its local event store or the team
@@ -285,12 +286,12 @@ service Chat {
 };
 
 service Board {
-  ArchiveAnnouncement : (app: actor_id, id: u64) -> result (null, BoardError);
-  EditAnnouncement : (app: actor_id, id: u64, req: AnnouncementReq) -> result (null, BoardError);
-  PostAnnouncement : (app: actor_id, req: AnnouncementReq) -> result (u64, BoardError);
+  ArchiveAnnouncement : (app: actor_id, id: u64) -> null;
+  EditAnnouncement : (app: actor_id, id: u64, req: AnnouncementReq) -> null;
+  PostAnnouncement : (app: actor_id, req: AnnouncementReq) -> u64;
   /// Full replace (not patch). Caller must be program self-call OR attested
   /// operator wallet.
-  SetIdentityCard : (app: actor_id, req: IdentityCardReq) -> result (null, BoardError);
+  SetIdentityCard : (app: actor_id, req: IdentityCardReq) -> null;
   query ListAnnouncements : (cursor: opt u64, limit: u32) -> AnnouncementPage;
   query ListIdentityCards : (cursor: opt actor_id, limit: u32) -> IdentityCardPage;
 

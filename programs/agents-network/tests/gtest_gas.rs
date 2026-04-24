@@ -23,7 +23,6 @@ mod common;
 use common::*;
 use agents_network_client::{AgentsNetworkClient, HandleRef, chat::Chat, registry::Registry};
 use sails_rs::client::*;
-use sails_rs::gtest::*;
 use sails_rs::prelude::*;
 
 /// 10%-of-block-allowance gate. Current worst-case paths use 2-4B (well

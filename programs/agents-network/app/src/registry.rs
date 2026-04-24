@@ -6,6 +6,7 @@
 //! else's deployed program is impossible.
 
 use crate::board::BoardState;
+use crate::admin::AdminState;
 use crate::guards;
 use crate::types::*;
 use sails_rs::cell::RefCell;
@@ -77,6 +78,7 @@ pub enum RegistryEvent {
 // ---------------------------------------------------------------------------
 
 pub struct RegistryService<'a> {
+    admin: &'a RefCell<AdminState>,
     registry: &'a RefCell<RegistryState>,
     /// Shared mutable access to board state so `registerApplication` can call
     /// the `BoardState::push_announcement` helper atomically.
@@ -86,11 +88,13 @@ pub struct RegistryService<'a> {
 
 impl<'a> RegistryService<'a> {
     pub fn new(
+        admin: &'a RefCell<AdminState>,
         registry: &'a RefCell<RegistryState>,
         board: &'a RefCell<BoardState>,
         current_season: u32,
     ) -> Self {
         Self {
+            admin,
             registry,
             board,
             current_season,
@@ -102,25 +106,28 @@ impl<'a> RegistryService<'a> {
 impl<'a> RegistryService<'a> {
     /// Register the caller as a participant. `msg::source()` IS the wallet;
     /// no impersonation possible.
-    #[export]
+    #[export(unwrap_result)]
     pub fn register_participant(
         &mut self,
         handle: Handle,
         github: String,
-    ) -> Result<(), RegistryError> {
-        guards::validate_handle(&handle)?;
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_participant_registration_enabled(&config)?;
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::validate_handle(&handle, &config)?;
         if github.len() > MAX_GITHUB_URL {
-            return Err(RegistryError::FieldTooLarge);
+            return Err(ContractError::FieldTooLarge);
         }
 
         let wallet = msg::source();
         let mut reg = self.registry.borrow_mut();
 
         if reg.participants.contains_key(&wallet) {
-            return Err(RegistryError::AlreadyRegistered);
+            return Err(ContractError::AlreadyRegistered);
         }
         if reg.handles.contains_key(&handle) {
-            return Err(RegistryError::HandleTaken);
+            return Err(ContractError::HandleTaken);
         }
 
         let joined_at = exec::block_timestamp();
@@ -157,12 +164,15 @@ impl<'a> RegistryService<'a> {
     ///
     /// Atomic: on any error / panic (including inside `push_announcement`),
     /// the whole message reverts per Gear transaction boundary.
-    #[export]
+    #[export(unwrap_result)]
     pub fn register_application(
         &mut self,
         req: RegisterAppReq,
-    ) -> Result<(), RegistryError> {
-        guards::check_register_app_req(&req)?;
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_application_registration_enabled(&config)?;
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_register_app_req(&req, &config)?;
 
         let program_id = msg::source();
         let now = exec::block_timestamp();
@@ -172,20 +182,11 @@ impl<'a> RegistryService<'a> {
         let mut board = self.board.borrow_mut();
 
         if reg.handles.contains_key(&req.handle) {
-            return Err(RegistryError::HandleTaken);
+            return Err(ContractError::HandleTaken);
         }
         if reg.applications.contains_key(&program_id) {
-            return Err(RegistryError::AlreadyRegistered);
+            return Err(ContractError::AlreadyRegistered);
         }
-        // NOTE: we intentionally do NOT cap `apps_by_owner[req.operator]`.
-        // Capping on an unauthenticated field lets any attacker burn a victim
-        // wallet's operator-slot budget by spamming registrations that name
-        // the victim. Cost-to-deploy (each program needs its own ActorId via
-        // real code upload on mainnet) is the real anti-Sybil backstop.
-        // `apps_by_owner` still populated for UX lookup ("show @alice's agents").
-        // `MAX_APPS_PER_OPERATOR` constant and `AppLimitReached` enum variant
-        // kept for IDL stability but no longer emitted.
-        let _ = MAX_APPS_PER_OPERATOR;
 
         let app = Application {
             program_id,
@@ -226,6 +227,7 @@ impl<'a> RegistryService<'a> {
             Vec::new(), // no tags on auto-announcement
             now,
             season_id,
+            config.max_announcements_per_app,
         );
 
         drop(reg);
@@ -251,13 +253,21 @@ impl<'a> RegistryService<'a> {
         Ok(())
     }
 
-    #[export]
+    #[export(unwrap_result)]
     pub fn update_application(
         &mut self,
         program_id: ActorId,
         patch: ApplicationPatch,
-    ) -> Result<(), RegistryError> {
-        guards::check_application_patch(&patch)?;
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_application_patch(
+            patch.description.as_ref(),
+            patch.skills_url.as_ref(),
+            patch.idl_url.as_ref(),
+            patch.x_account.as_ref(),
+            &config,
+        )?;
 
         let caller = msg::source();
         let mut reg = self.registry.borrow_mut();
@@ -265,11 +275,11 @@ impl<'a> RegistryService<'a> {
         let app = reg
             .applications
             .get_mut(&program_id)
-            .ok_or(RegistryError::UnknownApplication)?;
+            .ok_or(ContractError::UnknownApplication)?;
 
         // Auth: operator wallet OR program self-call.
         if caller != app.owner && caller != program_id {
-            return Err(RegistryError::NotOwner);
+            return Err(ContractError::NotOwner);
         }
 
         // Apply each Some(_) arm and build the `applied` patch we emit.
@@ -343,7 +353,7 @@ impl<'a> RegistryService<'a> {
         cursor: Option<ActorId>,
         limit: u32,
     ) -> ApplicationPage {
-        let limit = limit.min(MAX_PAGE_SIZE_DISCOVER) as usize;
+        let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_DISCOVER);
         let reg = self.registry.borrow();
 
         let mut iter: Vec<(&ActorId, &Application)> = reg

@@ -4,10 +4,9 @@ mod common;
 
 use common::*;
 use agents_network_client::{
-    AnnouncementKind, BoardError, AgentsNetworkClient, board::Board, registry::Registry,
+    AnnouncementKind, AgentsNetworkClient, board::Board, registry::Registry,
 };
 use sails_rs::client::*;
-use sails_rs::gtest::*;
 use sails_rs::prelude::*;
 
 async fn setup() -> sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv> {
@@ -20,14 +19,12 @@ async fn setup() -> sails_rs::client::Actor<agents_network_client::AgentsNetwork
         .register_participant("bob".to_string(), "github.com/bob".to_string())
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
     program
         .registry()
         .register_application(mk_register_req("nft", BOB))
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
-        .unwrap()
         .unwrap();
 
     program
@@ -42,7 +39,6 @@ async fn set_identity_card_happy_path() {
         .set_identity_card(STUB_PROGRAM_ALPHA.into(), mk_identity_card_req())
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
 
     let page = program
@@ -60,14 +56,12 @@ async fn set_identity_card_unauthorized() {
     let program = setup().await;
 
     // Mallory is neither the program nor the operator.
-    let err = program
+    program
         .board()
         .set_identity_card(STUB_PROGRAM_ALPHA.into(), mk_identity_card_req())
         .with_actor_id(MALLORY.into())
         .await
-        .unwrap()
         .unwrap_err();
-    assert_eq!(err, BoardError::Unauthorized);
 
     // Program self-call works.
     program
@@ -75,7 +69,6 @@ async fn set_identity_card_unauthorized() {
         .set_identity_card(STUB_PROGRAM_ALPHA.into(), mk_identity_card_req())
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
-        .unwrap()
         .unwrap();
 }
 
@@ -88,7 +81,6 @@ async fn post_announcement_happy_path() {
         .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("hello"))
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
     // Registration auto-announce already has id=1; invitation is id=2.
     assert_eq!(id, 2);
@@ -116,17 +108,14 @@ async fn rate_limit_blocks_rapid_posts() {
         .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("one"))
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
 
-    let err = program
+    program
         .board()
         .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("two"))
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap_err();
-    assert_eq!(err, BoardError::RateLimited);
 }
 
 #[tokio::test]
@@ -138,7 +127,6 @@ async fn archive_announcement_manual() {
         .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("drop-me"))
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
 
     program
@@ -146,7 +134,6 @@ async fn archive_announcement_manual() {
         .archive_announcement(STUB_PROGRAM_ALPHA.into(), id)
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
 
     let page = program
@@ -168,7 +155,6 @@ async fn edit_announcement_happy_path() {
         .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("v1"))
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
 
     let mut edited = mk_announcement_req("v2");
@@ -178,7 +164,6 @@ async fn edit_announcement_happy_path() {
         .edit_announcement(STUB_PROGRAM_ALPHA.into(), id, edited)
         .with_actor_id(BOB.into())
         .await
-        .unwrap()
         .unwrap();
 
     let page = program

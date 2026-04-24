@@ -65,61 +65,76 @@ pub enum ArchiveReason {
     Manual,
 }
 
-// FieldTag removed at v1.1 (protocol_version = 2). Update events now carry
-// the applied `ApplicationPatch` directly, so FieldTag's only use (listing
-// which fields changed) is subsumed: non-None arms on the emitted patch IS
-// the change set. Kept out of the IDL entirely — this is a wire reset, not
-// an additive migration.
+// ---------------------------------------------------------------------------
+// Config
+// ---------------------------------------------------------------------------
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct Config {
+    pub paused: bool,
+    pub readonly: bool,
+    pub allow_participant_registration: bool,
+    pub allow_application_registration: bool,
+    pub allow_chat: bool,
+    pub allow_board_updates: bool,
+    pub max_chat_body: u32,
+    pub max_mentions_per_post: u32,
+    pub mention_inbox_cap: u32,
+    pub max_announcements_per_app: u32,
+    pub chat_rate_limit_ms: u64,
+    pub board_rate_limit_ms: u64,
+}
+
+impl Default for Config {
+    fn default() -> Self {
+        Self {
+            paused: false,
+            readonly: false,
+            allow_participant_registration: true,
+            allow_application_registration: true,
+            allow_chat: true,
+            allow_board_updates: true,
+            max_chat_body: 2048,
+            max_mentions_per_post: 8,
+            mention_inbox_cap: 100,
+            max_announcements_per_app: 5,
+            chat_rate_limit_ms: 5_000,
+            board_rate_limit_ms: 60_000,
+        }
+    }
+}
 
 // ---------------------------------------------------------------------------
-// Error enums (each route returns Result<T, E>)
+// Errors
 // ---------------------------------------------------------------------------
 
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub enum RegistryError {
+pub enum ContractError {
+    NotAdmin,
+    Paused,
+    ReadOnly,
+    RegistrationDisabled,
+    ChatDisabled,
+    BoardUpdatesDisabled,
     HandleTaken,
     HandleMalformed,
-    /// `apps_by_owner[req.operator].len() >= 20`. Rotate to a fresh operator
-    /// wallet if the slot budget is exhausted (starter-kit mints per-program
-    /// operator keys by default).
     AppLimitReached,
     NotOwner,
+    Unauthorized,
     UnknownApplication,
     UnknownParticipant,
-    /// Propagated when `BoardState::push_announcement` fails inside
-    /// `registerApplication`; the whole message rolls back.
+    UnknownAnnouncement,
     AutoAnnounceFailed,
-    /// Any string field exceeds its cap (see `guards.rs`).
     FieldTooLarge,
-    /// A participant with `msg::source()` already exists at `registerParticipant`.
     AlreadyRegistered,
-}
-
-#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum ChatError {
     RateLimited,
-    /// `msg::source()` does not own the `author` HandleRef.
-    Unauthorized,
-    BodyTooLarge,
     TooManyMentions,
     EmptyBody,
-    /// `author = Application(a)` where `applications[a]` does not exist.
-    UnknownApplication,
-}
-
-#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum BoardError {
-    RateLimited,
-    Unauthorized,
-    FieldTooLarge,
-    UnknownApplication,
-    UnknownAnnouncement,
+    ConfigInvalid,
 }
 
 // ---------------------------------------------------------------------------
@@ -323,44 +338,21 @@ pub struct AnnouncementPage {
 }
 
 // ---------------------------------------------------------------------------
-// Size caps (enforced in guards.rs; errors returned typed)
+// Structural limits kept stable at compile time
 // ---------------------------------------------------------------------------
 
-pub const MAX_CHAT_BODY: usize = 2048;
-pub const MAX_MENTIONS_PER_POST: usize = 8;
 pub const MIN_HANDLE_LEN: usize = 3;
 pub const MAX_HANDLE_LEN: usize = 32;
-
 pub const MAX_GITHUB_URL: usize = 256;
 pub const MAX_SKILLS_URL: usize = 256;
 pub const MAX_IDL_URL: usize = 256;
 pub const MAX_DESCRIPTION: usize = 280;
 pub const MAX_X_ACCOUNT: usize = 64;
-
 pub const MAX_IDENTITY_FIELD: usize = 280;
 pub const MAX_TAGS: usize = 8;
 pub const MAX_TAG_LEN: usize = 32;
 pub const MAX_ANNOUNCEMENT_TITLE: usize = 80;
 pub const MAX_ANNOUNCEMENT_BODY: usize = 1024;
-
-/// Per-recipient inbox cap. Drives ring-buffer gas ceiling and is the input
-/// to the pre-IDL-freeze gas measurement.
-pub const MENTION_INBOX_CAP: usize = 100;
-
-/// Max apps attesting the same operator wallet. Griefing mitigation: fresh
-/// operator keypair per program (starter-kit default).
-pub const MAX_APPS_PER_OPERATOR: usize = 20;
-
-/// Max announcements per application; overflow auto-prunes oldest.
-pub const MAX_ANNOUNCEMENTS_PER_APP: usize = 5;
-
-/// Chat rate limit per `msg::source()`.
-pub const CHAT_RATE_LIMIT_MS: u64 = 5_000;
-
-/// Board rate limit per application.
-pub const BOARD_RATE_LIMIT_MS: u64 = 60_000;
-
-/// Pagination clamps.
 pub const MAX_PAGE_SIZE_DISCOVER: u32 = 50;
 pub const MAX_PAGE_SIZE_LIST: u32 = 50;
 pub const MAX_PAGE_SIZE_MENTIONS: u32 = 100;

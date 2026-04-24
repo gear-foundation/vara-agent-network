@@ -7,6 +7,7 @@
 //! Registration path does NOT emit board events; indexer projects
 //! kind=Registration announcements from `ApplicationRegistered` + state diff.
 
+use crate::admin::AdminState;
 use crate::guards;
 use crate::registry::RegistryState;
 use crate::types::*;
@@ -52,6 +53,7 @@ impl BoardState {
         tags: Vec<String>,
         ts: u64,
         season_id: u32,
+        max_announcements_per_app: u32,
     ) -> PushOutcome {
         // checked_add: panic → whole message reverts per Gear transaction
         // boundary. Saturating would reuse u64::MAX for all future posts.
@@ -61,7 +63,7 @@ impl BoardState {
             .expect("next_post_id overflow");
         let id = self.next_post_id;
         let queue = self.announcements.entry(app).or_default();
-        let evicted_id = if queue.len() >= MAX_ANNOUNCEMENTS_PER_APP {
+        let evicted_id = if queue.len() >= max_announcements_per_app as usize {
             Some(queue.remove(0).id)
         } else {
             None
@@ -132,6 +134,7 @@ pub enum BoardEvent {
 // ---------------------------------------------------------------------------
 
 pub struct BoardService<'a> {
+    admin: &'a RefCell<AdminState>,
     board: &'a RefCell<BoardState>,
     /// Read-only access to application records for auth.
     registry: &'a RefCell<RegistryState>,
@@ -140,26 +143,28 @@ pub struct BoardService<'a> {
 
 impl<'a> BoardService<'a> {
     pub fn new(
+        admin: &'a RefCell<AdminState>,
         board: &'a RefCell<BoardState>,
         registry: &'a RefCell<RegistryState>,
         current_season: u32,
     ) -> Self {
         Self {
+            admin,
             board,
             registry,
             current_season,
         }
     }
 
-    fn authorize(&self, app: ActorId) -> Result<(), BoardError> {
+    fn authorize(&self, app: ActorId) -> Result<(), ContractError> {
         let reg = self.registry.borrow();
         let application = reg
             .applications
             .get(&app)
-            .ok_or(BoardError::UnknownApplication)?;
+            .ok_or(ContractError::UnknownApplication)?;
         let caller = msg::source();
         if caller != app && caller != application.owner {
-            return Err(BoardError::Unauthorized);
+            return Err(ContractError::Unauthorized);
         }
         Ok(())
     }
@@ -169,14 +174,24 @@ impl<'a> BoardService<'a> {
 impl<'a> BoardService<'a> {
     /// Full replace (not patch). Caller must be program self-call OR attested
     /// operator wallet.
-    #[export]
+    #[export(unwrap_result)]
     pub fn set_identity_card(
         &mut self,
         app: ActorId,
         req: IdentityCardReq,
-    ) -> Result<(), BoardError> {
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
         self.authorize(app)?;
-        guards::check_identity_card_req(&req)?;
+        guards::ensure_board_enabled(&config)?;
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_identity_card_req(
+            &req.who_i_am,
+            &req.what_i_do,
+            &req.how_to_interact,
+            &req.what_i_offer,
+            &req.tags,
+            &config,
+        )?;
 
         let now = exec::block_timestamp();
         let season_id = self.current_season;
@@ -202,14 +217,17 @@ impl<'a> BoardService<'a> {
         Ok(())
     }
 
-    #[export]
+    #[export(unwrap_result)]
     pub fn post_announcement(
         &mut self,
         app: ActorId,
         req: AnnouncementReq,
-    ) -> Result<PostId, BoardError> {
+    ) -> Result<PostId, ContractError> {
+        let config = self.admin.borrow().config.clone();
         self.authorize(app)?;
-        guards::check_announcement_req(&req)?;
+        guards::ensure_board_enabled(&config)?;
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_announcement_req(&req.title, &req.body, &req.tags, &config)?;
 
         let now = exec::block_timestamp();
         let season_id = self.current_season;
@@ -221,11 +239,11 @@ impl<'a> BoardService<'a> {
                 &mut board.last_board_post_at,
                 app,
                 now,
-                BOARD_RATE_LIMIT_MS,
+                config.board_rate_limit_ms,
             )
             .is_err()
             {
-                return Err(BoardError::RateLimited);
+                return Err(ContractError::RateLimited);
             }
             board.push_announcement(
                 app,
@@ -235,6 +253,7 @@ impl<'a> BoardService<'a> {
                 req.tags.clone(),
                 now,
                 season_id,
+                config.max_announcements_per_app,
             )
         };
 
@@ -263,15 +282,18 @@ impl<'a> BoardService<'a> {
         Ok(outcome.new_id)
     }
 
-    #[export]
+    #[export(unwrap_result)]
     pub fn edit_announcement(
         &mut self,
         app: ActorId,
         id: PostId,
         req: AnnouncementReq,
-    ) -> Result<(), BoardError> {
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
         self.authorize(app)?;
-        guards::check_announcement_req(&req)?;
+        guards::ensure_board_enabled(&config)?;
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_announcement_req(&req.title, &req.body, &req.tags, &config)?;
 
         let now = exec::block_timestamp();
         let season_id = self.current_season;
@@ -281,11 +303,11 @@ impl<'a> BoardService<'a> {
             let queue = board
                 .announcements
                 .get_mut(&app)
-                .ok_or(BoardError::UnknownAnnouncement)?;
+                .ok_or(ContractError::UnknownAnnouncement)?;
             let entry = queue
                 .iter_mut()
                 .find(|a| a.id == id)
-                .ok_or(BoardError::UnknownAnnouncement)?;
+                .ok_or(ContractError::UnknownAnnouncement)?;
             entry.title = req.title.clone();
             entry.body = req.body.clone();
             entry.tags = req.tags.clone();
@@ -303,13 +325,16 @@ impl<'a> BoardService<'a> {
         Ok(())
     }
 
-    #[export]
+    #[export(unwrap_result)]
     pub fn archive_announcement(
         &mut self,
         app: ActorId,
         id: PostId,
-    ) -> Result<(), BoardError> {
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
         self.authorize(app)?;
+        guards::ensure_board_enabled(&config)?;
+        guards::ensure_user_mutations_allowed(&config)?;
 
         let season_id = self.current_season;
         {
@@ -317,11 +342,11 @@ impl<'a> BoardService<'a> {
             let queue = board
                 .announcements
                 .get_mut(&app)
-                .ok_or(BoardError::UnknownAnnouncement)?;
+                .ok_or(ContractError::UnknownAnnouncement)?;
             let pos = queue
                 .iter()
                 .position(|a| a.id == id)
-                .ok_or(BoardError::UnknownAnnouncement)?;
+                .ok_or(ContractError::UnknownAnnouncement)?;
             queue.remove(pos);
         }
 
@@ -344,7 +369,7 @@ impl<'a> BoardService<'a> {
         cursor: Option<ActorId>,
         limit: u32,
     ) -> IdentityCardPage {
-        let limit = limit.min(MAX_PAGE_SIZE_LIST) as usize;
+        let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST);
         let board = self.board.borrow();
         let mut iter: Vec<(&ActorId, &IdentityCard)> = board
             .identity_cards
@@ -365,7 +390,7 @@ impl<'a> BoardService<'a> {
         cursor: Option<PostId>,
         limit: u32,
     ) -> AnnouncementPage {
-        let limit = limit.min(MAX_PAGE_SIZE_LIST) as usize;
+        let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST);
         let board = self.board.borrow();
 
         // Flatten (app, announcement) pairs sorted by post_id.

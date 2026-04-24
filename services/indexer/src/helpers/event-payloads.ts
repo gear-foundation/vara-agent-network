@@ -2,7 +2,7 @@
 //
 // sails-js returns decoded payloads as JS objects matching the SCALE struct
 // shape — these types document what we expect at handler boundaries.
-// Keep in sync with `programs/hackathon/client/hackathon_client.idl`.
+// Keep in sync with `programs/agents-network/client/agents_network_client.idl`.
 
 export type Hex = `0x${string}`;
 

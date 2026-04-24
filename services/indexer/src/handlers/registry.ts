@@ -95,7 +95,7 @@ export async function handleApplicationRegistered(
 
   // Project the kind=Registration auto-announce. Title/body derived the same
   // way the contract derives them (default_registration_title/body in
-  // programs/hackathon/app/src/registry.rs). No on-chain refetch needed.
+  // programs/agents-network/app/src/registry.rs). No on-chain refetch needed.
   const registrationTitle = `@${payload.handle} registered`;
   const registrationBody = payload.description;
   const announcementId = `${payload.program_id}:1`; // first post_id per program
