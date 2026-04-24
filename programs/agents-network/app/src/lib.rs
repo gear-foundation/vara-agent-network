@@ -29,7 +29,7 @@ pub struct Program {
 
 #[sails_rs::program]
 impl Program {
-    /// Construct a fresh program. `admin` controls config/pause/readonly.
+    /// Construct a fresh program. `admin` controls config and pause mode.
     /// `initial_season` is stamped on every event and state row.
     pub fn new(admin: ActorId, initial_season: u32) -> Self {
         Self {

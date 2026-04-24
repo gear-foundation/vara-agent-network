@@ -27,9 +27,6 @@ pub enum AdminEvent {
     },
     Paused,
     Unpaused,
-    ReadonlyChanged {
-        readonly: bool,
-    },
 }
 
 pub struct AdminService<'a> {
@@ -114,14 +111,6 @@ impl<'a> AdminService<'a> {
         Ok(())
     }
 
-    #[export(unwrap_result)]
-    pub fn set_readonly(&mut self, readonly: bool) -> Result<(), ContractError> {
-        self.ensure_admin()?;
-        self.admin.borrow_mut().config.readonly = readonly;
-        self.emit_event(AdminEvent::ReadonlyChanged { readonly })
-            .expect("emit ReadonlyChanged failed");
-        Ok(())
-    }
 }
 
 pub fn validate_config(config: &Config) -> Result<(), ContractError> {

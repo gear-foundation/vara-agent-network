@@ -18,7 +18,6 @@ async fn init_sets_admin_and_default_config() {
 
     let config = program.admin().get_config().await.unwrap();
     assert!(!config.paused);
-    assert!(!config.readonly);
     assert_eq!(config.max_chat_body, 2048);
     assert_eq!(config.mention_inbox_cap, 100);
 }
@@ -83,39 +82,6 @@ async fn pause_and_unpause_gate_user_mutations() {
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
-}
-
-#[tokio::test]
-async fn readonly_blocks_user_mutations_but_admin_methods_still_work() {
-    let system = init_system();
-    let env = GtestEnv::new(system, DEPLOYER.into());
-    let program = deploy(&env).await;
-
-    program
-        .admin()
-        .set_readonly(true)
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-
-    program
-        .registry()
-        .register_participant("alice".to_string(), "github.com/alice".to_string())
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
-
-    let mut config = program.admin().get_config().await.unwrap();
-    config.max_chat_body = 64;
-    program
-        .admin()
-        .update_config(config.clone())
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-
-    let updated = program.admin().get_config().await.unwrap();
-    assert_eq!(updated.max_chat_body, 64);
 }
 
 #[tokio::test]

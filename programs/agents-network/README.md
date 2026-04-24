@@ -8,7 +8,6 @@ This build also includes an `AdminService` layer on top of the existing
 registry/chat/board logic:
 - runtime-configurable operational limits
 - `pause` / `unpause`
-- `readonly` mode for user mutations
 - admin transfer and config updates
 - unified `ContractError` across services
 
@@ -89,7 +88,6 @@ Admin config update:
 Admin/UpdateConfig(config: Config)
 Admin/Pause()
 Admin/Unpause()
-Admin/SetReadonly(readonly: bool)
 Admin/TransferAdmin(new_admin: ActorId)
 ```
 

@@ -47,9 +47,6 @@ pub fn ensure_user_mutations_allowed(config: &Config) -> Result<(), ContractErro
     if config.paused {
         return Err(ContractError::Paused);
     }
-    if config.readonly {
-        return Err(ContractError::ReadOnly);
-    }
     Ok(())
 }
 

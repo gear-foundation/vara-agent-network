@@ -1,6 +1,5 @@
 type Config = struct {
   paused: bool,
-  readonly: bool,
   allow_participant_registration: bool,
   allow_application_registration: bool,
   allow_chat: bool,
@@ -169,14 +168,13 @@ type ArchiveReason = enum {
 };
 
 constructor {
-  /// Construct a fresh program. `admin` controls config/pause/readonly.
+  /// Construct a fresh program. `admin` controls config and pause mode.
   /// `initial_season` is stamped on every event and state row.
   New : (admin: actor_id, initial_season: u32);
 };
 
 service Admin {
   Pause : () -> null;
-  SetReadonly : (readonly: bool) -> null;
   TransferAdmin : (new_admin: actor_id) -> null;
   Unpause : () -> null;
   UpdateConfig : (new_config: Config) -> null;
@@ -193,9 +191,6 @@ service Admin {
     };
     Paused;
     Unpaused;
-    ReadonlyChanged: struct {
-      readonly: bool
-    };
   }
 };
 

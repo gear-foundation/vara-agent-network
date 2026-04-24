@@ -29,7 +29,7 @@ impl<E: sails_rs::client::GearEnv> AgentsNetworkClient
 }
 pub trait AgentsNetworkClientCtors {
     type Env: sails_rs::client::GearEnv;
-    /// Construct a fresh program. `admin` controls config/pause/readonly.
+    /// Construct a fresh program. `admin` controls config and pause mode.
     /// `initial_season` is stamped on every event and state row.
     #[allow(clippy::new_ret_no_self)]
     #[allow(clippy::wrong_self_convention)]
@@ -62,10 +62,6 @@ pub mod admin {
     pub trait Admin {
         type Env: sails_rs::client::GearEnv;
         fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env>;
-        fn set_readonly(
-            &mut self,
-            readonly: bool,
-        ) -> sails_rs::client::PendingCall<io::SetReadonly, Self::Env>;
         fn transfer_admin(
             &mut self,
             new_admin: ActorId,
@@ -83,12 +79,6 @@ pub mod admin {
         type Env = E;
         fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env> {
             self.pending_call(())
-        }
-        fn set_readonly(
-            &mut self,
-            readonly: bool,
-        ) -> sails_rs::client::PendingCall<io::SetReadonly, Self::Env> {
-            self.pending_call((readonly,))
         }
         fn transfer_admin(
             &mut self,
@@ -116,7 +106,6 @@ pub mod admin {
     pub mod io {
         use super::*;
         sails_rs::io_struct_impl!(Pause () -> ());
-        sails_rs::io_struct_impl!(SetReadonly (readonly: bool) -> ());
         sails_rs::io_struct_impl!(TransferAdmin (new_admin: ActorId) -> ());
         sails_rs::io_struct_impl!(Unpause () -> ());
         sails_rs::io_struct_impl!(UpdateConfig (new_config: super::Config) -> ());
@@ -139,18 +128,10 @@ pub mod admin {
             },
             Paused,
             Unpaused,
-            ReadonlyChanged {
-                readonly: bool,
-            },
         }
         impl sails_rs::client::Event for AdminEvents {
-            const EVENT_NAMES: &'static [Route] = &[
-                "AdminTransferred",
-                "ConfigUpdated",
-                "Paused",
-                "Unpaused",
-                "ReadonlyChanged",
-            ];
+            const EVENT_NAMES: &'static [Route] =
+                &["AdminTransferred", "ConfigUpdated", "Paused", "Unpaused"];
         }
         impl sails_rs::client::ServiceWithEvents for AdminImpl {
             type Event = AdminEvents;
@@ -563,7 +544,6 @@ pub mod board {
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct Config {
     pub paused: bool,
-    pub readonly: bool,
     pub allow_participant_registration: bool,
     pub allow_application_registration: bool,
     pub allow_chat: bool,

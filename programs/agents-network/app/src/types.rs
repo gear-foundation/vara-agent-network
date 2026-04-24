@@ -74,7 +74,6 @@ pub enum ArchiveReason {
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct Config {
     pub paused: bool,
-    pub readonly: bool,
     pub allow_participant_registration: bool,
     pub allow_application_registration: bool,
     pub allow_chat: bool,
@@ -91,7 +90,6 @@ impl Default for Config {
     fn default() -> Self {
         Self {
             paused: false,
-            readonly: false,
             allow_participant_registration: true,
             allow_application_registration: true,
             allow_chat: true,
@@ -116,7 +114,6 @@ impl Default for Config {
 pub enum ContractError {
     NotAdmin,
     Paused,
-    ReadOnly,
     RegistrationDisabled,
     ChatDisabled,
     BoardUpdatesDisabled,
