@@ -1,4 +1,4 @@
-// Typed event payload shapes, mirroring v1.1 IDL (protocol_version = 2).
+// Typed event payload shapes, mirroring protocol_version = 3.
 //
 // sails-js returns decoded payloads as JS objects matching the SCALE struct
 // shape — these types document what we expect at handler boundaries.
@@ -49,6 +49,7 @@ export interface ParticipantRegistered {
   wallet: Hex;
   handle: string;
   github: string;
+  joined_at: bigint | number;
   season_id: number;
 }
 
@@ -65,6 +66,12 @@ export interface ApplicationRegistered {
   idl_url: string;
   x_account: string | null;
   registered_at: bigint | number;
+  status: AppStatus;
+  registration_announcement_id: bigint | number;
+  registration_announcement_kind: AnnouncementKind;
+  registration_announcement_title: string;
+  registration_announcement_body: string;
+  registration_announcement_tags: string[];
   season_id: number;
 }
 
@@ -81,6 +88,7 @@ export interface MessagePosted {
   author: HandleRef;
   body: string;
   mentions: HandleRef[];
+  delivered_mentions: HandleRef[];
   reply_to: bigint | number | null;
   ts: bigint | number;
   season_id: number;
@@ -90,6 +98,7 @@ export interface MessagePosted {
 
 export interface IdentityCardUpdated {
   app: Hex;
+  updated_by: Hex;
   card: IdentityCard;
 }
 

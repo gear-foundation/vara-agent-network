@@ -11,6 +11,7 @@ use crate::admin::AdminState;
 use crate::guards;
 use crate::registry::RegistryState;
 use crate::types::*;
+use alloc::collections::VecDeque;
 use sails_rs::cell::RefCell;
 use sails_rs::collections::BTreeMap;
 use sails_rs::gstd::{exec, msg};
@@ -23,7 +24,8 @@ use sails_rs::prelude::*;
 #[derive(Default)]
 pub struct BoardState {
     pub identity_cards: BTreeMap<ActorId, IdentityCard>,
-    pub announcements: BTreeMap<ActorId, Vec<Announcement>>,
+    pub announcements: BTreeMap<ActorId, VecDeque<Announcement>>,
+    pub announcement_index: BTreeMap<PostId, ActorId>,
     pub next_post_id: PostId,
     /// Keyed per application (not per owning wallet). One wallet owning 20
     /// apps gets 20 independent 60s buckets.
@@ -64,11 +66,15 @@ impl BoardState {
         let id = self.next_post_id;
         let queue = self.announcements.entry(app).or_default();
         let evicted_id = if queue.len() >= max_announcements_per_app as usize {
-            Some(queue.remove(0).id)
+            let evicted = queue.pop_front().map(|a| a.id);
+            if let Some(evicted_id) = evicted {
+                self.announcement_index.remove(&evicted_id);
+            }
+            evicted
         } else {
             None
         };
-        queue.push(Announcement {
+        queue.push_back(Announcement {
             id,
             title,
             body,
@@ -77,6 +83,7 @@ impl BoardState {
             posted_at: ts,
             season_id,
         });
+        self.announcement_index.insert(id, app);
         PushOutcome {
             new_id: id,
             evicted_id,
@@ -93,14 +100,15 @@ impl BoardState {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum BoardEvent {
-    /// v1.1 enrichment: carries the full `IdentityCard`. `updated_at` and
-    /// `season_id` are inside the card itself (no duplication). Indexer
-    /// projects directly — no state refetch.
+    /// v1.2 enrichment: carries the full `IdentityCard` plus `updated_by`.
+    /// `updated_at` and `season_id` are inside the card itself (no
+    /// duplication). Indexer projects directly — no state refetch.
     IdentityCardUpdated {
         app: ActorId,
+        updated_by: ActorId,
         card: IdentityCard,
     },
-    /// v1.1 enrichment: adds `body` so indexer can project the full
+    /// v1.2 enrichment: adds `body` so indexer can project the full
     /// Announcement row from this event alone.
     AnnouncementPosted {
         app: ActorId,
@@ -112,7 +120,7 @@ pub enum BoardEvent {
         ts: u64,
         season_id: u32,
     },
-    /// v1.1 enrichment: carries the new `AnnouncementReq` (title + body +
+    /// v1.2 enrichment: carries the new `AnnouncementReq` (title + body +
     /// tags) so the indexer overwrites the row without refetching.
     AnnouncementEdited {
         app: ActorId,
@@ -190,10 +198,10 @@ impl<'a> BoardService<'a> {
             &req.how_to_interact,
             &req.what_i_offer,
             &req.tags,
-            &config,
         )?;
 
         let now = exec::block_timestamp();
+        let updated_by = msg::source();
         let season_id = self.current_season;
 
         let card = IdentityCard {
@@ -211,7 +219,11 @@ impl<'a> BoardService<'a> {
             board.identity_cards.insert(app, card.clone());
         }
 
-        self.emit_event(BoardEvent::IdentityCardUpdated { app, card })
+        self.emit_event(BoardEvent::IdentityCardUpdated {
+            app,
+            updated_by,
+            card,
+        })
             .expect("emit IdentityCardUpdated failed");
 
         Ok(())
@@ -227,7 +239,7 @@ impl<'a> BoardService<'a> {
         self.authorize(app)?;
         guards::ensure_board_enabled(&config)?;
         guards::ensure_user_mutations_allowed(&config)?;
-        guards::check_announcement_req(&req.title, &req.body, &req.tags, &config)?;
+        guards::check_announcement_req(&req.title, &req.body, &req.tags)?;
 
         let now = exec::block_timestamp();
         let season_id = self.current_season;
@@ -293,7 +305,7 @@ impl<'a> BoardService<'a> {
         self.authorize(app)?;
         guards::ensure_board_enabled(&config)?;
         guards::ensure_user_mutations_allowed(&config)?;
-        guards::check_announcement_req(&req.title, &req.body, &req.tags, &config)?;
+        guards::check_announcement_req(&req.title, &req.body, &req.tags)?;
 
         let now = exec::block_timestamp();
         let season_id = self.current_season;
@@ -347,7 +359,8 @@ impl<'a> BoardService<'a> {
                 .iter()
                 .position(|a| a.id == id)
                 .ok_or(ContractError::UnknownAnnouncement)?;
-            queue.remove(pos);
+            let _ = queue.remove(pos);
+            board.announcement_index.remove(&id);
         }
 
         self.emit_event(BoardEvent::AnnouncementArchived {
@@ -371,15 +384,20 @@ impl<'a> BoardService<'a> {
     ) -> IdentityCardPage {
         let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST);
         let board = self.board.borrow();
-        let mut iter: Vec<(&ActorId, &IdentityCard)> = board
-            .identity_cards
-            .iter()
-            .skip_while(|(k, _)| cursor.map_or(false, |c| **k <= c))
-            .collect();
-        iter.truncate(limit);
-        let next_cursor = iter.last().map(|(k, _)| **k);
+        let mut items = Vec::with_capacity(limit);
+        let mut next_cursor = None;
+        for (key, card) in board.identity_cards.iter() {
+            if cursor.map_or(false, |c| *key <= c) {
+                continue;
+            }
+            if items.len() == limit {
+                break;
+            }
+            next_cursor = Some(*key);
+            items.push((*key, card.clone()));
+        }
         IdentityCardPage {
-            items: iter.into_iter().map(|(k, v)| (*k, v.clone())).collect(),
+            items,
             next_cursor,
         }
     }
@@ -393,22 +411,26 @@ impl<'a> BoardService<'a> {
         let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST);
         let board = self.board.borrow();
 
-        // Flatten (app, announcement) pairs sorted by post_id.
-        let mut flat: Vec<(ActorId, Announcement)> = board
-            .announcements
-            .iter()
-            .flat_map(|(app, queue)| queue.iter().map(move |a| (*app, a.clone())))
-            .collect();
-        flat.sort_by_key(|(_, a)| a.id);
-
-        let start = cursor
-            .map(|c| flat.iter().position(|(_, a)| a.id > c).unwrap_or(flat.len()))
-            .unwrap_or(0);
-        let end = (start + limit).min(flat.len());
-        let slice = flat[start..end].to_vec();
-        let next_cursor = slice.last().map(|(_, a)| a.id);
+        let mut items = Vec::with_capacity(limit);
+        let mut next_cursor = None;
+        for (post_id, app) in board.announcement_index.iter() {
+            if cursor.map_or(false, |c| *post_id <= c) {
+                continue;
+            }
+            let Some(queue) = board.announcements.get(app) else {
+                continue;
+            };
+            let Some(announcement) = queue.iter().find(|a| a.id == *post_id) else {
+                continue;
+            };
+            if items.len() == limit {
+                break;
+            }
+            next_cursor = Some(*post_id);
+            items.push((*app, announcement.clone()));
+        }
         AnnouncementPage {
-            items: slice,
+            items,
             next_cursor,
         }
     }

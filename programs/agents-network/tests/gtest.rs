@@ -98,16 +98,17 @@ async fn happy_path_end_to_end() {
 }
 
 #[tokio::test]
-async fn protocol_version_returns_2() {
-    // v2: event-enrichment release. ApplicationRegistered/Updated +
-    // IdentityCardUpdated + AnnouncementPosted/Edited now carry payloads
-    // sufficient for deterministic indexer replay without state refetch.
+async fn protocol_version_returns_3() {
+    // v3: event payloads are fully self-contained for deterministic indexer
+    // replay. Registration auto-announcements include their real post id and
+    // full payload; chat distinguishes mentioned vs delivered recipients; and
+    // identity-card updates include the actor that performed the write.
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
     let v = program.registry().protocol_version().await.unwrap();
-    assert_eq!(v, 2);
+    assert_eq!(v, 3);
 }
 
 #[tokio::test]

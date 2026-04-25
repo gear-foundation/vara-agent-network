@@ -43,6 +43,7 @@ pub enum ChatEvent {
         author: HandleRef,
         body: String,
         mentions: Vec<HandleRef>,
+        delivered_mentions: Vec<HandleRef>,
         reply_to: Option<ChatMsgId>,
         ts: u64,
         season_id: u32,
@@ -169,16 +170,16 @@ impl<'a> ChatService<'a> {
             let inbox = chat.mention_inboxes.entry(key).or_default();
             inbox.latest_seq = msg_id;
             if inbox.ring.len() >= config.mention_inbox_cap as usize {
-                inbox.ring.remove(0);
+                let _ = inbox.ring.pop_front();
                 inbox.oldest_retained_seq = inbox
                     .ring
-                    .first()
+                    .front()
                     .map(|h| h.msg_id)
                     .unwrap_or(inbox.latest_seq);
             } else if inbox.oldest_retained_seq == 0 {
                 inbox.oldest_retained_seq = msg_id;
             }
-            inbox.ring.push(MentionHeader {
+            inbox.ring.push_back(MentionHeader {
                 msg_id,
                 block,
                 author: author.clone(),
@@ -193,6 +194,7 @@ impl<'a> ChatService<'a> {
             author,
             body,
             mentions: dedup_mentions,
+            delivered_mentions: registered_mentions,
             reply_to,
             ts: now,
             season_id,
@@ -264,8 +266,10 @@ impl<'a> ChatService<'a> {
 
 fn dedup_preserve_order(items: &[HandleRef]) -> Vec<HandleRef> {
     let mut out = Vec::with_capacity(items.len());
+    let mut seen = BTreeMap::new();
     for it in items {
-        if !out.contains(it) {
+        let key = it.encode();
+        if seen.insert(key, ()).is_none() {
             out.push(it.clone());
         }
     }

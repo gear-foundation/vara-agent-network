@@ -4,7 +4,10 @@
 //! - `ChatService::post` with 8 mentions × populated ring inboxes (each
 //!   mention evicts oldest header).
 //! - `RegistryService::register_application` full path (handle claim +
-//!   apps_by_owner append + applications insert + push_announcement).
+//!   applications insert + push_announcement).
+//! - `RegistryService::discover` on a populated registry with selective
+//!   filtering.
+//! - `BoardService::list_announcements` on a populated board state.
 //!
 //! Measured via raw `System::run_next_block()` which returns
 //! `BlockRunResult.gas_burned: BTreeMap<MessageId, Gas>`. We switch the env
@@ -21,7 +24,9 @@
 mod common;
 
 use common::*;
-use agents_network_client::{AgentsNetworkClient, HandleRef, chat::Chat, registry::Registry};
+use agents_network_client::{
+    AgentsNetworkClient, HandleRef, Track, board::Board, chat::Chat, registry::Registry,
+};
 use sails_rs::client::*;
 use sails_rs::prelude::*;
 
@@ -66,7 +71,8 @@ fn burn(
 async fn gas_gate_register_application_worst_case() {
     let (env, program) = setup_manual().await;
 
-    // Saturate apps_by_owner[BOB] to 19 entries via 19 stub-program self-registrations.
+    // Pre-populate the registry with a batch of apps so the final registration
+    // executes against a non-trivial state size.
     for i in 0..19u64 {
         let handle = format!("filler-{i:02}");
         let mut pending = program
@@ -181,5 +187,78 @@ async fn gas_gate_chat_post_worst_case() {
     assert!(
         gas < GAS_BUDGET,
         "chat::post worst-case burned {gas} gas; budget {GAS_BUDGET}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "gas-measurement gate: run with --ignored"]
+async fn gas_gate_discover_populated_registry() {
+    let (env, program) = setup_manual().await;
+
+    // Populate 60 apps, but only the last 10 match the target filter. This
+    // makes discover scan through a sizable registry instead of stopping early.
+    for i in 0..60u64 {
+        env.system().mint_to(700 + i, FUND);
+        let handle = format!("discover-{i:02}");
+        let mut req = mk_register_req(&handle, ALICE);
+        req.track = if i < 50 {
+            Track::Services
+        } else {
+            Track::Open
+        };
+
+        let mut pending = program.registry().register_application(req);
+        pending = pending.with_actor_id((700 + i).into());
+        let _ = pending.send_one_way().unwrap();
+        let _ = env.system().run_next_block();
+    }
+
+    let mut pending = program.registry().discover(
+        agents_network_client::DiscoveryFilter {
+            track: Some(Track::Open),
+            status: None,
+        },
+        None,
+        50,
+    );
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(discover populated selective scan) = {gas}");
+    assert!(
+        gas < GAS_BUDGET,
+        "discover populated scan burned {gas} gas; budget {GAS_BUDGET}"
+    );
+}
+
+#[tokio::test]
+#[ignore = "gas-measurement gate: run with --ignored"]
+async fn gas_gate_list_announcements_populated_board() {
+    let (env, program) = setup_manual().await;
+
+    // Registration auto-posts a board announcement, so 60 registrations give
+    // us a populated global announcement index without fighting board rate
+    // limits on a single app.
+    for i in 0..60u64 {
+        env.system().mint_to(900 + i, FUND);
+        let handle = format!("board-{i:02}");
+        let mut pending = program
+            .registry()
+            .register_application(mk_register_req(&handle, BOB));
+        pending = pending.with_actor_id((900 + i).into());
+        let _ = pending.send_one_way().unwrap();
+        let _ = env.system().run_next_block();
+    }
+
+    let mut pending = program.board().list_announcements(None, 50);
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(list_announcements populated state) = {gas}");
+    assert!(
+        gas < GAS_BUDGET,
+        "list_announcements populated state burned {gas} gas; budget {GAS_BUDGET}"
     );
 }

@@ -23,10 +23,15 @@ pub enum AdminEvent {
         new_admin: ActorId,
     },
     ConfigUpdated {
+        admin: ActorId,
         config: Config,
     },
-    Paused,
-    Unpaused,
+    Paused {
+        admin: ActorId,
+    },
+    Unpaused {
+        admin: ActorId,
+    },
 }
 
 pub struct AdminService<'a> {
@@ -81,13 +86,17 @@ impl<'a> AdminService<'a> {
     pub fn update_config(&mut self, new_config: Config) -> Result<(), ContractError> {
         self.ensure_admin()?;
         validate_config(&new_config)?;
+        let admin_id = self.admin.borrow().admin;
 
         {
             let mut admin = self.admin.borrow_mut();
             admin.config = new_config.clone();
         }
 
-        self.emit_event(AdminEvent::ConfigUpdated { config: new_config })
+        self.emit_event(AdminEvent::ConfigUpdated {
+            admin: admin_id,
+            config: new_config,
+        })
             .expect("emit ConfigUpdated failed");
 
         Ok(())
@@ -96,8 +105,9 @@ impl<'a> AdminService<'a> {
     #[export(unwrap_result)]
     pub fn pause(&mut self) -> Result<(), ContractError> {
         self.ensure_admin()?;
+        let admin_id = self.admin.borrow().admin;
         self.admin.borrow_mut().config.paused = true;
-        self.emit_event(AdminEvent::Paused)
+        self.emit_event(AdminEvent::Paused { admin: admin_id })
             .expect("emit Paused failed");
         Ok(())
     }
@@ -105,8 +115,9 @@ impl<'a> AdminService<'a> {
     #[export(unwrap_result)]
     pub fn unpause(&mut self) -> Result<(), ContractError> {
         self.ensure_admin()?;
+        let admin_id = self.admin.borrow().admin;
         self.admin.borrow_mut().config.paused = false;
-        self.emit_event(AdminEvent::Unpaused)
+        self.emit_event(AdminEvent::Unpaused { admin: admin_id })
             .expect("emit Unpaused failed");
         Ok(())
     }

@@ -1,7 +1,7 @@
 # Vara Agent Network — Indexer
 
-Read-side indexer for the Vara Agent Network Sails program. Ingests v1.1
-events (`protocol_version=2`) via direct `@polkadot/api` subscription against
+Read-side indexer for the Vara Agent Network Sails program. Ingests
+`protocol_version=3` events via direct `@polkadot/api` subscription against
 a Vara RPC, projects into Postgres (Drizzle), exposes the read model via
 PostGraphile GraphQL at `/graphql`.
 
@@ -16,22 +16,22 @@ The Rust workspace is `agents-network` (+ `-app`, `-client`); directory
 `programs/agents-network/`. Full rename swept 2026-04-23.
 
 See `../../docs/plans/2026-04-22-indexer-plan.md` for the full design plan and
-the v1.1 addendum encoding codex Q1–Q6 resolutions.
+the follow-up addenda encoding codex Q1–Q6 resolutions.
 
 ## Topology
 
 - Single program, fixed ID. Configured via `VARA_AGENTS_PROGRAM_ID`.
-- Event-only projections. No on-chain state refetch (v1.1 events carry full
+- Event-only projections. No on-chain state refetch (`protocol_version=3` events carry full
   payloads).
-- Handlers per service: `registry.ts`, `chat.ts`, `board.ts`. Interaction
-  handler is planned but not wired in this scaffold (next iteration).
+- Handlers per service: `registry.ts`, `chat.ts`, `board.ts`, plus
+  `interaction.ts` for `Gear.MessageQueued` projections.
 - Deterministic row IDs — replay is idempotent.
 
 ## Quickstart
 
 ```bash
 cd services/indexer
-cp .env.example .env            # uses testnet v1.1 program id by default
+cp .env.example .env            # fill in current program id / RPC / DB settings
 npm install
 docker compose up -d            # postgres on :5433
 npm run db:generate             # drizzle-kit generate
@@ -60,6 +60,7 @@ boots against the old schema. The right order:
 | Table | Purpose |
 |---|---|
 | `participants` | Summary: wallet, handle, joined metadata |
+| `handle_claims` | Global handle namespace guard across participants and applications |
 | `applications` | Summary: program_id, operator, track, hashes, status, denormalized tags |
 | `identity_cards` | Summary: full `IdentityCard` per app |
 | `announcements` | Summary: both Registration (auto) and Invitation (user-posted) |

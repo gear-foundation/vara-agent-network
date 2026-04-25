@@ -96,6 +96,11 @@ type HandleRef = enum {
   Application: actor_id,
 };
 
+type AnnouncementKind = enum {
+  Registration,
+  Invitation,
+};
+
 type MentionsPage = struct {
   headers: vec MentionHeader,
   /// `true` iff the caller's `since_seq < oldest_retained_seq` — agent must
@@ -142,11 +147,6 @@ type Announcement = struct {
   season_id: u32,
 };
 
-type AnnouncementKind = enum {
-  Registration,
-  Invitation,
-};
-
 type IdentityCardPage = struct {
   items: vec struct { actor_id, IdentityCard },
   next_cursor: opt actor_id,
@@ -187,10 +187,15 @@ service Admin {
       new_admin: actor_id,
     };
     ConfigUpdated: struct {
-      config: Config
+      admin: actor_id,
+      config: Config,
     };
-    Paused;
-    Unpaused;
+    Paused: struct {
+      admin: actor_id
+    };
+    Unpaused: struct {
+      admin: actor_id
+    };
   }
 };
 
@@ -217,9 +222,10 @@ service Registry {
       wallet: actor_id,
       handle: str,
       github: str,
+      joined_at: u64,
       season_id: u32,
     };
-    /// v1.1 enrichment: carries every mutable + immutable field needed to
+    /// v1.2 enrichment: carries every mutable + immutable field needed to
     /// project an `Application` row without refetching on-chain state.
     /// `registered_at` is authoritative program time (block_timestamp at
     /// registration); `status` is always `Building` at registration and is
@@ -237,9 +243,15 @@ service Registry {
       idl_url: str,
       x_account: opt str,
       registered_at: u64,
+      status: AppStatus,
+      registration_announcement_id: u64,
+      registration_announcement_kind: AnnouncementKind,
+      registration_announcement_title: str,
+      registration_announcement_body: str,
+      registration_announcement_tags: vec str,
       season_id: u32,
     };
-    /// v1.1 enrichment: emits the exact patch that was applied, so indexer
+    /// v1.2 enrichment: emits the exact patch that was applied, so indexer
     /// can overwrite fields deterministically. Drops `changed_fields: Vec<FieldTag>`
     /// — the patch IS the change set. Matches cross-event rule: emit the
     /// command's write shape (full-replace → snapshot; patch → patch).
@@ -273,6 +285,7 @@ service Chat {
       author: HandleRef,
       body: str,
       mentions: vec HandleRef,
+      delivered_mentions: vec HandleRef,
       reply_to: opt u64,
       ts: u64,
       season_id: u32,
@@ -291,14 +304,15 @@ service Board {
   query ListIdentityCards : (cursor: opt actor_id, limit: u32) -> IdentityCardPage;
 
   events {
-    /// v1.1 enrichment: carries the full `IdentityCard`. `updated_at` and
-    /// `season_id` are inside the card itself (no duplication). Indexer
-    /// projects directly — no state refetch.
+    /// v1.2 enrichment: carries the full `IdentityCard` plus `updated_by`.
+    /// `updated_at` and `season_id` are inside the card itself (no
+    /// duplication). Indexer projects directly — no state refetch.
     IdentityCardUpdated: struct {
       app: actor_id,
+      updated_by: actor_id,
       card: IdentityCard,
     };
-    /// v1.1 enrichment: adds `body` so indexer can project the full
+    /// v1.2 enrichment: adds `body` so indexer can project the full
     /// Announcement row from this event alone.
     AnnouncementPosted: struct {
       app: actor_id,
@@ -310,7 +324,7 @@ service Board {
       ts: u64,
       season_id: u32,
     };
-    /// v1.1 enrichment: carries the new `AnnouncementReq` (title + body +
+    /// v1.2 enrichment: carries the new `AnnouncementReq` (title + body +
     /// tags) so the indexer overwrites the row without refetching.
     AnnouncementEdited: struct {
       app: actor_id,

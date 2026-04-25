@@ -124,10 +124,15 @@ pub mod admin {
                 new_admin: ActorId,
             },
             ConfigUpdated {
+                admin: ActorId,
                 config: Config,
             },
-            Paused,
-            Unpaused,
+            Paused {
+                admin: ActorId,
+            },
+            Unpaused {
+                admin: ActorId,
+            },
         }
         impl sails_rs::client::Event for AdminEvents {
             const EVENT_NAMES: &'static [Route] =
@@ -264,9 +269,10 @@ pub mod registry {
                 wallet: ActorId,
                 handle: String,
                 github: String,
+                joined_at: u64,
                 season_id: u32,
             },
-            /// v1.1 enrichment: carries every mutable + immutable field needed to
+            /// v1.2 enrichment: carries every mutable + immutable field needed to
             /// project an `Application` row without refetching on-chain state.
             /// `registered_at` is authoritative program time (block_timestamp at
             /// registration); `status` is always `Building` at registration and is
@@ -284,9 +290,15 @@ pub mod registry {
                 idl_url: String,
                 x_account: Option<String>,
                 registered_at: u64,
+                status: AppStatus,
+                registration_announcement_id: u64,
+                registration_announcement_kind: AnnouncementKind,
+                registration_announcement_title: String,
+                registration_announcement_body: String,
+                registration_announcement_tags: Vec<String>,
                 season_id: u32,
             },
-            /// v1.1 enrichment: emits the exact patch that was applied, so indexer
+            /// v1.2 enrichment: emits the exact patch that was applied, so indexer
             /// can overwrite fields deterministically. Drops `changed_fields: Vec<FieldTag>`
             /// — the patch IS the change set. Matches cross-event rule: emit the
             /// command's write shape (full-replace → snapshot; patch → patch).
@@ -378,6 +390,7 @@ pub mod chat {
                 author: HandleRef,
                 body: String,
                 mentions: Vec<HandleRef>,
+                delivered_mentions: Vec<HandleRef>,
                 reply_to: Option<u64>,
                 ts: u64,
                 season_id: u32,
@@ -494,11 +507,15 @@ pub mod board {
         #[derive(PartialEq, Debug, Encode, Decode)]
         #[codec(crate = sails_rs::scale_codec)]
         pub enum BoardEvents {
-            /// v1.1 enrichment: carries the full `IdentityCard`. `updated_at` and
-            /// `season_id` are inside the card itself (no duplication). Indexer
-            /// projects directly — no state refetch.
-            IdentityCardUpdated { app: ActorId, card: IdentityCard },
-            /// v1.1 enrichment: adds `body` so indexer can project the full
+            /// v1.2 enrichment: carries the full `IdentityCard` plus `updated_by`.
+            /// `updated_at` and `season_id` are inside the card itself (no
+            /// duplication). Indexer projects directly — no state refetch.
+            IdentityCardUpdated {
+                app: ActorId,
+                updated_by: ActorId,
+                card: IdentityCard,
+            },
+            /// v1.2 enrichment: adds `body` so indexer can project the full
             /// Announcement row from this event alone.
             AnnouncementPosted {
                 app: ActorId,
@@ -510,7 +527,7 @@ pub mod board {
                 ts: u64,
                 season_id: u32,
             },
-            /// v1.1 enrichment: carries the new `AnnouncementReq` (title + body +
+            /// v1.2 enrichment: carries the new `AnnouncementReq` (title + body +
             /// tags) so the indexer overwrites the row without refetching.
             AnnouncementEdited {
                 app: ActorId,
@@ -660,6 +677,13 @@ pub enum HandleRef {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub enum AnnouncementKind {
+    Registration,
+    Invitation,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub struct MentionsPage {
     pub headers: Vec<MentionHeader>,
     /// `true` iff the caller's `since_seq < oldest_retained_seq` — agent must
@@ -714,13 +738,6 @@ pub struct Announcement {
     pub kind: AnnouncementKind,
     pub posted_at: u64,
     pub season_id: u32,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum AnnouncementKind {
-    Registration,
-    Invitation,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]

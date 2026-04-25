@@ -22,8 +22,6 @@ use sails_rs::prelude::*;
 pub struct RegistryState {
     pub participants: BTreeMap<ActorId, Participant>,
     pub applications: BTreeMap<ActorId, Application>,
-    /// Keyed on attested operator wallet (`req.operator`), not on program ActorId.
-    pub apps_by_owner: BTreeMap<ActorId, Vec<ActorId>>,
     pub handles: BTreeMap<Handle, HandleRef>,
 }
 
@@ -40,9 +38,10 @@ pub enum RegistryEvent {
         wallet: ActorId,
         handle: Handle,
         github: String,
+        joined_at: u64,
         season_id: u32,
     },
-    /// v1.1 enrichment: carries every mutable + immutable field needed to
+    /// v1.2 enrichment: carries every mutable + immutable field needed to
     /// project an `Application` row without refetching on-chain state.
     /// `registered_at` is authoritative program time (block_timestamp at
     /// registration); `status` is always `Building` at registration and is
@@ -60,9 +59,15 @@ pub enum RegistryEvent {
         idl_url: String,
         x_account: Option<String>,
         registered_at: u64,
+        status: AppStatus,
+        registration_announcement_id: PostId,
+        registration_announcement_kind: AnnouncementKind,
+        registration_announcement_title: String,
+        registration_announcement_body: String,
+        registration_announcement_tags: Vec<String>,
         season_id: u32,
     },
-    /// v1.1 enrichment: emits the exact patch that was applied, so indexer
+    /// v1.2 enrichment: emits the exact patch that was applied, so indexer
     /// can overwrite fields deterministically. Drops `changed_fields: Vec<FieldTag>`
     /// — the patch IS the change set. Matches cross-event rule: emit the
     /// command's write shape (full-replace → snapshot; patch → patch).
@@ -115,7 +120,7 @@ impl<'a> RegistryService<'a> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_participant_registration_enabled(&config)?;
         guards::ensure_user_mutations_allowed(&config)?;
-        guards::validate_handle(&handle, &config)?;
+        guards::validate_handle(&handle)?;
         if github.len() > MAX_GITHUB_URL {
             return Err(ContractError::FieldTooLarge);
         }
@@ -151,6 +156,7 @@ impl<'a> RegistryService<'a> {
             wallet,
             handle,
             github,
+            joined_at,
             season_id,
         })
         .expect("emit ParticipantRegistered failed");
@@ -172,7 +178,7 @@ impl<'a> RegistryService<'a> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_application_registration_enabled(&config)?;
         guards::ensure_user_mutations_allowed(&config)?;
-        guards::check_register_app_req(&req, &config)?;
+        guards::check_register_app_req(&req)?;
 
         let program_id = msg::source();
         let now = exec::block_timestamp();
@@ -188,43 +194,43 @@ impl<'a> RegistryService<'a> {
             return Err(ContractError::AlreadyRegistered);
         }
 
-        let app = Application {
-            program_id,
-            owner: req.operator,
-            handle: req.handle.clone(),
-            description: req.description.clone(),
-            track: req.track,
-            github_url: req.github_url.clone(),
-            skills_hash: req.skills_hash,
-            skills_url: req.skills_url.clone(),
-            idl_hash: req.idl_hash,
-            idl_url: req.idl_url.clone(),
-            x_account: req.x_account.clone(),
-            registered_at: now,
-            season_id,
-            status: AppStatus::Building,
-        };
-
         // Write registry state first; then push the kind=Registration
         // announcement into BoardState. Any panic below rolls back everything.
-        reg.applications.insert(program_id, app.clone());
+        reg.applications.insert(
+            program_id,
+            Application {
+                program_id,
+                owner: req.operator,
+                handle: req.handle.clone(),
+                description: req.description.clone(),
+                track: req.track,
+                github_url: req.github_url.clone(),
+                skills_hash: req.skills_hash,
+                skills_url: req.skills_url.clone(),
+                idl_hash: req.idl_hash,
+                idl_url: req.idl_url.clone(),
+                x_account: req.x_account.clone(),
+                registered_at: now,
+                season_id,
+                status: AppStatus::Building,
+            },
+        );
         reg.handles
             .insert(req.handle.clone(), HandleRef::Application(program_id));
-        reg.apps_by_owner
-            .entry(req.operator)
-            .or_default()
-            .push(program_id);
 
         // Shared helper — writes state, emits no events. RegistryService emits
         // the enriched `ApplicationRegistered`; indexer projects BOTH the
         // `Application` row AND the kind=Registration announcement from that
         // single event (body = description, title = "@{handle} registered").
-        board.push_announcement(
+        let registration_title = default_registration_title(&req.handle);
+        let registration_body = default_registration_body(&req);
+        let registration_tags = Vec::new();
+        let registration_outcome = board.push_announcement(
             program_id,
             AnnouncementKind::Registration,
-            default_registration_title(&req.handle),
-            default_registration_body(&req),
-            Vec::new(), // no tags on auto-announcement
+            registration_title.clone(),
+            registration_body.clone(),
+            registration_tags.clone(),
             now,
             season_id,
             config.max_announcements_per_app,
@@ -246,6 +252,12 @@ impl<'a> RegistryService<'a> {
             idl_url: req.idl_url,
             x_account: req.x_account,
             registered_at: now,
+            status: AppStatus::Building,
+            registration_announcement_id: registration_outcome.new_id,
+            registration_announcement_kind: AnnouncementKind::Registration,
+            registration_announcement_title: registration_title,
+            registration_announcement_body: registration_body,
+            registration_announcement_tags: registration_tags,
             season_id,
         })
         .expect("emit ApplicationRegistered failed");
@@ -266,7 +278,6 @@ impl<'a> RegistryService<'a> {
             patch.skills_url.as_ref(),
             patch.idl_url.as_ref(),
             patch.x_account.as_ref(),
-            &config,
         )?;
 
         let caller = msg::source();
@@ -356,37 +367,39 @@ impl<'a> RegistryService<'a> {
         let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_DISCOVER);
         let reg = self.registry.borrow();
 
-        let mut iter: Vec<(&ActorId, &Application)> = reg
-            .applications
-            .iter()
-            .skip_while(|(k, _)| cursor.map_or(false, |c| **k <= c))
-            .filter(|(_, a)| match filter.track {
-                Some(t) => a.track == t,
-                None => true,
-            })
-            .filter(|(_, a)| match filter.status {
-                Some(s) => a.status == s,
-                None => true,
-            })
-            .collect();
-
-        iter.truncate(limit);
-        let next_cursor = iter.last().map(|(k, _)| **k);
+        let mut items = Vec::with_capacity(limit);
+        let mut next_cursor = None;
+        for (key, app) in reg.applications.iter() {
+            if cursor.map_or(false, |c| *key <= c) {
+                continue;
+            }
+            if filter.track.is_some_and(|t| app.track != t) {
+                continue;
+            }
+            if filter.status.is_some_and(|s| app.status != s) {
+                continue;
+            }
+            if items.len() == limit {
+                break;
+            }
+            next_cursor = Some(*key);
+            items.push(app.clone());
+        }
         ApplicationPage {
-            items: iter.into_iter().map(|(_, a)| a.clone()).collect(),
+            items,
             next_cursor,
         }
     }
 
     #[export]
     pub fn protocol_version(&self) -> u32 {
-        // v2: event enrichment for deterministic indexer replay.
+        // v3: event payloads are fully self-contained for deterministic
+        // indexer replay.
         // ApplicationRegistered now carries all projectable fields;
-        // ApplicationUpdated carries the applied patch (FieldTag removed);
-        // IdentityCardUpdated carries the full card;
-        // AnnouncementPosted / AnnouncementEdited carry body + tags.
-        // Handlers are pure event→projection, no state refetch.
-        2
+        // registration auto-announcements include their real PostId + full
+        // payload; MessagePosted distinguishes mentions from delivered_mentions;
+        // IdentityCardUpdated carries updated_by.
+        3
     }
 }
 

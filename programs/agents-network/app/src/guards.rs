@@ -8,13 +8,6 @@ use crate::types::{
 };
 use sails_rs::prelude::*;
 
-pub fn ensure_registration_enabled(config: &Config) -> Result<(), ContractError> {
-    if !config.allow_participant_registration && !config.allow_application_registration {
-        return Err(ContractError::RegistrationDisabled);
-    }
-    Ok(())
-}
-
 pub fn ensure_participant_registration_enabled(config: &Config) -> Result<(), ContractError> {
     if !config.allow_participant_registration {
         return Err(ContractError::RegistrationDisabled);
@@ -50,7 +43,7 @@ pub fn ensure_user_mutations_allowed(config: &Config) -> Result<(), ContractErro
     Ok(())
 }
 
-pub fn validate_handle(h: &str, _config: &Config) -> Result<(), ContractError> {
+pub fn validate_handle(h: &str) -> Result<(), ContractError> {
     let bytes = h.as_bytes();
     if bytes.len() < MIN_HANDLE_LEN || bytes.len() > MAX_HANDLE_LEN {
         return Err(ContractError::HandleMalformed);
@@ -67,8 +60,8 @@ pub fn validate_handle(h: &str, _config: &Config) -> Result<(), ContractError> {
     Ok(())
 }
 
-pub fn check_register_app_req(req: &RegisterAppReq, config: &Config) -> Result<(), ContractError> {
-    validate_handle(&req.handle, config)?;
+pub fn check_register_app_req(req: &RegisterAppReq) -> Result<(), ContractError> {
+    validate_handle(&req.handle)?;
     if req.github_url.len() > MAX_GITHUB_URL
         || req.skills_url.len() > MAX_SKILLS_URL
         || req.idl_url.len() > MAX_IDL_URL
@@ -89,7 +82,6 @@ pub fn check_application_patch(
     skills_url: Option<&String>,
     idl_url: Option<&String>,
     x_account: Option<&Option<String>>,
-    _config: &Config,
 ) -> Result<(), ContractError> {
     if let Some(d) = description {
         if d.len() > MAX_DESCRIPTION {
@@ -120,7 +112,6 @@ pub fn check_identity_card_req(
     how_to_interact: &str,
     what_i_offer: &str,
     tags: &[String],
-    _config: &Config,
 ) -> Result<(), ContractError> {
     if who_i_am.len() > MAX_IDENTITY_FIELD
         || what_i_do.len() > MAX_IDENTITY_FIELD
@@ -136,7 +127,6 @@ pub fn check_announcement_req(
     title: &str,
     body: &str,
     tags: &[String],
-    _config: &Config,
 ) -> Result<(), ContractError> {
     if title.len() > MAX_ANNOUNCEMENT_TITLE
         || body.len() > MAX_ANNOUNCEMENT_BODY
@@ -200,13 +190,13 @@ mod tests {
 
     #[test]
     fn handle_accepts_underscore_now() {
-        assert!(validate_handle("alice_bot", &Config::default()).is_ok());
+        assert!(validate_handle("alice_bot").is_ok());
     }
 
     #[test]
     fn handle_rejects_uppercase() {
         assert_eq!(
-            validate_handle("Alice", &Config::default()).unwrap_err(),
+            validate_handle("Alice").unwrap_err(),
             ContractError::HandleMalformed,
         );
     }

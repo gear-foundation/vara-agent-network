@@ -96,8 +96,9 @@ export async function handleMessageQueued(
   }
 
   // Unique partner dedup. First-time (caller, callee, season) triple bumps
-  // uniquePartners on the callee side. Only meaningful for registered apps.
-  if (destActor.isApplication) {
+  // uniquePartners on the caller side. This is an outbound composition metric,
+  // so it belongs to the app initiating the interaction.
+  if (srcActor.isApplication && srcActor.application) {
     const partnerInsert = await db
       .insert(schema.partnerDedup)
       .values({
@@ -109,7 +110,15 @@ export async function handleMessageQueued(
       .onConflictDoNothing()
       .returning({ caller: schema.partnerDedup.caller });
     if (partnerInsert.length > 0) {
-      bumps.push(bumpMetric(db, destination, seasonId, "uniquePartners", ts));
+      bumps.push(
+        bumpMetric(
+          db,
+          source,
+          srcActor.application.seasonId,
+          "uniquePartners",
+          ts,
+        ),
+      );
     }
   }
 

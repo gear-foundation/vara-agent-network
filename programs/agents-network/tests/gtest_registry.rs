@@ -88,10 +88,9 @@ async fn handle_malformed_variants() {
 
 #[tokio::test]
 async fn operator_slot_griefing_resistant() {
-    // After the /review fix: `apps_by_owner[req.operator]` is no longer capped.
     // A griefer cannot exhaust a victim's operator-slot budget by registering
-    // stub programs that name the victim as operator. `apps_by_owner` is still
-    // populated for UX lookup. Cost-to-deploy is the real anti-Sybil backstop.
+    // stub programs that name the victim as operator. Cost-to-deploy is the
+    // real anti-Sybil backstop here.
     let system = init_system();
     for i in 0..25u64 {
         system.mint_to(300 + i, FUND);

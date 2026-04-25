@@ -1,9 +1,11 @@
 // Registry handler. Projects ParticipantRegistered, ApplicationRegistered,
-// and ApplicationUpdated from v1.1 event payloads.
+// and ApplicationUpdated from protocol_version=3 event payloads.
 //
-// No state refetch anywhere — v1.1 events carry all projectable fields.
-// The kind=Registration announcement is auto-inserted from ApplicationRegistered
-// because the contract emits no separate AnnouncementPosted on that path.
+// No state refetch anywhere — the events carry all projectable fields.
+// The kind=Registration announcement is still inserted from
+// ApplicationRegistered because the contract emits no separate
+// AnnouncementPosted on that path, but the event now carries the real
+// announcement id + full payload so there is no local derivation.
 import { sql } from "drizzle-orm";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
@@ -13,17 +15,28 @@ import type {
   ParticipantRegistered,
 } from "../helpers/event-payloads.js";
 import { asBigInt } from "../helpers/event-payloads.js";
-import type { HandlerContext } from "./common.js";
+import {
+  bumpMetric,
+  claimHandleOrThrow,
+  isFirstTimeEvent,
+  makeRowId,
+  type HandlerContext,
+} from "./common.js";
 
 export async function handleParticipantRegistered(
   db: Db,
-  ctx: HandlerContext,
+  _ctx: HandlerContext,
   payload: ParticipantRegistered,
 ): Promise<void> {
-  // v1.1 ParticipantRegistered doesn't carry joined_at — fall back to the
-  // substrate block timestamp at event-processing time. Adding joined_at to
-  // the event would require a v1.2 contract bump (review finding #6).
-  const joinedAt = ctx.block.substrateBlockTs;
+  const joinedAt = asBigInt(payload.joined_at);
+  await claimHandleOrThrow(
+    db,
+    payload.handle,
+    "Participant",
+    payload.wallet,
+    payload.season_id,
+    joinedAt,
+  );
   await db
     .insert(schema.participants)
     .values({
@@ -32,7 +45,7 @@ export async function handleParticipantRegistered(
       github: payload.github,
       joinedAt,
       seasonId: payload.season_id,
-      firstSeenSubstrateBlock: ctx.block.substrateBlockNumber,
+      firstSeenSubstrateBlock: _ctx.block.substrateBlockNumber,
       firstSeenGearBlock: 0, // participants don't carry gear block in events
     })
     .onConflictDoUpdate({
@@ -45,7 +58,7 @@ export async function handleParticipantRegistered(
         github: payload.github,
         joinedAt,
         seasonId: payload.season_id,
-        firstSeenSubstrateBlock: ctx.block.substrateBlockNumber,
+        firstSeenSubstrateBlock: _ctx.block.substrateBlockNumber,
       },
     });
 }
@@ -56,6 +69,14 @@ export async function handleApplicationRegistered(
   payload: ApplicationRegistered,
 ): Promise<void> {
   const registeredAt = asBigInt(payload.registered_at);
+  await claimHandleOrThrow(
+    db,
+    payload.handle,
+    "Application",
+    payload.program_id,
+    payload.season_id,
+    registeredAt,
+  );
   await db
     .insert(schema.applications)
     .values({
@@ -72,7 +93,7 @@ export async function handleApplicationRegistered(
       xAccount: payload.x_account ?? null,
       registeredAt,
       seasonId: payload.season_id,
-      status: "Building",
+      status: payload.status,
       tags: [],
     })
     .onConflictDoUpdate({
@@ -90,30 +111,30 @@ export async function handleApplicationRegistered(
         xAccount: payload.x_account ?? null,
         registeredAt,
         seasonId: payload.season_id,
+        status: payload.status,
       },
     });
 
-  // Project the kind=Registration auto-announce. Title/body derived the same
-  // way the contract derives them (default_registration_title/body in
-  // programs/agents-network/app/src/registry.rs). No on-chain refetch needed.
-  const registrationTitle = `@${payload.handle} registered`;
-  const registrationBody = payload.description;
-  const announcementId = `${payload.program_id}:1`; // first post_id per program
+  const registrationPostId = asBigInt(payload.registration_announcement_id);
+  const announcementId = `${payload.program_id}:${registrationPostId}`;
   await db
     .insert(schema.announcements)
     .values({
       id: announcementId,
       applicationId: payload.program_id,
-      postId: 1n,
-      title: registrationTitle,
-      body: registrationBody,
-      tags: [],
-      kind: "Registration",
+      postId: registrationPostId,
+      title: payload.registration_announcement_title,
+      body: payload.registration_announcement_body,
+      tags: payload.registration_announcement_tags,
+      kind: payload.registration_announcement_kind,
       postedAt: registeredAt,
       seasonId: payload.season_id,
       archived: false,
     })
     .onConflictDoNothing({ target: schema.announcements.id });
+
+  if (!(await isFirstTimeEvent(db, `registry:app-registered:${makeRowId(ctx)}`))) return;
+  await bumpMetric(db, payload.program_id, payload.season_id, "postsActive", registeredAt);
 }
 
 export async function handleApplicationUpdated(

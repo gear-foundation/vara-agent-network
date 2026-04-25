@@ -5,6 +5,7 @@
 //! v1 IDL. Future needs ship as NEW types on NEW events/routes.
 
 use sails_rs::prelude::*;
+use alloc::collections::VecDeque;
 
 // ---------------------------------------------------------------------------
 // Handle + identity
@@ -168,7 +169,7 @@ pub struct MentionHeader {
 pub struct MentionInbox {
     pub latest_seq: u64,
     pub oldest_retained_seq: u64,
-    pub ring: Vec<MentionHeader>,
+    pub ring: VecDeque<MentionHeader>,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
