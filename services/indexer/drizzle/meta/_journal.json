@@ -22,6 +22,20 @@
       "when": 1776943501647,
       "tag": "0002_heavy_spirit",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1777110388223,
+      "tag": "0003_fair_steel_serpent",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1777110681953,
+      "tag": "0004_easy_mimic",
+      "breakpoints": true
     }
   ]
 }

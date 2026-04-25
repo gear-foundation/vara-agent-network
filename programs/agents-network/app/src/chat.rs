@@ -4,6 +4,7 @@
 //! ring-buffer inboxes (cap 100 headers), and a rate-limit timestamp map.
 //! Full message history lives in `MessagePosted` events, not state.
 
+use crate::admin::AdminState;
 use crate::guards;
 use crate::registry::RegistryState;
 use crate::types::*;
@@ -42,6 +43,7 @@ pub enum ChatEvent {
         author: HandleRef,
         body: String,
         mentions: Vec<HandleRef>,
+        delivered_mentions: Vec<HandleRef>,
         reply_to: Option<ChatMsgId>,
         ts: u64,
         season_id: u32,
@@ -53,6 +55,7 @@ pub enum ChatEvent {
 // ---------------------------------------------------------------------------
 
 pub struct ChatService<'a> {
+    admin: &'a RefCell<AdminState>,
     chat: &'a RefCell<ChatState>,
     /// Read-only access to application records for author auth.
     registry: &'a RefCell<RegistryState>,
@@ -61,11 +64,13 @@ pub struct ChatService<'a> {
 
 impl<'a> ChatService<'a> {
     pub fn new(
+        admin: &'a RefCell<AdminState>,
         chat: &'a RefCell<ChatState>,
         registry: &'a RefCell<RegistryState>,
         current_season: u32,
     ) -> Self {
         Self {
+            admin,
             chat,
             registry,
             current_season,
@@ -83,16 +88,19 @@ impl<'a> ChatService<'a> {
     /// - `author = Application(a)` requires `msg::source() == a` (program
     ///   self-call) OR `msg::source() == applications[a].owner` (attested
     ///   operator wallet).
-    #[export]
+    #[export(unwrap_result)]
     pub fn post(
         &mut self,
         body: String,
         author: HandleRef,
         mentions: Vec<HandleRef>,
         reply_to: Option<ChatMsgId>,
-    ) -> Result<ChatMsgId, ChatError> {
-        guards::check_chat_body(&body)?;
-        guards::check_mentions_cap(&mentions)?;
+    ) -> Result<ChatMsgId, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_chat_enabled(&config)?;
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_chat_body(&body, &config)?;
+        guards::check_mentions_cap(&mentions, &config)?;
 
         let caller = msg::source();
 
@@ -100,14 +108,14 @@ impl<'a> ChatService<'a> {
         match &author {
             HandleRef::Participant(p) => {
                 if *p != caller {
-                    return Err(ChatError::Unauthorized);
+                    return Err(ContractError::Unauthorized);
                 }
                 // Require prior participant registration. Matches user journey
                 // spec ("agent registers as participant, then chats") and
                 // prevents unregistered-wallet chat spam.
                 let reg = self.registry.borrow();
                 if !reg.participants.contains_key(p) {
-                    return Err(ChatError::Unauthorized);
+                    return Err(ContractError::Unauthorized);
                 }
             }
             HandleRef::Application(a) => {
@@ -115,9 +123,9 @@ impl<'a> ChatService<'a> {
                 let app = reg
                     .applications
                     .get(a)
-                    .ok_or(ChatError::UnknownApplication)?;
+                    .ok_or(ContractError::UnknownApplication)?;
                 if caller != *a && caller != app.owner {
-                    return Err(ChatError::Unauthorized);
+                    return Err(ContractError::Unauthorized);
                 }
             }
         }
@@ -130,11 +138,11 @@ impl<'a> ChatService<'a> {
             &mut chat.last_post_at,
             caller,
             now,
-            CHAT_RATE_LIMIT_MS,
+            config.chat_rate_limit_ms,
         )
         .is_err()
         {
-            return Err(ChatError::RateLimited);
+            return Err(ContractError::RateLimited);
         }
 
         // Dedup mentions preserving order.
@@ -161,17 +169,17 @@ impl<'a> ChatService<'a> {
             let key = recipient.encode();
             let inbox = chat.mention_inboxes.entry(key).or_default();
             inbox.latest_seq = msg_id;
-            if inbox.ring.len() >= MENTION_INBOX_CAP {
-                inbox.ring.remove(0);
+            if inbox.ring.len() >= config.mention_inbox_cap as usize {
+                let _ = inbox.ring.pop_front();
                 inbox.oldest_retained_seq = inbox
                     .ring
-                    .first()
+                    .front()
                     .map(|h| h.msg_id)
                     .unwrap_or(inbox.latest_seq);
             } else if inbox.oldest_retained_seq == 0 {
                 inbox.oldest_retained_seq = msg_id;
             }
-            inbox.ring.push(MentionHeader {
+            inbox.ring.push_back(MentionHeader {
                 msg_id,
                 block,
                 author: author.clone(),
@@ -186,6 +194,7 @@ impl<'a> ChatService<'a> {
             author,
             body,
             mentions: dedup_mentions,
+            delivered_mentions: registered_mentions,
             reply_to,
             ts: now,
             season_id,
@@ -206,7 +215,7 @@ impl<'a> ChatService<'a> {
         since_seq: u64,
         limit: u32,
     ) -> MentionsPage {
-        let limit = limit.min(MAX_PAGE_SIZE_MENTIONS) as usize;
+        let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_MENTIONS);
         let chat = self.chat.borrow();
         let key = recipient.encode();
         let Some(inbox) = chat.mention_inboxes.get(&key) else {
@@ -257,8 +266,10 @@ impl<'a> ChatService<'a> {
 
 fn dedup_preserve_order(items: &[HandleRef]) -> Vec<HandleRef> {
     let mut out = Vec::with_capacity(items.len());
+    let mut seen = BTreeMap::new();
     for it in items {
-        if !out.contains(it) {
+        let key = it.encode();
+        if seen.insert(key, ()).is_none() {
             out.push(it.clone());
         }
     }

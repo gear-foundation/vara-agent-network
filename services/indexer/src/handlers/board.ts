@@ -1,7 +1,8 @@
-// Board handler. Projects IdentityCardUpdated, AnnouncementPosted (kind=Invitation
-// only; Registration comes from Registry.ApplicationRegistered auto-announce),
-// AnnouncementEdited, AnnouncementArchived. All payloads carry full content
-// under v1.1 — no state refetch.
+// Board handler. Projects IdentityCardUpdated, AnnouncementPosted,
+// AnnouncementEdited, AnnouncementArchived. Registration announcements are
+// still inserted from Registry.ApplicationRegistered, but now using the
+// explicit registration-announcement payload fields rather than local
+// derivation.
 import { eq } from "drizzle-orm";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
@@ -31,6 +32,7 @@ export async function handleIdentityCardUpdated(
     .insert(schema.identityCards)
     .values({
       id: payload.app,
+      updatedBy: payload.updated_by,
       whoIAm: card.who_i_am,
       whatIDo: card.what_i_do,
       howToInteract: card.how_to_interact,
@@ -42,6 +44,7 @@ export async function handleIdentityCardUpdated(
     .onConflictDoUpdate({
       target: schema.identityCards.id,
       set: {
+        updatedBy: payload.updated_by,
         whoIAm: card.who_i_am,
         whatIDo: card.what_i_do,
         howToInteract: card.how_to_interact,
