@@ -1,7 +1,7 @@
 // Drizzle schema for the Vara Agent Network read model.
 //
 // Design principles locked in Phase 5 review (2026-04-23):
-// - Event-only projections. No on-chain state refetch paths (v1.1 contract
+// - Event-only projections. No on-chain state refetch paths (protocol_version=3
 //   carries all projectable fields in events).
 // - Deterministic IDs for all append-only rows — replay safe.
 // - Dual block storage: substrate_block_number (extrinsic inclusion) and
@@ -48,6 +48,21 @@ export const participants = pgTable(
   }),
 );
 
+export const handleClaims = pgTable(
+  "handle_claims",
+  {
+    handle: text("handle").primaryKey(),
+    ownerKind: text("owner_kind").notNull(), // "Participant" | "Application"
+    ownerId: text("owner_id").notNull(),
+    seasonId: integer("season_id").notNull(),
+    claimedAt: bigint("claimed_at", { mode: "bigint" }).notNull(),
+  },
+  (t) => ({
+    ownerIdx: index("handle_claims_owner_idx").on(t.ownerKind, t.ownerId),
+    seasonIdx: index("handle_claims_season_idx").on(t.seasonId),
+  }),
+);
+
 export const applications = pgTable(
   "applications",
   {
@@ -79,6 +94,7 @@ export const applications = pgTable(
 
 export const identityCards = pgTable("identity_cards", {
   id: text("id").primaryKey(), // program_id hex
+  updatedBy: text("updated_by").notNull(),
   whoIAm: text("who_i_am").notNull(),
   whatIDo: text("what_i_do").notNull(),
   howToInteract: text("how_to_interact").notNull(),
@@ -131,7 +147,9 @@ export const chatMessages = pgTable(
     replyTo: bigint("reply_to", { mode: "bigint" }),
     ts: bigint("ts", { mode: "bigint" }).notNull(), // program time
     substrateBlockNumber: integer("substrate_block_number").notNull(),
-    gearBlockNumber: integer("gear_block_number").notNull(),
+    // The adapter does not currently expose `exec::block_height`, so keep
+    // this nullable instead of storing a fake 0.
+    gearBlockNumber: integer("gear_block_number"),
     substrateBlockTs: bigint("substrate_block_ts", { mode: "bigint" }).notNull(),
     extrinsicHash: text("extrinsic_hash"),
     seasonId: integer("season_id").notNull(),
@@ -154,11 +172,10 @@ export const chatMentions = pgTable(
     messageId: text("message_id")
       .notNull()
       .references(() => chatMessages.id, { onDelete: "cascade" }),
-    // Chat event carries the AUTHORED mention list (including orphans stripped
-    // on-chain from the inbox write). Flag indicates whether the recipient was
-    // registered at projection time. NOT an FK to applications because orphan
-    // mentions are the norm when recipient hasn't been ingested yet (e.g., if
-    // their registration event was in the pruned-backfill window).
+    // Chat event now carries only `delivered_mentions`, i.e. recipients that
+    // actually received inbox headers on-chain. Keep this as a tagged
+    // HandleRef string rather than an FK because participants and
+    // applications share the same stream.
     recipientRef: text("recipient_ref").notNull(),
     recipientHandle: text("recipient_handle"),
     recipientRegistered: boolean("recipient_registered").notNull(),

@@ -37,11 +37,11 @@ export async function handleMessagePosted(
       authorRef,
       authorHandle,
       body: payload.body,
-      mentionCount: payload.mentions.length,
+      mentionCount: payload.delivered_mentions.length,
       replyTo: payload.reply_to != null ? asBigInt(payload.reply_to) : null,
       ts: asBigInt(payload.ts),
       substrateBlockNumber: ctx.block.substrateBlockNumber,
-      gearBlockNumber: 0,
+      gearBlockNumber: null,
       substrateBlockTs: ctx.block.substrateBlockTs,
       extrinsicHash: null,
       seasonId: payload.season_id,
@@ -51,10 +51,10 @@ export async function handleMessagePosted(
   // Resolve mention handles in parallel, then insert rows sequentially
   // (they're keyed by `{rowId}:{index}` so ordering matters for determinism).
   const mentionHandles = await Promise.all(
-    payload.mentions.map((m) => resolveHandleRef(db, m)),
+    payload.delivered_mentions.map((m) => resolveHandleRef(db, m)),
   );
-  for (let i = 0; i < payload.mentions.length; i++) {
-    const m = payload.mentions[i]!;
+  for (let i = 0; i < payload.delivered_mentions.length; i++) {
+    const m = payload.delivered_mentions[i]!;
     await db
       .insert(schema.chatMentions)
       .values({
@@ -77,7 +77,7 @@ export async function handleMessagePosted(
   if ("application" in payload.author) {
     tasks.push(bumpMetric(db, payload.author.application, payload.season_id, "messagesSent", ts));
   }
-  for (const m of payload.mentions) {
+  for (const m of payload.delivered_mentions) {
     if ("application" in m) {
       tasks.push(
         bumpMentionCountAndSender(db, m.application, authorRef, payload.season_id, ctx),

@@ -38,6 +38,47 @@ export async function isFirstTimeEvent(db: Db, key: string): Promise<boolean> {
   return rows.length > 0;
 }
 
+export async function claimHandleOrThrow(
+  db: Db,
+  handle: string,
+  ownerKind: "Participant" | "Application",
+  ownerId: string,
+  seasonId: number,
+  claimedAt: bigint,
+): Promise<void> {
+  const inserted = await db
+    .insert(schema.handleClaims)
+    .values({
+      handle,
+      ownerKind,
+      ownerId,
+      seasonId,
+      claimedAt,
+    })
+    .onConflictDoNothing()
+    .returning({ handle: schema.handleClaims.handle });
+  if (inserted.length > 0) return;
+
+  const existing = await db
+    .select({
+      ownerKind: schema.handleClaims.ownerKind,
+      ownerId: schema.handleClaims.ownerId,
+    })
+    .from(schema.handleClaims)
+    .where(eq(schema.handleClaims.handle, handle))
+    .limit(1);
+
+  const claim = existing[0];
+  if (!claim) {
+    throw new Error(`handle claim conflict for ${handle}: insert skipped but no existing row found`);
+  }
+  if (claim.ownerKind !== ownerKind || claim.ownerId !== ownerId) {
+    throw new Error(
+      `global handle namespace violation for ${handle}: existing=${claim.ownerKind}:${claim.ownerId}, incoming=${ownerKind}:${ownerId}`,
+    );
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Origin taxonomy (codex Q1) — shared across interaction + metrics rollup.
 // ---------------------------------------------------------------------------

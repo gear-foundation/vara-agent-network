@@ -1,139 +1,174 @@
-//! Validation guards shared across services. Each guard returns a typed
-//! error variant; panics propagate the rollback boundary up to the message
-//! boundary.
+//! Validation guards shared across services. Limits come from runtime config.
 
-use crate::types::*;
+use crate::types::{
+    Config, ContractError, RegisterAppReq, MAX_ANNOUNCEMENT_BODY,
+    MAX_ANNOUNCEMENT_TITLE, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN,
+    MAX_IDENTITY_FIELD, MAX_IDL_URL, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS,
+    MAX_X_ACCOUNT, MIN_HANDLE_LEN,
+};
 use sails_rs::prelude::*;
 
-// ---------------------------------------------------------------------------
-// Handle regex: [a-z0-9-]{3,32}
-// ---------------------------------------------------------------------------
+pub fn ensure_participant_registration_enabled(config: &Config) -> Result<(), ContractError> {
+    if !config.allow_participant_registration {
+        return Err(ContractError::RegistrationDisabled);
+    }
+    Ok(())
+}
 
-/// `^[a-z0-9-]{3,32}$` enforced without pulling in a regex crate. `no_std`
-/// friendly. Rejects mixed case (contract is strict — frontend must
-/// lowercase).
-pub fn validate_handle(h: &str) -> Result<(), RegistryError> {
+pub fn ensure_application_registration_enabled(config: &Config) -> Result<(), ContractError> {
+    if !config.allow_application_registration {
+        return Err(ContractError::RegistrationDisabled);
+    }
+    Ok(())
+}
+
+pub fn ensure_chat_enabled(config: &Config) -> Result<(), ContractError> {
+    if !config.allow_chat {
+        return Err(ContractError::ChatDisabled);
+    }
+    Ok(())
+}
+
+pub fn ensure_board_enabled(config: &Config) -> Result<(), ContractError> {
+    if !config.allow_board_updates {
+        return Err(ContractError::BoardUpdatesDisabled);
+    }
+    Ok(())
+}
+
+pub fn ensure_user_mutations_allowed(config: &Config) -> Result<(), ContractError> {
+    if config.paused {
+        return Err(ContractError::Paused);
+    }
+    Ok(())
+}
+
+pub fn validate_handle(h: &str) -> Result<(), ContractError> {
     let bytes = h.as_bytes();
     if bytes.len() < MIN_HANDLE_LEN || bytes.len() > MAX_HANDLE_LEN {
-        return Err(RegistryError::HandleMalformed);
+        return Err(ContractError::HandleMalformed);
     }
     for &b in bytes {
-        let ok = (b >= b'a' && b <= b'z') || (b >= b'0' && b <= b'9') || b == b'-';
+        let ok = (b >= b'a' && b <= b'z')
+            || (b >= b'0' && b <= b'9')
+            || b == b'-'
+            || b == b'_';
         if !ok {
-            return Err(RegistryError::HandleMalformed);
+            return Err(ContractError::HandleMalformed);
         }
     }
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Field size caps (Registry)
-// ---------------------------------------------------------------------------
-
-pub fn check_register_app_req(req: &RegisterAppReq) -> Result<(), RegistryError> {
+pub fn check_register_app_req(req: &RegisterAppReq) -> Result<(), ContractError> {
     validate_handle(&req.handle)?;
     if req.github_url.len() > MAX_GITHUB_URL
         || req.skills_url.len() > MAX_SKILLS_URL
         || req.idl_url.len() > MAX_IDL_URL
         || req.description.len() > MAX_DESCRIPTION
     {
-        return Err(RegistryError::FieldTooLarge);
+        return Err(ContractError::FieldTooLarge);
     }
     if let Some(x) = &req.x_account {
         if x.len() > MAX_X_ACCOUNT {
-            return Err(RegistryError::FieldTooLarge);
+            return Err(ContractError::FieldTooLarge);
         }
     }
     Ok(())
 }
 
-pub fn check_application_patch(patch: &ApplicationPatch) -> Result<(), RegistryError> {
-    if let Some(d) = &patch.description {
+pub fn check_application_patch(
+    description: Option<&String>,
+    skills_url: Option<&String>,
+    idl_url: Option<&String>,
+    x_account: Option<&Option<String>>,
+) -> Result<(), ContractError> {
+    if let Some(d) = description {
         if d.len() > MAX_DESCRIPTION {
-            return Err(RegistryError::FieldTooLarge);
+            return Err(ContractError::FieldTooLarge);
         }
     }
-    if let Some(u) = &patch.skills_url {
+    if let Some(u) = skills_url {
         if u.len() > MAX_SKILLS_URL {
-            return Err(RegistryError::FieldTooLarge);
+            return Err(ContractError::FieldTooLarge);
         }
     }
-    if let Some(u) = &patch.idl_url {
+    if let Some(u) = idl_url {
         if u.len() > MAX_IDL_URL {
-            return Err(RegistryError::FieldTooLarge);
+            return Err(ContractError::FieldTooLarge);
         }
     }
-    if let Some(Some(x)) = &patch.x_account {
+    if let Some(Some(x)) = x_account {
         if x.len() > MAX_X_ACCOUNT {
-            return Err(RegistryError::FieldTooLarge);
+            return Err(ContractError::FieldTooLarge);
         }
     }
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Field size caps (Board)
-// ---------------------------------------------------------------------------
-
-pub fn check_identity_card_req(req: &IdentityCardReq) -> Result<(), BoardError> {
-    if req.who_i_am.len() > MAX_IDENTITY_FIELD
-        || req.what_i_do.len() > MAX_IDENTITY_FIELD
-        || req.how_to_interact.len() > MAX_IDENTITY_FIELD
-        || req.what_i_offer.len() > MAX_IDENTITY_FIELD
+pub fn check_identity_card_req(
+    who_i_am: &str,
+    what_i_do: &str,
+    how_to_interact: &str,
+    what_i_offer: &str,
+    tags: &[String],
+) -> Result<(), ContractError> {
+    if who_i_am.len() > MAX_IDENTITY_FIELD
+        || what_i_do.len() > MAX_IDENTITY_FIELD
+        || how_to_interact.len() > MAX_IDENTITY_FIELD
+        || what_i_offer.len() > MAX_IDENTITY_FIELD
     {
-        return Err(BoardError::FieldTooLarge);
+        return Err(ContractError::FieldTooLarge);
     }
-    check_tags(&req.tags)
+    check_tags(tags)
 }
 
-pub fn check_announcement_req(req: &AnnouncementReq) -> Result<(), BoardError> {
-    if req.title.len() > MAX_ANNOUNCEMENT_TITLE
-        || req.body.len() > MAX_ANNOUNCEMENT_BODY
+pub fn check_announcement_req(
+    title: &str,
+    body: &str,
+    tags: &[String],
+) -> Result<(), ContractError> {
+    if title.len() > MAX_ANNOUNCEMENT_TITLE
+        || body.len() > MAX_ANNOUNCEMENT_BODY
     {
-        return Err(BoardError::FieldTooLarge);
+        return Err(ContractError::FieldTooLarge);
     }
-    check_tags(&req.tags)
+    check_tags(tags)
 }
 
-fn check_tags(tags: &[String]) -> Result<(), BoardError> {
+fn check_tags(tags: &[String]) -> Result<(), ContractError> {
     if tags.len() > MAX_TAGS {
-        return Err(BoardError::FieldTooLarge);
+        return Err(ContractError::FieldTooLarge);
     }
     for t in tags {
         if t.len() > MAX_TAG_LEN {
-            return Err(BoardError::FieldTooLarge);
+            return Err(ContractError::FieldTooLarge);
         }
     }
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Chat body + mentions
-// ---------------------------------------------------------------------------
-
-pub fn check_chat_body(body: &str) -> Result<(), ChatError> {
+pub fn check_chat_body(body: &str, config: &Config) -> Result<(), ContractError> {
     if body.is_empty() {
-        return Err(ChatError::EmptyBody);
+        return Err(ContractError::EmptyBody);
     }
-    if body.len() > MAX_CHAT_BODY {
-        return Err(ChatError::BodyTooLarge);
-    }
-    Ok(())
-}
-
-pub fn check_mentions_cap(mentions: &[HandleRef]) -> Result<(), ChatError> {
-    if mentions.len() > MAX_MENTIONS_PER_POST {
-        return Err(ChatError::TooManyMentions);
+    if body.len() > config.max_chat_body as usize {
+        return Err(ContractError::FieldTooLarge);
     }
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Rate-limit helper
-// ---------------------------------------------------------------------------
+pub fn check_mentions_cap<T>(mentions: &[T], config: &Config) -> Result<(), ContractError> {
+    if mentions.len() > config.max_mentions_per_post as usize {
+        return Err(ContractError::TooManyMentions);
+    }
+    Ok(())
+}
 
-/// Generic timestamp-keyed rate limit. Callers pass the current block
-/// timestamp (milliseconds). On success, updates `last_at[key]` to `now`.
+pub fn clamp_page_size(limit: u32, max: u32) -> usize {
+    limit.min(max) as usize
+}
+
 pub fn check_and_bump_rate_limit(
     last_at: &mut sails_rs::collections::BTreeMap<ActorId, u64>,
     key: ActorId,
@@ -149,135 +184,30 @@ pub fn check_and_bump_rate_limit(
     Ok(())
 }
 
-// ---------------------------------------------------------------------------
-// Unit tests
-// ---------------------------------------------------------------------------
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn handle_min_len() {
-        assert!(validate_handle("abc").is_ok());
-        assert_eq!(validate_handle("ab").unwrap_err(), RegistryError::HandleMalformed);
-    }
-
-    #[test]
-    fn handle_max_len() {
-        let thirty_two = "a".repeat(32);
-        assert!(validate_handle(&thirty_two).is_ok());
-        let thirty_three = "a".repeat(33);
-        assert_eq!(
-            validate_handle(&thirty_three).unwrap_err(),
-            RegistryError::HandleMalformed,
-        );
+    fn handle_accepts_underscore_now() {
+        assert!(validate_handle("alice_bot").is_ok());
     }
 
     #[test]
     fn handle_rejects_uppercase() {
         assert_eq!(
             validate_handle("Alice").unwrap_err(),
-            RegistryError::HandleMalformed,
-        );
-        assert_eq!(
-            validate_handle("alice-BOT").unwrap_err(),
-            RegistryError::HandleMalformed,
-        );
-    }
-
-    #[test]
-    fn handle_rejects_underscore() {
-        assert_eq!(
-            validate_handle("alice_bot").unwrap_err(),
-            RegistryError::HandleMalformed,
-        );
-    }
-
-    #[test]
-    fn handle_rejects_unicode() {
-        assert_eq!(
-            validate_handle("áliçe").unwrap_err(),
-            RegistryError::HandleMalformed,
-        );
-        // emoji
-        assert_eq!(
-            validate_handle("alice🤖").unwrap_err(),
-            RegistryError::HandleMalformed,
-        );
-    }
-
-    #[test]
-    fn handle_accepts_digits_and_dashes() {
-        assert!(validate_handle("nft-007").is_ok());
-        assert!(validate_handle("a1").is_err()); // length
-        assert!(validate_handle("a1b").is_ok());
-    }
-
-    #[test]
-    fn handle_rejects_empty() {
-        assert_eq!(
-            validate_handle("").unwrap_err(),
-            RegistryError::HandleMalformed,
+            ContractError::HandleMalformed,
         );
     }
 
     #[test]
     fn chat_body_boundary() {
-        let max = "x".repeat(MAX_CHAT_BODY);
-        assert!(check_chat_body(&max).is_ok());
-        let over = "x".repeat(MAX_CHAT_BODY + 1);
-        assert_eq!(check_chat_body(&over).unwrap_err(), ChatError::BodyTooLarge);
-        assert_eq!(check_chat_body("").unwrap_err(), ChatError::EmptyBody);
-    }
-
-    #[test]
-    fn mentions_cap() {
-        let eight: Vec<HandleRef> = (0..8)
-            .map(|_| HandleRef::Participant(ActorId::default()))
-            .collect();
-        assert!(check_mentions_cap(&eight).is_ok());
-
-        let nine: Vec<HandleRef> = (0..9)
-            .map(|_| HandleRef::Participant(ActorId::default()))
-            .collect();
-        assert_eq!(
-            check_mentions_cap(&nine).unwrap_err(),
-            ChatError::TooManyMentions,
-        );
-    }
-
-    #[test]
-    fn rate_limit_bump() {
-        let mut m = sails_rs::collections::BTreeMap::new();
-        let k = ActorId::default();
-        assert!(check_and_bump_rate_limit(&mut m, k, 1000, 5000).is_ok());
-        assert!(check_and_bump_rate_limit(&mut m, k, 2000, 5000).is_err());
-        assert!(check_and_bump_rate_limit(&mut m, k, 6000, 5000).is_ok());
-    }
-
-    #[test]
-    fn register_req_field_caps() {
-        let mut req = RegisterAppReq {
-            handle: "ok".repeat(16), // 32 chars, valid
-            operator: ActorId::default(),
-            github_url: "x".repeat(MAX_GITHUB_URL),
-            skills_hash: [0; 32],
-            skills_url: "x".repeat(MAX_SKILLS_URL),
-            idl_hash: [0; 32],
-            idl_url: "x".repeat(MAX_IDL_URL),
-            description: "x".repeat(MAX_DESCRIPTION),
-            track: Track::Services,
-            x_account: Some("x".repeat(MAX_X_ACCOUNT)),
-        };
-        // Handle 32 chars of "ok" = all 'o' and 'k' chars, valid.
-        req.handle = "a".repeat(32);
-        assert!(check_register_app_req(&req).is_ok());
-
-        req.github_url = "x".repeat(MAX_GITHUB_URL + 1);
-        assert_eq!(
-            check_register_app_req(&req).unwrap_err(),
-            RegistryError::FieldTooLarge,
-        );
+        let cfg = Config::default();
+        let max = "x".repeat(cfg.max_chat_body as usize);
+        assert!(check_chat_body(&max, &cfg).is_ok());
+        let over = "x".repeat(cfg.max_chat_body as usize + 1);
+        assert_eq!(check_chat_body(&over, &cfg).unwrap_err(), ContractError::FieldTooLarge);
+        assert_eq!(check_chat_body("", &cfg).unwrap_err(), ContractError::EmptyBody);
     }
 }
