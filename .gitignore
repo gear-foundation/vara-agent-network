@@ -4,6 +4,10 @@
 .code-review-graph/
 target/
 node_modules/
+.env
+.env.local
+.env.development.local
+.env.production.local
 *.log
 
 # Local-only — internal planning, smoke reports, CLAUDE orientation, design history.

@@ -1,6 +1,6 @@
 // Processor entrypoint. Wires config → decoder → processor → handlers.
 import cron from "node-cron";
-import { config } from "./config.js";
+import { config, requireProcessorConfig } from "./config.js";
 import { SailsDecoder } from "./decoder/sails-decoder.js";
 import {
   handleAnnouncementArchived,
@@ -28,13 +28,14 @@ import { createProcessor } from "./processor.js";
 import { runDailyRollup, todayUtc, yesterdayUtc } from "./services/metrics-rollup.js";
 
 async function main() {
+  const processorConfig = requireProcessorConfig();
   log.info("boot", {
-    programId: config.programId,
-    startBlock: config.startBlock,
+    programId: processorConfig.programId,
+    startBlock: processorConfig.startBlock,
     season: config.seasonId,
   });
 
-  const decoder = await SailsDecoder.fromIdlFile(config.idlPath);
+  const decoder = await SailsDecoder.fromIdlFile(processorConfig.idlPath);
 
   const processor = await createProcessor({
     onBlock: async (ctx: BlockContext) => {
@@ -47,7 +48,7 @@ async function main() {
           event,
           extrinsicIdx: event.indexInBlock,
           eventIdx: event.indexInBlock,
-          programId: config.programId,
+          programId: processorConfig.programId,
         });
       }
 
@@ -81,7 +82,7 @@ async function main() {
           // Proxy for extrinsic idx (no direct mapping at this adapter layer).
           extrinsicIdx: event.indexInBlock,
           eventIdx,
-          programId: config.programId,
+          programId: processorConfig.programId,
         };
 
         // Handler errors MUST propagate so the processor can bail without

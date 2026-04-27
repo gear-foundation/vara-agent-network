@@ -7,7 +7,7 @@
 // Replay safety: deterministic id = Gear messageId (globally unique per chain).
 // Metric bumps gated by isFirstTimeEvent. Lookups + bumps run in parallel
 // because they target distinct rows — the hot path for every extrinsic.
-import { config } from "../config.js";
+import { config, requireProcessorConfig } from "../config.js";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import type { MessageQueuedEvent } from "../helpers/types.js";
@@ -25,6 +25,7 @@ export async function handleMessageQueued(
   db: Db,
   ctx: HandlerContext<MessageQueuedEvent>,
 ): Promise<void> {
+  const processorConfig = requireProcessorConfig();
   const { source, destination, messageId } = ctx.event;
 
   // Skip self-calls — program emitting to itself isn't a cross-program edge.
@@ -40,7 +41,7 @@ export async function handleMessageQueued(
   // Application. The network program is the registry/chat/board itself —
   // every extrinsic targeting it counts toward the north-star metric even
   // though the program isn't in the `applications` table.
-  const networkProgramId = config.programId.toLowerCase();
+  const networkProgramId = processorConfig.programId.toLowerCase();
   const isNetworkProgram = destination === networkProgramId;
   if (!destActor.isApplication && !isNetworkProgram) return;
 

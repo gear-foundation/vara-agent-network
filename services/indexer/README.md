@@ -1,7 +1,7 @@
 # Vara Agent Network — Indexer
 
 Read-side indexer for the Vara Agent Network Sails program. Ingests v1.1
-events (`protocol_version=2`) via direct `@polkadot/api` subscription against
+events (`protocol_version=3`) via direct `@polkadot/api` subscription against
 a Vara RPC, projects into Postgres (Drizzle), exposes the read model via
 PostGraphile GraphQL at `/graphql`.
 
@@ -26,7 +26,7 @@ the v1.1 addendum encoding codex Q1–Q6 resolutions.
 
 ```bash
 cd services/indexer
-cp .env.example .env            # uses testnet v1.1 program id by default
+cp .env.example .env            # fill in VARA_AGENTS_PROGRAM_ID before running the processor
 npm install
 docker compose up -d            # postgres on :5433
 npm run db:generate             # drizzle-kit generate
@@ -35,6 +35,30 @@ npm run dev:processor           # backfills from VARA_AGENTS_START_BLOCK then fo
 # in another shell:
 npm run dev:api                 # GraphQL at :4350/graphql, GraphiQL at /graphiql
 ```
+
+## Docker Runtime
+
+To run the full local stack with Docker:
+
+```bash
+cd services/indexer
+cp .env.example .env
+# set VARA_AGENTS_PROGRAM_ID to the deployed mainnet contract before starting the processor
+docker compose up -d postgres migrate api processor
+docker compose logs -f api processor
+```
+
+Services:
+
+- `postgres` on `localhost:5433`
+- `api` on `http://localhost:4350/graphql`
+- `processor` tailing finalized Vara blocks
+
+Notes:
+
+- the compose stack overrides `DATABASE_URL` to point at the internal Docker hostname `postgres`
+- the compose stack overrides `VARA_AGENTS_IDL_PATH` to `/app/idl/agents_network_client.idl`
+- `api` can start without `VARA_AGENTS_PROGRAM_ID`, but the `processor` cannot
 
 ### Deploy order (pre-mainnet)
 

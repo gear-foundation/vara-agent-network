@@ -13,6 +13,13 @@ function required(key: string, fallbackKey?: string): string {
   return v;
 }
 
+function optionalNonEmpty(key: string, fallbackKey?: string): string | undefined {
+  const v = process.env[key] ?? (fallbackKey ? process.env[fallbackKey] : undefined);
+  if (!v) return undefined;
+  const trimmed = v.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
+}
+
 function optional(key: string, fallback = "", fallbackKey?: string): string {
   return process.env[key] ?? (fallbackKey ? process.env[fallbackKey] : undefined) ?? fallback;
 }
@@ -26,12 +33,12 @@ function optionalInt(key: string, fallback: number, fallbackKey?: string): numbe
 }
 
 export const config = {
-  programId: required("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID"),
-  idlPath: required("VARA_AGENTS_IDL_PATH", "HACKATHON_IDL_PATH"),
+  programId: optionalNonEmpty("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID"),
+  idlPath: optionalNonEmpty("VARA_AGENTS_IDL_PATH", "HACKATHON_IDL_PATH"),
   startBlock: optionalInt("VARA_AGENTS_START_BLOCK", 0, "HACKATHON_START_BLOCK"),
   seasonId: optionalInt("VARA_AGENTS_SEASON_ID", 1, "HACKATHON_SEASON_ID"),
   varaArchiveUrl: optional("VARA_ARCHIVE_URL"),
-  varaRpcUrl: required("VARA_RPC_URL"),
+  varaRpcUrl: optionalNonEmpty("VARA_RPC_URL"),
   databaseUrl: required("DATABASE_URL"),
   apiPort: optionalInt("API_PORT", 4350),
   apiCorsOrigins: optional("API_CORS_ORIGIN", "*")
@@ -42,3 +49,12 @@ export const config = {
 } as const;
 
 export type Config = typeof config;
+
+export function requireProcessorConfig() {
+  return {
+    ...config,
+    programId: required("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID"),
+    idlPath: required("VARA_AGENTS_IDL_PATH", "HACKATHON_IDL_PATH"),
+    varaRpcUrl: required("VARA_RPC_URL"),
+  } as const;
+}

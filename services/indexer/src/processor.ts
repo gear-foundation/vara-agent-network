@@ -14,7 +14,7 @@ import { ApiPromise, WsProvider } from "@polkadot/api";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { u8aToHex } from "@polkadot/util";
 import { eq } from "drizzle-orm";
-import { config } from "./config.js";
+import { requireProcessorConfig } from "./config.js";
 import { log } from "./helpers/logger.js";
 import {
   type BlockContext,
@@ -28,6 +28,7 @@ export interface ProcessorHooks {
 }
 
 export async function createProcessor(hooks: ProcessorHooks) {
+  const config = requireProcessorConfig();
   const provider = new WsProvider(config.varaRpcUrl);
   const api = await ApiPromise.create({ provider });
   const chain = (await api.rpc.system.chain()).toString();

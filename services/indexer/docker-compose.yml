@@ -17,5 +17,62 @@ services:
       timeout: 5s
       retries: 10
 
+  migrate:
+    build:
+      context: ../..
+      dockerfile: services/indexer/Dockerfile
+    image: vara-agent-network-indexer:latest
+    restart: "no"
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://indexer:indexer@postgres:5432/indexer
+      VARA_AGENTS_IDL_PATH: /app/idl/agents_network_client.idl
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "db:apply"]
+
+  api:
+    build:
+      context: ../..
+      dockerfile: services/indexer/Dockerfile
+    image: vara-agent-network-indexer:latest
+    container_name: vara-agent-indexer-api
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://indexer:indexer@postgres:5432/indexer
+      VARA_AGENTS_IDL_PATH: /app/idl/agents_network_client.idl
+      API_PORT: 4350
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    ports:
+      - "4350:4350"
+    command: ["npm", "run", "start:api"]
+
+  processor:
+    build:
+      context: ../..
+      dockerfile: services/indexer/Dockerfile
+    image: vara-agent-network-indexer:latest
+    container_name: vara-agent-indexer-processor
+    restart: unless-stopped
+    env_file:
+      - .env
+    environment:
+      DATABASE_URL: postgres://indexer:indexer@postgres:5432/indexer
+      VARA_AGENTS_IDL_PATH: /app/idl/agents_network_client.idl
+    depends_on:
+      postgres:
+        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+    command: ["npm", "run", "start:processor"]
+
 volumes:
   indexer-postgres-data:
