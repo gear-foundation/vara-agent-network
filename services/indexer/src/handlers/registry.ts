@@ -1,5 +1,5 @@
 // Registry handler. Projects ParticipantRegistered, ApplicationRegistered,
-// and ApplicationUpdated from protocol_version=3 event payloads.
+// ApplicationUpdated, and ApplicationSubmitted event payloads.
 //
 // No state refetch anywhere — the events carry all projectable fields.
 // The kind=Registration announcement is still inserted from
@@ -11,10 +11,11 @@ import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import type {
   ApplicationRegistered,
+  ApplicationSubmitted,
   ApplicationUpdated,
   ParticipantRegistered,
 } from "../helpers/event-payloads.js";
-import { asBigInt } from "../helpers/event-payloads.js";
+import { asBigInt, hashToHex } from "../helpers/event-payloads.js";
 import {
   bumpMetric,
   claimHandleOrThrow,
@@ -77,6 +78,8 @@ export async function handleApplicationRegistered(
     payload.season_id,
     registeredAt,
   );
+  const skillsHash = hashToHex(payload.skills_hash);
+  const idlHash = hashToHex(payload.idl_hash);
   await db
     .insert(schema.applications)
     .values({
@@ -86,11 +89,13 @@ export async function handleApplicationRegistered(
       description: payload.description,
       track: payload.track,
       githubUrl: payload.github_url,
-      skillsHash: payload.skills_hash,
+      skillsHash,
       skillsUrl: payload.skills_url,
-      idlHash: payload.idl_hash,
+      idlHash,
       idlUrl: payload.idl_url,
-      xAccount: payload.x_account ?? null,
+      discordAccount: payload.contacts?.discord ?? null,
+      telegramAccount: payload.contacts?.telegram ?? null,
+      xAccount: payload.contacts?.x ?? null,
       registeredAt,
       seasonId: payload.season_id,
       status: payload.status,
@@ -104,11 +109,13 @@ export async function handleApplicationRegistered(
         description: payload.description,
         track: payload.track,
         githubUrl: payload.github_url,
-        skillsHash: payload.skills_hash,
+        skillsHash,
         skillsUrl: payload.skills_url,
-        idlHash: payload.idl_hash,
+        idlHash,
         idlUrl: payload.idl_url,
-        xAccount: payload.x_account ?? null,
+        discordAccount: payload.contacts?.discord ?? null,
+        telegramAccount: payload.contacts?.telegram ?? null,
+        xAccount: payload.contacts?.x ?? null,
         registeredAt,
         seasonId: payload.season_id,
         status: payload.status,
@@ -147,21 +154,40 @@ export async function handleApplicationUpdated(
   const patch = payload.patch;
   const updates: Record<string, unknown> = {};
   if (patch.description != null) updates.description = patch.description;
-  if (patch.skills_hash != null) updates.skillsHash = patch.skills_hash;
   if (patch.skills_url != null) updates.skillsUrl = patch.skills_url;
-  if (patch.idl_hash != null) updates.idlHash = patch.idl_hash;
   if (patch.idl_url != null) updates.idlUrl = patch.idl_url;
-  // x_account is Option<Option<String>> — inner None (`undefined` here after
-  // JSON decode) clears the field. Outer None (missing key) means unchanged.
-  if ("x_account" in patch) {
-    updates.xAccount = patch.x_account ?? null;
+
+  // contacts is Option<Option<ContactLinks>>. Some decoders omit outer None,
+  // others may materialize it as `null`, so only treat `null` as an explicit
+  // clear when contacts is the only applied field in this patch.
+  if (patch.contacts != null) {
+    updates.discordAccount = patch.contacts?.discord ?? null;
+    updates.telegramAccount = patch.contacts?.telegram ?? null;
+    updates.xAccount = patch.contacts?.x ?? null;
+  } else if (
+    Object.prototype.hasOwnProperty.call(patch, "contacts") &&
+    Object.keys(updates).length === 0
+  ) {
+    updates.discordAccount = null;
+    updates.telegramAccount = null;
+    updates.xAccount = null;
   }
-  if (patch.status != null) updates.status = patch.status;
 
   if (Object.keys(updates).length === 0) return;
 
   await db
     .update(schema.applications)
     .set(updates)
+    .where(sql`${schema.applications.id} = ${payload.program_id}`);
+}
+
+export async function handleApplicationSubmitted(
+  db: Db,
+  _ctx: HandlerContext,
+  payload: ApplicationSubmitted,
+): Promise<void> {
+  await db
+    .update(schema.applications)
+    .set({ status: "Submitted" })
     .where(sql`${schema.applications.id} = ${payload.program_id}`);
 }

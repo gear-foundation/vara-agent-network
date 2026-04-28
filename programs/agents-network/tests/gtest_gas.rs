@@ -23,10 +23,11 @@
 
 mod common;
 
-use common::*;
 use agents_network_client::{
-    AgentsNetworkClient, HandleRef, Track, board::Board, chat::Chat, registry::Registry,
+    AgentsNetworkClient, ContactLinks, HandleRef, Track, board::Board, chat::Chat,
+    registry::Registry,
 };
+use common::*;
 use sails_rs::client::*;
 use sails_rs::prelude::*;
 
@@ -49,10 +50,7 @@ async fn setup_manual() -> (
 
 /// Stage a message via `send_one_way`, run the next block, return the per-
 /// message gas burned. Asserts the message executed successfully.
-fn burn(
-    env: &GtestEnv,
-    msg_id: sails_rs::prelude::MessageId,
-) -> u64 {
+fn burn(env: &GtestEnv, msg_id: sails_rs::prelude::MessageId) -> u64 {
     let result = env.system().run_next_block();
     assert!(
         result.succeed.contains(&msg_id),
@@ -75,9 +73,10 @@ async fn gas_gate_register_application_worst_case() {
     // executes against a non-trivial state size.
     for i in 0..19u64 {
         let handle = format!("filler-{i:02}");
-        let mut pending = program
-            .registry()
-            .register_application(mk_register_req(&handle, BOB));
+        let mut pending =
+            program
+                .registry()
+                .register_application(mk_register_req(&handle, BOB, 300 + i));
         pending = pending.with_actor_id((300 + i).into());
         let msg_id = pending.send_one_way().unwrap();
         let _ = env.system().run_next_block();
@@ -86,14 +85,16 @@ async fn gas_gate_register_application_worst_case() {
     }
 
     // Worst-case RegisterAppReq: all string fields at max caps.
-    let mut req = mk_register_req(&"a".repeat(32), BOB); // handle max len
-    req.github_url = "x".repeat(256);
+    let mut req = mk_register_req(&"a".repeat(32), BOB, 3_000_000); // handle max len
+    req.github_url = format!("https://github.com/{}", "x".repeat(237));
     req.skills_url = "x".repeat(256);
-    req.idl_url = "x".repeat(256);
+    req.idl_url = format!("https://example.com/{}.idl", "x".repeat(228));
     req.description = "x".repeat(280);
-    req.x_account = Some("x".repeat(64));
-    req.skills_hash = [0xab; 32];
-    req.idl_hash = [0xcd; 32];
+    req.contacts = Some(ContactLinks {
+        discord: Some("x".repeat(64)),
+        telegram: Some("x".repeat(64)),
+        x: Some("x".repeat(64)),
+    });
 
     env.system().mint_to(3_000_000u64, FUND);
     let mut pending = program.registry().register_application(req);
@@ -116,9 +117,10 @@ async fn gas_gate_chat_post_worst_case() {
     // Pre-register 8 distinct application recipients.
     for i in 0..8u64 {
         let handle = format!("recip-{i}");
-        let mut pending = program
-            .registry()
-            .register_application(mk_register_req(&handle, ALICE));
+        let mut pending =
+            program
+                .registry()
+                .register_application(mk_register_req(&handle, ALICE, 400 + i));
         pending = pending.with_actor_id((400 + i).into());
         let msg_id = pending.send_one_way().unwrap();
         let _ = env.system().run_next_block();
@@ -136,16 +138,8 @@ async fn gas_gate_chat_post_worst_case() {
     let all_eight: Vec<HandleRef> = (400u64..408)
         .map(|a| HandleRef::Application(a.into()))
         .collect();
-    // Register posters as participants (participant authorship now requires registration).
     for &pid in &poster_ids {
         env.system().mint_to(pid, FUND);
-        let handle = format!("filler-{pid}");
-        let mut pending = program
-            .registry()
-            .register_participant(handle, format!("github.com/p{pid}"));
-        pending = pending.with_actor_id(pid.into());
-        let _ = pending.send_one_way().unwrap();
-        let _ = env.system().run_next_block();
     }
     for &pid in &poster_ids {
         let mut pending = program.chat().post(
@@ -167,18 +161,13 @@ async fn gas_gate_chat_post_worst_case() {
     let body = "x".repeat(2048); // worst-case body at MAX_CHAT_BODY.
 
     env.system().mint_to(6_000_000u64, FUND);
-    // Register the worst-case author so chat auth passes; otherwise the post
-    // returns Unauthorized and we'd be measuring the rejected path.
-    let mut reg_pending = program
-        .registry()
-        .register_participant("worst-author".to_string(), "github.com/wa".to_string());
-    reg_pending = reg_pending.with_actor_id((6_000_000u64).into());
-    let _ = reg_pending.send_one_way().unwrap();
-    let _ = env.system().run_next_block();
 
-    let mut pending = program
-        .chat()
-        .post(body, HandleRef::Participant((6_000_000u64).into()), mentions, None);
+    let mut pending = program.chat().post(
+        body,
+        HandleRef::Participant((6_000_000u64).into()),
+        mentions,
+        None,
+    );
     pending = pending.with_actor_id((6_000_000u64).into());
     let msg_id = pending.send_one_way().unwrap();
 
@@ -200,12 +189,8 @@ async fn gas_gate_discover_populated_registry() {
     for i in 0..60u64 {
         env.system().mint_to(700 + i, FUND);
         let handle = format!("discover-{i:02}");
-        let mut req = mk_register_req(&handle, ALICE);
-        req.track = if i < 50 {
-            Track::Services
-        } else {
-            Track::Open
-        };
+        let mut req = mk_register_req(&handle, ALICE, 700 + i);
+        req.track = if i < 50 { Track::Services } else { Track::Open };
 
         let mut pending = program.registry().register_application(req);
         pending = pending.with_actor_id((700 + i).into());
@@ -243,9 +228,10 @@ async fn gas_gate_list_announcements_populated_board() {
     for i in 0..60u64 {
         env.system().mint_to(900 + i, FUND);
         let handle = format!("board-{i:02}");
-        let mut pending = program
-            .registry()
-            .register_application(mk_register_req(&handle, BOB));
+        let mut pending =
+            program
+                .registry()
+                .register_application(mk_register_req(&handle, BOB, 900 + i));
         pending = pending.with_actor_id((900 + i).into());
         let _ = pending.send_one_way().unwrap();
         let _ = env.system().run_next_block();

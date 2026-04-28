@@ -1,10 +1,9 @@
 //! Validation guards shared across services. Limits come from runtime config.
 
 use crate::types::{
-    Config, ContractError, RegisterAppReq, MAX_ANNOUNCEMENT_BODY,
-    MAX_ANNOUNCEMENT_TITLE, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN,
-    MAX_IDENTITY_FIELD, MAX_IDL_URL, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS,
-    MAX_X_ACCOUNT, MIN_HANDLE_LEN,
+    Config, ContactLinks, ContractError, MAX_ANNOUNCEMENT_BODY, MAX_ANNOUNCEMENT_TITLE,
+    MAX_CONTACT_LINK, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN, MAX_IDENTITY_FIELD,
+    MAX_IDL_URL, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS, MIN_HANDLE_LEN, RegisterAppReq,
 };
 use sails_rs::prelude::*;
 
@@ -49,10 +48,7 @@ pub fn validate_handle(h: &str) -> Result<(), ContractError> {
         return Err(ContractError::HandleMalformed);
     }
     for &b in bytes {
-        let ok = (b >= b'a' && b <= b'z')
-            || (b >= b'0' && b <= b'9')
-            || b == b'-'
-            || b == b'_';
+        let ok = (b >= b'a' && b <= b'z') || (b >= b'0' && b <= b'9') || b == b'-' || b == b'_';
         if !ok {
             return Err(ContractError::HandleMalformed);
         }
@@ -62,6 +58,11 @@ pub fn validate_handle(h: &str) -> Result<(), ContractError> {
 
 pub fn check_register_app_req(req: &RegisterAppReq) -> Result<(), ContractError> {
     validate_handle(&req.handle)?;
+    if req.program_id == ActorId::zero() {
+        return Err(ContractError::UnknownApplication);
+    }
+    validate_hash(&req.skills_hash)?;
+    validate_hash(&req.idl_hash)?;
     if req.github_url.len() > MAX_GITHUB_URL
         || req.skills_url.len() > MAX_SKILLS_URL
         || req.idl_url.len() > MAX_IDL_URL
@@ -69,10 +70,32 @@ pub fn check_register_app_req(req: &RegisterAppReq) -> Result<(), ContractError>
     {
         return Err(ContractError::FieldTooLarge);
     }
-    if let Some(x) = &req.x_account {
-        if x.len() > MAX_X_ACCOUNT {
-            return Err(ContractError::FieldTooLarge);
-        }
+    validate_github_url(&req.github_url)?;
+    validate_idl_url(&req.idl_url)?;
+    check_contact_links(req.contacts.as_ref())?;
+    Ok(())
+}
+
+pub fn validate_hash(hash: &[u8; 32]) -> Result<(), ContractError> {
+    if hash.iter().all(|b| *b == 0) {
+        return Err(ContractError::InvalidHash);
+    }
+    Ok(())
+}
+
+pub fn validate_github_url(url: &str) -> Result<(), ContractError> {
+    if url.starts_with("https://github.com/") {
+        return Ok(());
+    }
+    Err(ContractError::InvalidGithubUrl)
+}
+
+pub fn validate_idl_url(url: &str) -> Result<(), ContractError> {
+    if !(url.starts_with("https://") || url.starts_with("ipfs://")) {
+        return Err(ContractError::InvalidIdlUrl);
+    }
+    if !url.ends_with(".idl") {
+        return Err(ContractError::InvalidIdlUrl);
     }
     Ok(())
 }
@@ -81,7 +104,7 @@ pub fn check_application_patch(
     description: Option<&String>,
     skills_url: Option<&String>,
     idl_url: Option<&String>,
-    x_account: Option<&Option<String>>,
+    contacts: Option<&Option<ContactLinks>>,
 ) -> Result<(), ContractError> {
     if let Some(d) = description {
         if d.len() > MAX_DESCRIPTION {
@@ -97,9 +120,23 @@ pub fn check_application_patch(
         if u.len() > MAX_IDL_URL {
             return Err(ContractError::FieldTooLarge);
         }
+        validate_idl_url(u)?;
     }
-    if let Some(Some(x)) = x_account {
-        if x.len() > MAX_X_ACCOUNT {
+    if let Some(Some(links)) = contacts {
+        check_contact_links(Some(links))?;
+    }
+    Ok(())
+}
+
+fn check_contact_links(links: Option<&ContactLinks>) -> Result<(), ContractError> {
+    let Some(links) = links else {
+        return Ok(());
+    };
+    for value in [&links.discord, &links.telegram, &links.x]
+        .into_iter()
+        .flatten()
+    {
+        if value.len() > MAX_CONTACT_LINK {
             return Err(ContractError::FieldTooLarge);
         }
     }
@@ -128,9 +165,7 @@ pub fn check_announcement_req(
     body: &str,
     tags: &[String],
 ) -> Result<(), ContractError> {
-    if title.len() > MAX_ANNOUNCEMENT_TITLE
-        || body.len() > MAX_ANNOUNCEMENT_BODY
-    {
+    if title.len() > MAX_ANNOUNCEMENT_TITLE || body.len() > MAX_ANNOUNCEMENT_BODY {
         return Err(ContractError::FieldTooLarge);
     }
     check_tags(tags)
@@ -207,7 +242,13 @@ mod tests {
         let max = "x".repeat(cfg.max_chat_body as usize);
         assert!(check_chat_body(&max, &cfg).is_ok());
         let over = "x".repeat(cfg.max_chat_body as usize + 1);
-        assert_eq!(check_chat_body(&over, &cfg).unwrap_err(), ContractError::FieldTooLarge);
-        assert_eq!(check_chat_body("", &cfg).unwrap_err(), ContractError::EmptyBody);
+        assert_eq!(
+            check_chat_body(&over, &cfg).unwrap_err(),
+            ContractError::FieldTooLarge
+        );
+        assert_eq!(
+            check_chat_body("", &cfg).unwrap_err(),
+            ContractError::EmptyBody
+        );
     }
 }

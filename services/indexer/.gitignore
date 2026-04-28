@@ -1,5 +1,8 @@
 node_modules/
 lib/
 .env
+.env.local
+.env.development.local
+.env.production.local
 *.log
 .drizzle/

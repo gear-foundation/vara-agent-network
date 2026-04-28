@@ -1,12 +1,11 @@
 //! Registry service — participants, applications, handles, discovery.
 //!
-//! Program-ownership proof (Option A): `registerApplication` keys the new
-//! `Application` entry on `msg::source()`. A wallet cannot forge
-//! `msg::source()` to be another program's ActorId, so squatting someone
-//! else's deployed program is impossible.
+//! Application records are keyed by explicit `program_id`, while the caller is
+//! recorded/authorized as the operator. This lets one wallet manage multiple
+//! registered applications.
 
-use crate::board::BoardState;
 use crate::admin::AdminState;
+use crate::board::BoardState;
 use crate::guards;
 use crate::types::*;
 use sails_rs::cell::RefCell;
@@ -41,7 +40,7 @@ pub enum RegistryEvent {
         joined_at: u64,
         season_id: u32,
     },
-    /// v1.2 enrichment: carries every mutable + immutable field needed to
+    /// Carries every mutable + immutable field needed to
     /// project an `Application` row without refetching on-chain state.
     /// `registered_at` is authoritative program time (block_timestamp at
     /// registration); `status` is always `Building` at registration and is
@@ -53,11 +52,11 @@ pub enum RegistryEvent {
         description: String,
         track: Track,
         github_url: String,
-        skills_hash: ContentHash,
+        skills_hash: Hash32,
         skills_url: String,
-        idl_hash: ContentHash,
+        idl_hash: Hash32,
         idl_url: String,
-        x_account: Option<String>,
+        contacts: Option<ContactLinks>,
         registered_at: u64,
         status: AppStatus,
         registration_announcement_id: PostId,
@@ -67,13 +66,20 @@ pub enum RegistryEvent {
         registration_announcement_tags: Vec<String>,
         season_id: u32,
     },
-    /// v1.2 enrichment: emits the exact patch that was applied, so indexer
+    /// Emits the exact patch that was applied, so indexer
     /// can overwrite fields deterministically. Drops `changed_fields: Vec<FieldTag>`
     /// — the patch IS the change set. Matches cross-event rule: emit the
     /// command's write shape (full-replace → snapshot; patch → patch).
     ApplicationUpdated {
         program_id: ActorId,
         patch: ApplicationPatch,
+        season_id: u32,
+    },
+    /// Owner/program self-call: marks the application ready for review.
+    /// Trusted statuses after submission are controlled by AdminService.
+    ApplicationSubmitted {
+        program_id: ActorId,
+        owner: ActorId,
         season_id: u32,
     },
 }
@@ -124,6 +130,7 @@ impl<'a> RegistryService<'a> {
         if github.len() > MAX_GITHUB_URL {
             return Err(ContractError::FieldTooLarge);
         }
+        guards::validate_github_url(&github)?;
 
         let wallet = msg::source();
         let mut reg = self.registry.borrow_mut();
@@ -164,29 +171,30 @@ impl<'a> RegistryService<'a> {
         Ok(())
     }
 
-    /// Register an application. Option A: `msg::source()` IS the program_id.
-    /// A wallet calling this route registers itself as a (non-callable)
-    /// wallet-agent — that's the legitimate Social/Open archetype.
+    /// Register an application by explicit `program_id`. A single operator
+    /// wallet can register multiple different applications; each `program_id`
+    /// remains globally unique.
     ///
     /// Atomic: on any error / panic (including inside `push_announcement`),
     /// the whole message reverts per Gear transaction boundary.
     #[export(unwrap_result)]
-    pub fn register_application(
-        &mut self,
-        req: RegisterAppReq,
-    ) -> Result<(), ContractError> {
+    pub fn register_application(&mut self, req: RegisterAppReq) -> Result<(), ContractError> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_application_registration_enabled(&config)?;
         guards::ensure_user_mutations_allowed(&config)?;
         guards::check_register_app_req(&req)?;
 
-        let program_id = msg::source();
+        let caller = msg::source();
+        let program_id = req.program_id;
         let now = exec::block_timestamp();
         let season_id = self.current_season;
 
         let mut reg = self.registry.borrow_mut();
         let mut board = self.board.borrow_mut();
 
+        if caller != req.operator && caller != program_id {
+            return Err(ContractError::Unauthorized);
+        }
         if reg.handles.contains_key(&req.handle) {
             return Err(ContractError::HandleTaken);
         }
@@ -209,7 +217,7 @@ impl<'a> RegistryService<'a> {
                 skills_url: req.skills_url.clone(),
                 idl_hash: req.idl_hash,
                 idl_url: req.idl_url.clone(),
-                x_account: req.x_account.clone(),
+                contacts: req.contacts.clone(),
                 registered_at: now,
                 season_id,
                 status: AppStatus::Building,
@@ -250,7 +258,7 @@ impl<'a> RegistryService<'a> {
             skills_url: req.skills_url,
             idl_hash: req.idl_hash,
             idl_url: req.idl_url,
-            x_account: req.x_account,
+            contacts: req.contacts,
             registered_at: now,
             status: AppStatus::Building,
             registration_announcement_id: registration_outcome.new_id,
@@ -277,7 +285,7 @@ impl<'a> RegistryService<'a> {
             patch.description.as_ref(),
             patch.skills_url.as_ref(),
             patch.idl_url.as_ref(),
-            patch.x_account.as_ref(),
+            patch.contacts.as_ref(),
         )?;
 
         let caller = msg::source();
@@ -302,31 +310,18 @@ impl<'a> RegistryService<'a> {
             app.description = d.clone();
             applied.description = Some(d);
         }
-        if let Some(h) = patch.skills_hash {
-            app.skills_hash = h;
-            applied.skills_hash = Some(h);
-        }
         if let Some(u) = patch.skills_url {
             app.skills_url = u.clone();
             applied.skills_url = Some(u);
-        }
-        if let Some(h) = patch.idl_hash {
-            app.idl_hash = h;
-            applied.idl_hash = Some(h);
         }
         if let Some(u) = patch.idl_url {
             app.idl_url = u.clone();
             applied.idl_url = Some(u);
         }
-        if let Some(x) = patch.x_account {
-            app.x_account = x.clone();
-            applied.x_account = Some(x);
+        if let Some(contacts) = patch.contacts {
+            app.contacts = contacts.clone();
+            applied.contacts = Some(contacts);
         }
-        if let Some(s) = patch.status {
-            app.status = s;
-            applied.status = Some(s);
-        }
-
         let season_id = self.current_season;
         drop(reg);
 
@@ -336,6 +331,40 @@ impl<'a> RegistryService<'a> {
             season_id,
         })
         .expect("emit ApplicationUpdated failed");
+
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn submit_application(&mut self, program_id: ActorId) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+
+        let caller = msg::source();
+        let mut reg = self.registry.borrow_mut();
+        let app = reg
+            .applications
+            .get_mut(&program_id)
+            .ok_or(ContractError::UnknownApplication)?;
+
+        if caller != app.owner && caller != program_id {
+            return Err(ContractError::NotOwner);
+        }
+        if app.status != AppStatus::Building {
+            return Err(ContractError::InvalidStatusTransition);
+        }
+
+        app.status = AppStatus::Submitted;
+        let owner = app.owner;
+        let season_id = self.current_season;
+        drop(reg);
+
+        self.emit_event(RegistryEvent::ApplicationSubmitted {
+            program_id,
+            owner,
+            season_id,
+        })
+        .expect("emit ApplicationSubmitted failed");
 
         Ok(())
     }
@@ -385,22 +414,9 @@ impl<'a> RegistryService<'a> {
             next_cursor = Some(*key);
             items.push(app.clone());
         }
-        ApplicationPage {
-            items,
-            next_cursor,
-        }
+        ApplicationPage { items, next_cursor }
     }
 
-    #[export]
-    pub fn protocol_version(&self) -> u32 {
-        // v3: event payloads are fully self-contained for deterministic
-        // indexer replay.
-        // ApplicationRegistered now carries all projectable fields;
-        // registration auto-announcements include their real PostId + full
-        // payload; MessagePosted distinguishes mentions from delivered_mentions;
-        // IdentityCardUpdated carries updated_by.
-        3
-    }
 }
 
 // ---------------------------------------------------------------------------

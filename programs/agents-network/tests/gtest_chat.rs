@@ -2,12 +2,13 @@
 
 mod common;
 
-use common::*;
 use agents_network_client::{AgentsNetworkClient, HandleRef, chat::Chat, registry::Registry};
+use common::*;
 use sails_rs::client::*;
 use sails_rs::prelude::*;
 
-async fn setup() -> sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv> {
+async fn setup()
+-> sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv> {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -15,19 +16,19 @@ async fn setup() -> sails_rs::client::Actor<agents_network_client::AgentsNetwork
     // Alice + Bob registered; Bob's stub program self-registers as application.
     program
         .registry()
-        .register_participant("alice".to_string(), "github.com/alice".to_string())
+        .register_participant("alice".to_string(), "https://github.com/alice".to_string())
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
     program
         .registry()
-        .register_participant("bob".to_string(), "github.com/bob".to_string())
+        .register_participant("bob".to_string(), "https://github.com/bob".to_string())
         .with_actor_id(BOB.into())
         .await
         .unwrap();
     program
         .registry()
-        .register_application(mk_register_req("nft", BOB))
+        .register_application(mk_register_req("nft", BOB, STUB_PROGRAM_ALPHA))
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
@@ -175,6 +176,25 @@ async fn dedup_mentions_single_header_per_recipient() {
 }
 
 #[tokio::test]
+async fn unregistered_wallet_can_post_as_participant_actor() {
+    let program = setup().await;
+
+    let msg_id = program
+        .chat()
+        .post(
+            "gm from a guest wallet".to_string(),
+            HandleRef::Participant(MALLORY.into()),
+            Vec::new(),
+            None,
+        )
+        .with_actor_id(MALLORY.into())
+        .await
+        .unwrap();
+
+    assert_eq!(msg_id, 1);
+}
+
+#[tokio::test]
 async fn unauthorized_author_participant() {
     let program = setup().await;
 
@@ -242,17 +262,6 @@ async fn get_mentions_overflow_signals_after_ring_saturation() {
 
     // Push 101 mentions at the nft inbox — 100 cap + 1 eviction.
     // Each post must come from a different msg::source() to avoid rate limit.
-    // Register 110 distinct wallets as participants first (participant auth
-    // now requires registration per /review fix).
-    for i in 0..110u64 {
-        let handle = format!("poster-{i:03}");
-        program
-            .registry()
-            .register_participant(handle, format!("github.com/p{i}"))
-            .with_actor_id((3000 + i).into())
-            .await
-            .unwrap();
-    }
     for i in 0..110u64 {
         program
             .chat()
@@ -303,16 +312,6 @@ async fn get_mentions_overflow_signals_after_ring_saturation() {
 async fn get_mentions_limit_clamps_to_100() {
     let program = setup().await;
 
-    // Register posters before they can author.
-    for i in 0..50u64 {
-        let handle = format!("sender-{i:02}");
-        program
-            .registry()
-            .register_participant(handle, format!("github.com/s{i}"))
-            .with_actor_id((3000 + i).into())
-            .await
-            .unwrap();
-    }
     // Push 50 mentions at nft.
     for i in 0..50u64 {
         program

@@ -1,13 +1,13 @@
 // Interaction handler. Projects Gear.MessageQueued into `interactions` rows
-// with the origin tag (codex Q1). Every extrinsic that calls a tracked
-// Application counts — wallet-initiated and program-initiated split so the
+// with the origin tag (codex Q1). Messages involving a registered
+// Application count — wallet-initiated and program-initiated split so the
 // Top Integrators leaderboard can distinguish true cross-program composition
 // from wallet-driven demand.
 //
 // Replay safety: deterministic id = Gear messageId (globally unique per chain).
 // Metric bumps gated by isFirstTimeEvent. Lookups + bumps run in parallel
 // because they target distinct rows — the hot path for every extrinsic.
-import { config } from "../config.js";
+import { config, requireProcessorConfig } from "../config.js";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import type { MessageQueuedEvent } from "../helpers/types.js";
@@ -25,6 +25,7 @@ export async function handleMessageQueued(
   db: Db,
   ctx: HandlerContext<MessageQueuedEvent>,
 ): Promise<void> {
+  const processorConfig = requireProcessorConfig();
   const { source, destination, messageId } = ctx.event;
 
   // Skip self-calls — program emitting to itself isn't a cross-program edge.
@@ -36,22 +37,22 @@ export async function handleMessageQueued(
     resolveActor(db, destination),
   ]);
 
-  // Valid callees: the Vara Agent Network program itself OR a registered
-  // Application. The network program is the registry/chat/board itself —
-  // every extrinsic targeting it counts toward the north-star metric even
-  // though the program isn't in the `applications` table.
-  const networkProgramId = config.programId.toLowerCase();
-  const isNetworkProgram = destination === networkProgramId;
-  if (!destActor.isApplication && !isNetworkProgram) return;
+  // Valid interactions: the Vara Agent Network program itself OR any message
+  // where at least one side is a registered Application. The processor passes
+  // all Gear.MessageQueued events so app->app messages are not dropped before
+  // registry resolution.
+  const networkProgramId = processorConfig.programId.toLowerCase();
+  const isNetworkProgram = destination === networkProgramId || source === networkProgramId;
+  if (!srcActor.isApplication && !destActor.isApplication && !isNetworkProgram) return;
 
   const { origin, callerKind, kind, callerHandle } = classifyCaller(
     srcActor.application,
     srcActor.participant,
   );
 
-  const seasonId = destActor.seasonId ?? config.seasonId;
+  const seasonId = destActor.seasonId ?? srcActor.seasonId ?? config.seasonId;
   const calleeHandle = destActor.application?.handle
-    ?? (isNetworkProgram ? "vara-agents" : null);
+    ?? (destination === networkProgramId ? "vara-agents" : null);
 
   await db
     .insert(schema.interactions)
@@ -64,7 +65,7 @@ export async function handleMessageQueued(
       callerHandle,
       callee: destination,
       calleeHandle,
-      method: null, // v1 defers method decoding (requires target IDL registry)
+      method: null, // Method decoding is deferred (requires target IDL registry)
       valuePaidRaw: null, // adapter doesn't plumb value through yet
       substrateBlockNumber: ctx.block.substrateBlockNumber,
       substrateBlockTs: ctx.block.substrateBlockTs,

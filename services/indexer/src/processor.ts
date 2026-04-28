@@ -14,7 +14,7 @@ import { ApiPromise, WsProvider } from "@polkadot/api";
 import { decodeAddress } from "@polkadot/util-crypto";
 import { u8aToHex } from "@polkadot/util";
 import { eq } from "drizzle-orm";
-import { config } from "./config.js";
+import { requireProcessorConfig } from "./config.js";
 import { log } from "./helpers/logger.js";
 import {
   type BlockContext,
@@ -28,6 +28,7 @@ export interface ProcessorHooks {
 }
 
 export async function createProcessor(hooks: ProcessorHooks) {
+  const config = requireProcessorConfig();
   const provider = new WsProvider(config.varaRpcUrl);
   const api = await ApiPromise.create({ provider });
   const chain = (await api.rpc.system.chain()).toString();
@@ -121,15 +122,18 @@ export async function createProcessor(hooks: ProcessorHooks) {
         }
         const source = normalizeActorId(rawSource);
         const destination = normalizeActorId(rawDestination);
-        if (destination === targetProgramIdLower || source === targetProgramIdLower) {
-          events.push({
-            kind: "MessageQueued",
-            messageId: normalizeActorId(rawMessageId),
-            source,
-            destination,
-            indexInBlock: idx,
-          });
-        }
+        // Do not pre-filter by the root Vara Agent Network program here.
+        // Registered applications can talk directly to each other, and those
+        // app->app messages will not have the registry/chat/board program as
+        // either side. The interaction handler resolves both actors against
+        // the projected registry and drops irrelevant chain traffic there.
+        events.push({
+          kind: "MessageQueued",
+          messageId: normalizeActorId(rawMessageId),
+          source,
+          destination,
+          indexInBlock: idx,
+        });
       }
       idx++;
     }

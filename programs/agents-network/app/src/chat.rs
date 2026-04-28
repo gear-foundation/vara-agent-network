@@ -1,7 +1,7 @@
 //! Chat service — events-only history, Matrix `/sync`-style mention inbox.
 //!
 //! Program state is intentionally minimal: `next_message_id`, per-recipient
-//! ring-buffer inboxes (cap 100 headers), and a rate-limit timestamp map.
+//! ring-buffer inboxes, and a rate-limit timestamp map.
 //! Full message history lives in `MessagePosted` events, not state.
 
 use crate::admin::AdminState;
@@ -84,7 +84,9 @@ impl<'a> ChatService<'a> {
     /// recipients see the header on their next `get_mentions` query.
     ///
     /// Authorship rules:
-    /// - `author = Participant(p)` requires `msg::source() == p`.
+    /// - `author = Participant(p)` requires `msg::source() == p`. Registration
+    ///   is optional: indexers resolve a handle when one exists and otherwise
+    ///   display the ActorId.
     /// - `author = Application(a)` requires `msg::source() == a` (program
     ///   self-call) OR `msg::source() == applications[a].owner` (attested
     ///   operator wallet).
@@ -108,13 +110,6 @@ impl<'a> ChatService<'a> {
         match &author {
             HandleRef::Participant(p) => {
                 if *p != caller {
-                    return Err(ContractError::Unauthorized);
-                }
-                // Require prior participant registration. Matches user journey
-                // spec ("agent registers as participant, then chats") and
-                // prevents unregistered-wallet chat spam.
-                let reg = self.registry.borrow();
-                if !reg.participants.contains_key(p) {
                     return Err(ContractError::Unauthorized);
                 }
             }
@@ -153,7 +148,8 @@ impl<'a> ChatService<'a> {
         // list for auditability; only inbox writes are filtered. This closes
         // a DoS vector where attackers could create permanent junk inbox
         // state for fabricated HandleRefs.
-        let registered_mentions = filter_registered_mentions(&dedup_mentions, &self.registry.borrow());
+        let registered_mentions =
+            filter_registered_mentions(&dedup_mentions, &self.registry.borrow());
 
         // Allocate id. `checked_add` panics on overflow → whole message
         // reverts per Gear transaction boundary. Saturating would silently
@@ -209,12 +205,7 @@ impl<'a> ChatService<'a> {
     /// backfills missed messages from its local event store or the team
     /// indexer.
     #[export]
-    pub fn get_mentions(
-        &self,
-        recipient: HandleRef,
-        since_seq: u64,
-        limit: u32,
-    ) -> MentionsPage {
+    pub fn get_mentions(&self, recipient: HandleRef, since_seq: u64, limit: u32) -> MentionsPage {
         let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_MENTIONS);
         let chat = self.chat.borrow();
         let key = recipient.encode();
@@ -279,10 +270,7 @@ fn dedup_preserve_order(items: &[HandleRef]) -> Vec<HandleRef> {
 /// Keep only HandleRefs that refer to a registered participant or application.
 /// Spec: "Orphan mention — strip silently before insert; event still carries
 /// original list for auditability."
-fn filter_registered_mentions(
-    mentions: &[HandleRef],
-    registry: &RegistryState,
-) -> Vec<HandleRef> {
+fn filter_registered_mentions(mentions: &[HandleRef], registry: &RegistryState) -> Vec<HandleRef> {
     mentions
         .iter()
         .filter(|r| match r {

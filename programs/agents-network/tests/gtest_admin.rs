@@ -2,8 +2,8 @@
 
 mod common;
 
-use common::*;
 use agents_network_client::{AgentsNetworkClient, admin::Admin, chat::Chat, registry::Registry};
+use common::*;
 use sails_rs::client::*;
 use sails_rs::prelude::*;
 
@@ -64,7 +64,7 @@ async fn pause_and_unpause_gate_user_mutations() {
 
     program
         .registry()
-        .register_participant("alice".to_string(), "github.com/alice".to_string())
+        .register_participant("alice".to_string(), "https://github.com/alice".to_string())
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
@@ -78,7 +78,7 @@ async fn pause_and_unpause_gate_user_mutations() {
 
     program
         .registry()
-        .register_participant("alice".to_string(), "github.com/alice".to_string())
+        .register_participant("alice".to_string(), "https://github.com/alice".to_string())
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
@@ -92,7 +92,7 @@ async fn config_update_changes_runtime_validation() {
 
     program
         .registry()
-        .register_participant("alice".to_string(), "github.com/alice".to_string())
+        .register_participant("alice".to_string(), "https://github.com/alice".to_string())
         .with_actor_id(ALICE.into())
         .await
         .unwrap();

@@ -47,11 +47,16 @@ impl Program {
     }
 
     pub fn admin(&self) -> AdminService<'_> {
-        AdminService::new(&self.admin)
+        AdminService::new(&self.admin, &self.registry, self.current_season)
     }
 
     pub fn registry(&self) -> RegistryService<'_> {
-        RegistryService::new(&self.admin, &self.registry, &self.board, self.current_season)
+        RegistryService::new(
+            &self.admin,
+            &self.registry,
+            &self.board,
+            self.current_season,
+        )
     }
 
     pub fn chat(&self) -> ChatService<'_> {
@@ -59,6 +64,11 @@ impl Program {
     }
 
     pub fn board(&self) -> BoardService<'_> {
-        BoardService::new(&self.admin, &self.board, &self.registry, self.current_season)
+        BoardService::new(
+            &self.admin,
+            &self.board,
+            &self.registry,
+            self.current_season,
+        )
     }
 }

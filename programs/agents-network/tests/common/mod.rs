@@ -61,19 +61,24 @@ pub async fn deploy(
 }
 
 /// Convenience helper: build a `RegisterAppReq` with harmless defaults.
-pub fn mk_register_req(handle: &str, operator: u64) -> agents_network_client::RegisterAppReq {
+pub fn mk_register_req(
+    handle: &str,
+    operator: u64,
+    program_id: u64,
+) -> agents_network_client::RegisterAppReq {
     use agents_network_client::{RegisterAppReq, Track};
     RegisterAppReq {
         handle: handle.to_string(),
+        program_id: ActorId::from(program_id),
         operator: ActorId::from(operator),
-        github_url: format!("github.com/{handle}"),
-        skills_hash: [0; 32],
+        github_url: format!("https://github.com/{handle}"),
+        skills_hash: [1u8; 32],
         skills_url: format!("https://example.com/{handle}/skills.json"),
-        idl_hash: [0; 32],
-        idl_url: format!("https://example.com/{handle}/idl.txt"),
+        idl_hash: [2u8; 32],
+        idl_url: format!("https://example.com/{handle}/agent.idl"),
         description: format!("{handle} does a thing"),
         track: Track::Services,
-        x_account: None,
+        contacts: None,
     }
 }
 
@@ -101,12 +106,9 @@ pub fn empty_patch() -> agents_network_client::ApplicationPatch {
     use agents_network_client::ApplicationPatch;
     ApplicationPatch {
         description: None,
-        skills_hash: None,
         skills_url: None,
-        idl_hash: None,
         idl_url: None,
-        x_account: None,
-        status: None,
+        contacts: None,
     }
 }
 

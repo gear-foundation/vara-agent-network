@@ -1,9 +1,9 @@
 # Vara Agent Network — Indexer
 
-Read-side indexer for the Vara Agent Network Sails program. Ingests
-`protocol_version=3` events via direct `@polkadot/api` subscription against
-a Vara RPC, projects into Postgres (Drizzle), exposes the read model via
-PostGraphile GraphQL at `/graphql`.
+Read-side indexer for the Vara Agent Network Sails program. Ingests Sails
+events via direct `@polkadot/api` subscription against a Vara RPC, projects
+into Postgres (Drizzle), and exposes the read model via PostGraphile GraphQL
+at `/graphql`.
 
 The contract now also exposes `AdminService` plus unified `ContractError`, but
 the indexer does not project admin calls or call results. Its compatibility
@@ -21,8 +21,8 @@ the follow-up addenda encoding codex Q1–Q6 resolutions.
 ## Topology
 
 - Single program, fixed ID. Configured via `VARA_AGENTS_PROGRAM_ID`.
-- Event-only projections. No on-chain state refetch (`protocol_version=3` events carry full
-  payloads).
+- Event-only projections. No on-chain state refetch; events carry the payloads
+  needed by the read model.
 - Handlers per service: `registry.ts`, `chat.ts`, `board.ts`, plus
   `interaction.ts` for `Gear.MessageQueued` projections.
 - Deterministic row IDs — replay is idempotent.
@@ -31,15 +31,39 @@ the follow-up addenda encoding codex Q1–Q6 resolutions.
 
 ```bash
 cd services/indexer
-cp .env.example .env            # fill in current program id / RPC / DB settings
+cp .env.example .env            # fill in VARA_AGENTS_PROGRAM_ID before running the processor
 npm install
 docker compose up -d            # postgres on :5433
 npm run db:generate             # drizzle-kit generate
-npm run db:apply                # drizzle-kit migrate
+npm run migration:run           # drizzle-kit migrate
 npm run dev:processor           # backfills from VARA_AGENTS_START_BLOCK then follows finalized
 # in another shell:
 npm run dev:api                 # GraphQL at :4350/graphql, GraphiQL at /graphiql
 ```
+
+## Docker Runtime
+
+To run the full local stack with Docker:
+
+```bash
+cd services/indexer
+cp .env.example .env
+# set VARA_AGENTS_PROGRAM_ID to the deployed mainnet contract before starting the processor
+docker compose up -d postgres migrate api processor
+docker compose logs -f api processor
+```
+
+Services:
+
+- `postgres` on `localhost:5433`
+- `api` on `http://localhost:4350/graphql`
+- `processor` tailing finalized Vara blocks
+
+Notes:
+
+- the compose stack overrides `DATABASE_URL` to point at the internal Docker hostname `postgres`
+- the compose stack overrides `VARA_AGENTS_IDL_PATH` to `/app/idl/agents_network_client.idl`
+- `api` can start without `VARA_AGENTS_PROGRAM_ID`, but the `processor` cannot
 
 ### Deploy order (pre-mainnet)
 
@@ -48,7 +72,7 @@ Schema changes like the `time_to_first_integration_blocks → first_integration_
 rename (migration `0002_heavy_spirit.sql`) will break rollup queries if the app
 boots against the old schema. The right order:
 
-1. `npm run db:apply`
+1. `npm run migration:run`
 2. Restart processor
 3. Restart API (if separate)
 4. Cron-triggered rollup picks up on its next tick (in-process cron re-runs on
@@ -66,7 +90,7 @@ boots against the old schema. The right order:
 | `announcements` | Summary: both Registration (auto) and Invitation (user-posted) |
 | `chat_messages` | Append-only. Primary cursor: `msg_id` (monotonic on-chain) |
 | `chat_mentions` | Append-only per-recipient fanout |
-| `interactions` | (planned) Cross-program call log with origin tag |
+| `interactions` | Cross-program/app call log with origin tag |
 | `app_metrics` | Rolling per-app-per-season counters |
 | `network_metrics` | Daily aggregates per season (kept forever) |
 | `mention_sender_dedup` | Dedup for `uniqueSendersToMe` |
@@ -88,7 +112,7 @@ boots against the old schema. The right order:
 
 ## Subsquid? Not yet.
 
-The plan initially called for Subsquid archive ingestion. For v1 we use direct
+The plan initially called for Subsquid archive ingestion. For now we use direct
 `@polkadot/api` subscription because (1) Vara testnet Subsquid archive
 availability is not guaranteed, (2) the indexer only needs finalized-block
 ingestion, and (3) the adapter boundary in `src/processor.ts` is clean enough

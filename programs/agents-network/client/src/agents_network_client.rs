@@ -62,6 +62,11 @@ pub mod admin {
     pub trait Admin {
         type Env: sails_rs::client::GearEnv;
         fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env>;
+        fn set_application_status(
+            &mut self,
+            program_id: ActorId,
+            new_status: AppStatus,
+        ) -> sails_rs::client::PendingCall<io::SetApplicationStatus, Self::Env>;
         fn transfer_admin(
             &mut self,
             new_admin: ActorId,
@@ -79,6 +84,13 @@ pub mod admin {
         type Env = E;
         fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env> {
             self.pending_call(())
+        }
+        fn set_application_status(
+            &mut self,
+            program_id: ActorId,
+            new_status: AppStatus,
+        ) -> sails_rs::client::PendingCall<io::SetApplicationStatus, Self::Env> {
+            self.pending_call((program_id, new_status))
         }
         fn transfer_admin(
             &mut self,
@@ -106,6 +118,7 @@ pub mod admin {
     pub mod io {
         use super::*;
         sails_rs::io_struct_impl!(Pause () -> ());
+        sails_rs::io_struct_impl!(SetApplicationStatus (program_id: ActorId, new_status: super::AppStatus) -> ());
         sails_rs::io_struct_impl!(TransferAdmin (new_admin: ActorId) -> ());
         sails_rs::io_struct_impl!(Unpause () -> ());
         sails_rs::io_struct_impl!(UpdateConfig (new_config: super::Config) -> ());
@@ -122,21 +135,37 @@ pub mod admin {
             AdminTransferred {
                 old_admin: ActorId,
                 new_admin: ActorId,
+                season_id: u32,
             },
             ConfigUpdated {
                 admin: ActorId,
                 config: Config,
+                season_id: u32,
             },
             Paused {
                 admin: ActorId,
+                season_id: u32,
             },
             Unpaused {
                 admin: ActorId,
+                season_id: u32,
+            },
+            ApplicationStatusChanged {
+                admin: ActorId,
+                program_id: ActorId,
+                old_status: AppStatus,
+                new_status: AppStatus,
+                season_id: u32,
             },
         }
         impl sails_rs::client::Event for AdminEvents {
-            const EVENT_NAMES: &'static [Route] =
-                &["AdminTransferred", "ConfigUpdated", "Paused", "Unpaused"];
+            const EVENT_NAMES: &'static [Route] = &[
+                "AdminTransferred",
+                "ConfigUpdated",
+                "Paused",
+                "Unpaused",
+                "ApplicationStatusChanged",
+            ];
         }
         impl sails_rs::client::ServiceWithEvents for AdminImpl {
             type Event = AdminEvents;
@@ -148,9 +177,9 @@ pub mod registry {
     use super::*;
     pub trait Registry {
         type Env: sails_rs::client::GearEnv;
-        /// Register an application. Option A: `msg::source()` IS the program_id.
-        /// A wallet calling this route registers itself as a (non-callable)
-        /// wallet-agent — that's the legitimate Social/Open archetype.
+        /// Register an application by explicit `program_id`. A single operator
+        /// wallet can register multiple different applications; each `program_id`
+        /// remains globally unique.
         ///
         /// Atomic: on any error / panic (including inside `push_announcement`),
         /// the whole message reverts per Gear transaction boundary.
@@ -165,6 +194,10 @@ pub mod registry {
             handle: String,
             github: String,
         ) -> sails_rs::client::PendingCall<io::RegisterParticipant, Self::Env>;
+        fn submit_application(
+            &mut self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::SubmitApplication, Self::Env>;
         fn update_application(
             &mut self,
             program_id: ActorId,
@@ -184,8 +217,6 @@ pub mod registry {
             &self,
             wallet: ActorId,
         ) -> sails_rs::client::PendingCall<io::GetParticipant, Self::Env>;
-        fn protocol_version(&self)
-        -> sails_rs::client::PendingCall<io::ProtocolVersion, Self::Env>;
         fn resolve_handle(
             &self,
             handle: String,
@@ -206,6 +237,12 @@ pub mod registry {
             github: String,
         ) -> sails_rs::client::PendingCall<io::RegisterParticipant, Self::Env> {
             self.pending_call((handle, github))
+        }
+        fn submit_application(
+            &mut self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::SubmitApplication, Self::Env> {
+            self.pending_call((program_id,))
         }
         fn update_application(
             &mut self,
@@ -234,11 +271,6 @@ pub mod registry {
         ) -> sails_rs::client::PendingCall<io::GetParticipant, Self::Env> {
             self.pending_call((wallet,))
         }
-        fn protocol_version(
-            &self,
-        ) -> sails_rs::client::PendingCall<io::ProtocolVersion, Self::Env> {
-            self.pending_call(())
-        }
         fn resolve_handle(
             &self,
             handle: String,
@@ -251,11 +283,11 @@ pub mod registry {
         use super::*;
         sails_rs::io_struct_impl!(RegisterApplication (req: super::RegisterAppReq) -> ());
         sails_rs::io_struct_impl!(RegisterParticipant (handle: String, github: String) -> ());
+        sails_rs::io_struct_impl!(SubmitApplication (program_id: ActorId) -> ());
         sails_rs::io_struct_impl!(UpdateApplication (program_id: ActorId, patch: super::ApplicationPatch) -> ());
         sails_rs::io_struct_impl!(Discover (filter: super::DiscoveryFilter, cursor: Option<ActorId>, limit: u32) -> super::ApplicationPage);
         sails_rs::io_struct_impl!(GetApplication (id: ActorId) -> Option<super::Application>);
         sails_rs::io_struct_impl!(GetParticipant (wallet: ActorId) -> Option<super::Participant>);
-        sails_rs::io_struct_impl!(ProtocolVersion () -> u32);
         sails_rs::io_struct_impl!(ResolveHandle (handle: String) -> Option<super::HandleRef>);
     }
 
@@ -272,7 +304,7 @@ pub mod registry {
                 joined_at: u64,
                 season_id: u32,
             },
-            /// v1.2 enrichment: carries every mutable + immutable field needed to
+            /// Carries every mutable + immutable field needed to
             /// project an `Application` row without refetching on-chain state.
             /// `registered_at` is authoritative program time (block_timestamp at
             /// registration); `status` is always `Building` at registration and is
@@ -288,7 +320,7 @@ pub mod registry {
                 skills_url: String,
                 idl_hash: [u8; 32],
                 idl_url: String,
-                x_account: Option<String>,
+                contacts: Option<ContactLinks>,
                 registered_at: u64,
                 status: AppStatus,
                 registration_announcement_id: u64,
@@ -298,7 +330,7 @@ pub mod registry {
                 registration_announcement_tags: Vec<String>,
                 season_id: u32,
             },
-            /// v1.2 enrichment: emits the exact patch that was applied, so indexer
+            /// Emits the exact patch that was applied, so indexer
             /// can overwrite fields deterministically. Drops `changed_fields: Vec<FieldTag>`
             /// — the patch IS the change set. Matches cross-event rule: emit the
             /// command's write shape (full-replace → snapshot; patch → patch).
@@ -307,12 +339,20 @@ pub mod registry {
                 patch: ApplicationPatch,
                 season_id: u32,
             },
+            /// Owner/program self-call: marks the application ready for review.
+            /// Trusted statuses after submission are controlled by AdminService.
+            ApplicationSubmitted {
+                program_id: ActorId,
+                owner: ActorId,
+                season_id: u32,
+            },
         }
         impl sails_rs::client::Event for RegistryEvents {
             const EVENT_NAMES: &'static [Route] = &[
                 "ParticipantRegistered",
                 "ApplicationRegistered",
                 "ApplicationUpdated",
+                "ApplicationSubmitted",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for RegistryImpl {
@@ -329,7 +369,9 @@ pub mod chat {
         /// recipients see the header on their next `get_mentions` query.
         ///
         /// Authorship rules:
-        /// - `author = Participant(p)` requires `msg::source() == p`.
+        /// - `author = Participant(p)` requires `msg::source() == p`. Registration
+        /// is optional: indexers resolve a handle when one exists and otherwise
+        /// display the ActorId.
         /// - `author = Application(a)` requires `msg::source() == a` (program
         /// self-call) OR `msg::source() == applications[a].owner` (attested
         /// operator wallet).
@@ -507,7 +549,7 @@ pub mod board {
         #[derive(PartialEq, Debug, Encode, Decode)]
         #[codec(crate = sails_rs::scale_codec)]
         pub enum BoardEvents {
-            /// v1.2 enrichment: carries the full `IdentityCard` plus `updated_by`.
+            /// Carries the full `IdentityCard` plus `updated_by`.
             /// `updated_at` and `season_id` are inside the card itself (no
             /// duplication). Indexer projects directly — no state refetch.
             IdentityCardUpdated {
@@ -515,7 +557,7 @@ pub mod board {
                 updated_by: ActorId,
                 card: IdentityCard,
             },
-            /// v1.2 enrichment: adds `body` so indexer can project the full
+            /// Adds `body` so indexer can project the full
             /// Announcement row from this event alone.
             AnnouncementPosted {
                 app: ActorId,
@@ -527,7 +569,7 @@ pub mod board {
                 ts: u64,
                 season_id: u32,
             },
-            /// v1.2 enrichment: carries the new `AnnouncementReq` (title + body +
+            /// Carries the new `AnnouncementReq` (title + body +
             /// tags) so the indexer overwrites the row without refetching.
             AnnouncementEdited {
                 app: ActorId,
@@ -559,6 +601,16 @@ pub mod board {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub enum AppStatus {
+    Building,
+    Live,
+    Submitted,
+    Finalist,
+    Winner,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub struct Config {
     pub paused: bool,
     pub allow_participant_registration: bool,
@@ -572,13 +624,14 @@ pub struct Config {
     pub chat_rate_limit_ms: u64,
     pub board_rate_limit_ms: u64,
 }
-/// Option A: caller MUST be the program being registered. Registry keys on
-/// `msg::source()`; `program_id` is not accepted in the request.
+/// Register an application by explicit program id. The caller must be either
+/// the attested operator wallet or the program itself.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct RegisterAppReq {
     pub handle: String,
+    pub program_id: ActorId,
     /// The wallet the program attests as its human operator. Chat/board auth
     /// for `author = Application(a)` passes for this wallet.
     pub operator: ActorId,
@@ -589,7 +642,7 @@ pub struct RegisterAppReq {
     pub idl_url: String,
     pub description: String,
     pub track: Track,
-    pub x_account: Option<String>,
+    pub contacts: Option<ContactLinks>,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -600,28 +653,23 @@ pub enum Track {
     Economy,
     Open,
 }
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ContactLinks {
+    pub discord: Option<String>,
+    pub telegram: Option<String>,
+    pub x: Option<String>,
+}
 /// Handle + program_id + owner + registered_at + season_id are immutable.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct ApplicationPatch {
     pub description: Option<String>,
-    pub skills_hash: Option<[u8; 32]>,
     pub skills_url: Option<String>,
-    pub idl_hash: Option<[u8; 32]>,
     pub idl_url: Option<String>,
-    pub x_account: Option<Option<String>>,
-    pub status: Option<AppStatus>,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum AppStatus {
-    Building,
-    Live,
-    Submitted,
-    Finalist,
-    Winner,
+    pub contacts: Option<Option<ContactLinks>>,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -651,7 +699,7 @@ pub struct Application {
     pub skills_url: String,
     pub idl_hash: [u8; 32],
     pub idl_url: String,
-    pub x_account: Option<String>,
+    pub contacts: Option<ContactLinks>,
     pub registered_at: u64,
     pub season_id: u32,
     pub status: AppStatus,

@@ -1,10 +1,11 @@
-// Typed event payload shapes, mirroring protocol_version = 3.
+// Typed event payload shapes decoded from the current Sails IDL.
 //
 // sails-js returns decoded payloads as JS objects matching the SCALE struct
 // shape — these types document what we expect at handler boundaries.
 // Keep in sync with `programs/agents-network/client/agents_network_client.idl`.
 
 export type Hex = `0x${string}`;
+export type Hash32 = Hex | Uint8Array | number[];
 
 export type HandleRef =
   | { participant: Hex }
@@ -15,16 +16,19 @@ export type AppStatus = "Building" | "Live" | "Submitted" | "Finalist" | "Winner
 export type AnnouncementKind = "Registration" | "Invitation";
 export type ArchiveReason = "AutoPrune" | "Manual";
 
+export interface ContactLinks {
+  discord?: string | null;
+  telegram?: string | null;
+  x?: string | null;
+}
+
 export interface ApplicationPatch {
   description?: string | null;
-  skills_hash?: Hex | null;
   skills_url?: string | null;
-  idl_hash?: Hex | null;
   idl_url?: string | null;
-  // Note: double Option — Some(None) clears the field on-chain. sails-js
-  // usually serializes this as Option<Option<string>>.
-  x_account?: (string | null) | null;
-  status?: AppStatus | null;
+  // Note: double Option — Some(None) clears the whole contacts object on-chain.
+  // Outer None (missing key) means unchanged.
+  contacts?: ContactLinks | null;
 }
 
 export interface IdentityCard {
@@ -60,11 +64,11 @@ export interface ApplicationRegistered {
   description: string;
   track: Track;
   github_url: string;
-  skills_hash: Hex;
+  skills_hash: Hash32;
   skills_url: string;
-  idl_hash: Hex;
+  idl_hash: Hash32;
   idl_url: string;
-  x_account: string | null;
+  contacts: ContactLinks | null;
   registered_at: bigint | number;
   status: AppStatus;
   registration_announcement_id: bigint | number;
@@ -78,6 +82,22 @@ export interface ApplicationRegistered {
 export interface ApplicationUpdated {
   program_id: Hex;
   patch: ApplicationPatch;
+  season_id: number;
+}
+
+export interface ApplicationSubmitted {
+  program_id: Hex;
+  owner: Hex;
+  season_id: number;
+}
+
+// ---- Admin events ----
+
+export interface ApplicationStatusChanged {
+  admin: Hex;
+  program_id: Hex;
+  old_status: AppStatus;
+  new_status: AppStatus;
   season_id: number;
 }
 
@@ -151,4 +171,16 @@ export function asNumber(x: bigint | number): number {
 
 export function asBigInt(x: bigint | number): bigint {
   return typeof x === "bigint" ? x : BigInt(x);
+}
+
+export function hashToHex(hash: Hash32): Hex {
+  if (typeof hash === "string") {
+    return hash.startsWith("0x") ? hash as Hex : `0x${hash}`;
+  }
+
+  const bytes = Array.from(hash);
+  if (bytes.length !== 32) {
+    throw new Error(`expected 32-byte hash, got ${bytes.length} bytes`);
+  }
+  return `0x${bytes.map((byte) => byte.toString(16).padStart(2, "0")).join("")}`;
 }

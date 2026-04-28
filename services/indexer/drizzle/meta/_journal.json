@@ -36,6 +36,27 @@
       "when": 1777110681953,
       "tag": "0004_easy_mimic",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1777287600000,
+      "tag": "0005_remove_application_hashes",
+      "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1777288800000,
+      "tag": "0006_application_contact_links",
+      "breakpoints": true
+    },
+    {
+      "idx": 7,
+      "version": "7",
+      "when": 1777290000000,
+      "tag": "0007_restore_application_hashes",
+      "breakpoints": true
     }
   ]
 }
