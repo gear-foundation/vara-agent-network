@@ -100,7 +100,7 @@ impl BoardState {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum BoardEvent {
-    /// v1.2 enrichment: carries the full `IdentityCard` plus `updated_by`.
+    /// Carries the full `IdentityCard` plus `updated_by`.
     /// `updated_at` and `season_id` are inside the card itself (no
     /// duplication). Indexer projects directly — no state refetch.
     IdentityCardUpdated {
@@ -108,7 +108,7 @@ pub enum BoardEvent {
         updated_by: ActorId,
         card: IdentityCard,
     },
-    /// v1.2 enrichment: adds `body` so indexer can project the full
+    /// Adds `body` so indexer can project the full
     /// Announcement row from this event alone.
     AnnouncementPosted {
         app: ActorId,
@@ -120,7 +120,7 @@ pub enum BoardEvent {
         ts: u64,
         season_id: u32,
     },
-    /// v1.2 enrichment: carries the new `AnnouncementReq` (title + body +
+    /// Carries the new `AnnouncementReq` (title + body +
     /// tags) so the indexer overwrites the row without refetching.
     AnnouncementEdited {
         app: ActorId,
@@ -224,7 +224,7 @@ impl<'a> BoardService<'a> {
             updated_by,
             card,
         })
-            .expect("emit IdentityCardUpdated failed");
+        .expect("emit IdentityCardUpdated failed");
 
         Ok(())
     }
@@ -338,11 +338,7 @@ impl<'a> BoardService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn archive_announcement(
-        &mut self,
-        app: ActorId,
-        id: PostId,
-    ) -> Result<(), ContractError> {
+    pub fn archive_announcement(&mut self, app: ActorId, id: PostId) -> Result<(), ContractError> {
         let config = self.admin.borrow().config.clone();
         self.authorize(app)?;
         guards::ensure_board_enabled(&config)?;
@@ -377,11 +373,7 @@ impl<'a> BoardService<'a> {
     // ---- Queries ----
 
     #[export]
-    pub fn list_identity_cards(
-        &self,
-        cursor: Option<ActorId>,
-        limit: u32,
-    ) -> IdentityCardPage {
+    pub fn list_identity_cards(&self, cursor: Option<ActorId>, limit: u32) -> IdentityCardPage {
         let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST);
         let board = self.board.borrow();
         let mut items = Vec::with_capacity(limit);
@@ -396,18 +388,11 @@ impl<'a> BoardService<'a> {
             next_cursor = Some(*key);
             items.push((*key, card.clone()));
         }
-        IdentityCardPage {
-            items,
-            next_cursor,
-        }
+        IdentityCardPage { items, next_cursor }
     }
 
     #[export]
-    pub fn list_announcements(
-        &self,
-        cursor: Option<PostId>,
-        limit: u32,
-    ) -> AnnouncementPage {
+    pub fn list_announcements(&self, cursor: Option<PostId>, limit: u32) -> AnnouncementPage {
         let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST);
         let board = self.board.borrow();
 
@@ -429,9 +414,6 @@ impl<'a> BoardService<'a> {
             next_cursor = Some(*post_id);
             items.push((*app, announcement.clone()));
         }
-        AnnouncementPage {
-            items,
-            next_cursor,
-        }
+        AnnouncementPage { items, next_cursor }
     }
 }

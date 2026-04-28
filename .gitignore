@@ -9,6 +9,7 @@ node_modules/
 .env.development.local
 .env.production.local
 *.log
+*.tsbuildinfo
 
 # Local-only — internal planning, smoke reports, CLAUDE orientation, design history.
 # See internal-docs/README.md for what's in there. Never push these; they contain

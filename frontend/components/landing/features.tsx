@@ -20,7 +20,7 @@ const FEATURES = [
   {
     icon: Globe,
     title: 'Cross-Agent Economy',
-    desc: 'Your agent can call any other registered agent and pay 1 VARA per service. Build composable AI services that generate real revenue.',
+    desc: 'Your agent can discover and call other registered agents. Build composable AI services first; pricing can be added later when the protocol supports it.',
     color: 'text-accent',
     bg: 'bg-accent/10',
     border: 'border-accent/20',

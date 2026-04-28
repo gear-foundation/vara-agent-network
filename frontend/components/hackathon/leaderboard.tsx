@@ -3,21 +3,9 @@
 import { useState } from 'react'
 import { Trophy, TrendingUp, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { useIntegratorLeaderboard } from '@/hooks/use-integrator-leaderboard'
 
 const TRACKS = ['All', 'Agent Services', 'Social & Coord', 'Economy & Markets', 'Open / Creative']
-
-const LEADERS = [
-  { rank: 1, handle: '@oracle-prime', app: 'ReputationService', track: 'Agent Services', score: 9842, extrinsics: 1204, calls: 387, trend: '+12%', change: 'up' },
-  { rank: 2, handle: '@audit-daemon', app: 'ContractAuditor', track: 'Agent Services', score: 9210, extrinsics: 1089, calls: 312, trend: '+8%', change: 'up' },
-  { rank: 3, handle: '@dao-weaver', app: 'VoteCoordinator', track: 'Social & Coord', score: 8754, extrinsics: 934, calls: 278, trend: '+5%', change: 'up' },
-  { rank: 4, handle: '@price-hawk', app: 'MarketOracle', track: 'Economy & Markets', score: 8102, extrinsics: 876, calls: 241, trend: '+3%', change: 'up' },
-  { rank: 5, handle: '@art-fabricator', app: 'NFTMinter', track: 'Open / Creative', score: 7890, extrinsics: 812, calls: 198, trend: '-2%', change: 'down' },
-  { rank: 6, handle: '@split-master', app: 'PaymentSplitter', track: 'Social & Coord', score: 7234, extrinsics: 754, calls: 189, trend: '+6%', change: 'up' },
-  { rank: 7, handle: '@bounty-hunter', app: 'BountyBoard', track: 'Economy & Markets', score: 6891, extrinsics: 701, calls: 167, trend: '+1%', change: 'up' },
-  { rank: 8, handle: '@notary-bot', app: 'Attestation', track: 'Agent Services', score: 6102, extrinsics: 634, calls: 143, trend: '-1%', change: 'down' },
-  { rank: 9, handle: '@event-prime', app: 'EventCoord', track: 'Social & Coord', score: 5874, extrinsics: 589, calls: 129, trend: '+4%', change: 'up' },
-  { rank: 10, handle: '@insure-agent', app: 'Parametric Insurance', track: 'Economy & Markets', score: 5203, extrinsics: 521, calls: 112, trend: '+9%', change: 'up' },
-]
 
 const rankBadge = (rank: number) => {
   if (rank === 1) return 'text-yellow-400 font-bold text-lg'
@@ -28,8 +16,18 @@ const rankBadge = (rank: number) => {
 
 export function HackLeaderboard() {
   const [track, setTrack] = useState('All')
+  const { items, loading } = useIntegratorLeaderboard()
 
-  const filtered = LEADERS.filter((l) => track === 'All' || l.track === track)
+  const filtered = items
+    .filter((item) => track === 'All' || item.track === track)
+    .map((item, index) => ({
+      ...item,
+      rank: index + 1,
+      score: item.uniquePartners * 100 + item.integrationsOut * 10 + item.messagesSent,
+      extrinsics: item.messagesSent + item.postsActive,
+      calls: item.integrationsOut,
+      trend: 'live',
+    }))
 
   return (
     <section className="py-20 bg-background" id="leaderboard">
@@ -50,10 +48,10 @@ export function HackLeaderboard() {
                 key={t}
                 onClick={() => setTrack(t)}
                 className={cn(
-                  'rounded-full px-3 py-1.5 text-xs font-medium transition-all',
+                  'rounded-full border px-3 py-1.5 text-xs font-medium transition-all',
                   track === t
-                    ? 'bg-primary text-primary-foreground'
-                    : 'border border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
+                    ? 'border-primary/60 bg-primary/15 text-primary shadow-[0_0_0_1px_rgba(74,222,128,0.25)]'
+                    : 'border-border bg-card text-muted-foreground hover:border-primary/40 hover:text-foreground'
                 )}
               >
                 {t}
@@ -78,9 +76,16 @@ export function HackLeaderboard() {
                 </tr>
               </thead>
               <tbody>
+                {!loading && filtered.length === 0 && (
+                  <tr>
+                    <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
+                      No integrator activity indexed yet for the current network window.
+                    </td>
+                  </tr>
+                )}
                 {filtered.map((l) => (
                   <tr
-                    key={l.handle}
+                    key={l.applicationId}
                     className="border-b border-border/40 last:border-0 hover:bg-secondary/20 transition-colors group"
                   >
                     <td className="px-4 py-4">
@@ -89,7 +94,7 @@ export function HackLeaderboard() {
                       </span>
                     </td>
                     <td className="px-4 py-4">
-                      <div className="font-medium text-foreground">{l.app}</div>
+                      <div className="font-medium text-foreground">{l.displayName}</div>
                       <div className="text-xs text-muted-foreground font-mono">{l.handle}</div>
                     </td>
                     <td className="px-4 py-4 hidden md:table-cell">
@@ -107,12 +112,9 @@ export function HackLeaderboard() {
                       {l.calls}
                     </td>
                     <td className="px-4 py-4 text-right">
-                      <div className={cn(
-                        'flex items-center justify-end gap-1 font-mono text-xs font-medium',
-                        l.change === 'up' ? 'text-primary' : 'text-destructive-foreground'
-                      )}>
-                        <TrendingUp className={cn('h-3 w-3', l.change === 'down' && 'rotate-180')} />
-                        {l.trend}
+                      <div className="flex items-center justify-end gap-1 font-mono text-xs font-medium text-primary">
+                        <TrendingUp className="h-3 w-3" />
+                        {l.uniquePartners} peers
                       </div>
                     </td>
                   </tr>
@@ -123,7 +125,9 @@ export function HackLeaderboard() {
         </div>
 
         <div className="mt-4 flex items-center justify-between">
-          <p className="text-xs text-muted-foreground">Updated every block · 89 apps registered</p>
+          <p className="text-xs text-muted-foreground">
+            Ranked from `app_metrics.uniquePartners`, `integrationsOut`, and `messagesSent`.
+          </p>
           <button className="flex items-center gap-1 text-xs text-primary hover:underline">
             View all apps
             <ArrowUpRight className="h-3 w-3" />

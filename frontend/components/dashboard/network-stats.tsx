@@ -1,9 +1,9 @@
 'use client'
 
 import { useEffect, useState } from 'react'
-import { TrendingUp, TrendingDown } from 'lucide-react'
+import { Activity, GitBranch, MessageSquare, Pin, Users, Zap } from 'lucide-react'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
-import { DASHBOARD_STATS, type DashboardStat } from '@/lib/site-data'
+import type { DashboardStat } from '@/lib/site-data'
 
 function useAnimatedValue(target: number) {
   const [val, setVal] = useState(target * 0.8)
@@ -28,7 +28,6 @@ function useAnimatedValue(target: number) {
 function StatCard({ stat }: { stat: DashboardStat }) {
   const Icon = stat.icon
   const animated = useAnimatedValue(stat.value)
-  const positive = stat.trend >= 0
 
   return (
     <div className={`rounded-2xl border ${stat.border} ${stat.bg} p-5 hover:scale-[1.02] transition-all duration-300`}>
@@ -36,9 +35,8 @@ function StatCard({ stat }: { stat: DashboardStat }) {
         <div className={`h-10 w-10 rounded-xl border ${stat.border} ${stat.bg} flex items-center justify-center`}>
           <Icon className={`h-5 w-5 ${stat.color}`} />
         </div>
-        <div className={`flex items-center gap-1 text-xs font-mono font-medium ${positive ? 'text-primary' : 'text-destructive-foreground'}`}>
-          {positive ? <TrendingUp className="h-3 w-3" /> : <TrendingDown className="h-3 w-3" />}
-          {positive ? '+' : ''}{stat.trend}%
+        <div className="rounded-full border border-border/70 bg-background/50 px-2 py-1 text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+          Live
         </div>
       </div>
       <div className={`font-mono text-3xl font-bold ${stat.color} mb-1`}>
@@ -51,50 +49,68 @@ function StatCard({ stat }: { stat: DashboardStat }) {
 
 export function NetworkStats() {
   const { snapshot } = useDashboardSnapshot()
-  const stats = DASHBOARD_STATS.map((stat) => {
-    if (!snapshot) return stat
-
-    if (stat.label === 'Extrinsics / Day') {
-      return {
-        ...stat,
-        value:
-          snapshot.latestNetworkMetric?.extrinsicsOnHackathonPrograms
-          ?? snapshot.chatMessageCount + snapshot.interactionCount + snapshot.announcementCount
-          ?? stat.value,
-      }
-    }
-
-    if (stat.label === 'Active Wallets') {
-      return {
-        ...stat,
-        value: snapshot.latestNetworkMetric?.uniqueWalletsCalling ?? stat.value,
-      }
-    }
-
-    if (stat.label === 'Registered Apps') {
-      return {
-        ...stat,
-        value: snapshot.applicationCount || stat.value,
-      }
-    }
-
-    if (stat.label === 'Cross-Program Calls') {
-      return {
-        ...stat,
-        value: snapshot.interactionCount || stat.value,
-      }
-    }
-
-    if (stat.label === 'Integration Density') {
-      const pct = snapshot.latestNetworkMetric?.crossProgramCallPct
-      return {
-        ...stat,
-        value: pct != null ? Math.round(pct) : stat.value,
-      }
-    }
-
-    return stat
-  })
+  const stats: DashboardStat[] = [
+    {
+      label: 'Extrinsics / Day',
+      value: snapshot?.latestNetworkMetric?.extrinsicsOnHackathonPrograms ?? 0,
+      unit: '',
+      icon: Activity,
+      trend: 0,
+      color: 'text-primary',
+      bg: 'bg-primary/10',
+      border: 'border-primary/20',
+    },
+    {
+      label: 'Active Wallets',
+      value: snapshot?.latestNetworkMetric?.uniqueWalletsCalling ?? 0,
+      unit: '',
+      icon: Users,
+      trend: 0,
+      color: 'text-accent',
+      bg: 'bg-accent/10',
+      border: 'border-accent/20',
+    },
+    {
+      label: 'Deployed Apps',
+      value: snapshot?.applicationCount ?? 0,
+      unit: '',
+      icon: Zap,
+      trend: 0,
+      color: 'text-yellow-400',
+      bg: 'bg-yellow-400/10',
+      border: 'border-yellow-400/20',
+    },
+    {
+      label: 'Chat Messages',
+      value: snapshot?.chatMessageCount ?? 0,
+      unit: '',
+      icon: MessageSquare,
+      trend: 0,
+      color: 'text-pink-400',
+      bg: 'bg-pink-400/10',
+      border: 'border-pink-400/20',
+    },
+    {
+      label: 'Cross-Program Calls',
+      value: snapshot?.interactionCount ?? 0,
+      unit: '',
+      icon: GitBranch,
+      trend: 0,
+      color: 'text-blue-400',
+      bg: 'bg-blue-400/10',
+      border: 'border-blue-400/20',
+    },
+    {
+      label: 'Board Posts',
+      value: snapshot?.announcementCount ?? 0,
+      unit: '',
+      icon: Pin,
+      trend: 0,
+      color: 'text-primary',
+      bg: 'bg-primary/10',
+      border: 'border-primary/20',
+    },
+  ]
 
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">

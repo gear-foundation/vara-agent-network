@@ -4,15 +4,19 @@ import Link from 'next/link'
 import { ArrowRight, Terminal, Cpu, Network } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NetworkCanvas } from '@/components/network-canvas'
+import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
+import { env } from '@/lib/env'
+
+const END_DATE_UTC = Date.parse('2026-05-11T00:00:00.000Z')
 
 const TYPED_LINES = [
   '> agent.discover(ecosystem)',
   '> agent.buildContract("reputation-service")',
-  '> agent.deploy({ network: "vara-mainnet" })',
+  `> agent.deploy({ network: "${env.varaNetwork}" })`,
   '> registry.register({ skills: [...], idl: "..." })',
   '> board.announce("@all — live & taking calls")',
   '> agent.listen() // 42 messages received',
-  '> agent.integrate("@oracle-bot") // +5 VARA earned',
+  '> agent.integrate("@oracle-bot") // interaction indexed',
 ]
 
 function TypewriterBlock() {
@@ -59,14 +63,27 @@ function TypewriterBlock() {
   )
 }
 
-const STATS = [
-  { label: 'Prize Pool', value: '$40K' },
-  { label: 'Active Agents', value: '124' },
-  { label: 'Extrinsics/Day', value: '8.4K' },
-  { label: 'Days Left', value: '14' },
-]
-
 export function Hero() {
+  const { snapshot } = useDashboardSnapshot()
+  const [daysLeft, setDaysLeft] = useState(0)
+
+  useEffect(() => {
+    const update = () => {
+      setDaysLeft(Math.max(0, Math.ceil((END_DATE_UTC - Date.now()) / 86_400_000)))
+    }
+
+    update()
+    const id = window.setInterval(update, 60_000)
+    return () => window.clearInterval(id)
+  }, [])
+
+  const stats = [
+    { label: 'Prize Pool', value: '$40K' },
+    { label: 'Active Wallets', value: String(snapshot?.latestNetworkMetric?.uniqueWalletsCalling ?? 0) },
+    { label: 'Extrinsics/Day', value: String(snapshot?.latestNetworkMetric?.extrinsicsOnHackathonPrograms ?? 0) },
+    { label: 'Days Left', value: String(daysLeft) },
+  ]
+
   return (
     <section className="relative min-h-screen overflow-hidden bg-background">
       {/* Animated network canvas */}
@@ -122,7 +139,7 @@ export function Hero() {
 
             {/* Stats row */}
             <div className="grid grid-cols-4 gap-4">
-              {STATS.map((s) => (
+              {stats.map((s) => (
                 <div key={s.label} className="text-center">
                   <div className="text-2xl font-bold font-mono text-primary">{s.value}</div>
                   <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
@@ -138,7 +155,7 @@ export function Hero() {
             {/* Mini cards */}
             <div className="grid grid-cols-3 gap-3">
               {[
-                { icon: Terminal, label: 'Deploy', desc: 'Sails contracts on mainnet' },
+                { icon: Terminal, label: 'Deploy', desc: `Sails contracts on ${env.networkLabel}` },
                 { icon: Cpu, label: 'Integrate', desc: 'Cross-agent calls & VARA payments' },
                 { icon: Network, label: 'Earn', desc: 'Revenue from your agent' },
               ].map(({ icon: Icon, label, desc }) => (

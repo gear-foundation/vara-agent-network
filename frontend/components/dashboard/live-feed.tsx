@@ -2,32 +2,42 @@
 
 import { useEffect, useState } from 'react'
 import { cn } from '@/lib/utils'
-import { LIVE_FEED_ROTATION, LIVE_FEED_SEED, type LiveFeedEventType } from '@/lib/site-data'
+import { getLiveFeedEvents, type FeedEvent } from '@/lib/indexer-client'
 
-const TYPE_STYLE: Record<LiveFeedEventType, { label: string; color: string; bg: string }> = {
+const TYPE_STYLE: Record<FeedEvent['type'], { label: string; color: string; bg: string }> = {
   DEPLOY: { label: 'DEPLOY', color: 'text-primary', bg: 'bg-primary/10' },
   CALL: { label: 'CALL', color: 'text-accent', bg: 'bg-accent/10' },
   MSG: { label: 'MSG', color: 'text-muted-foreground', bg: 'bg-muted/20' },
-  EARN: { label: 'EARN', color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
-  MINT: { label: 'MINT', color: 'text-pink-400', bg: 'bg-pink-400/10' },
-  VOTE: { label: 'VOTE', color: 'text-blue-400', bg: 'bg-blue-400/10' },
+  POST: { label: 'POST', color: 'text-yellow-400', bg: 'bg-yellow-400/10' },
 }
 
 export function LiveFeed() {
-  const [events, setEvents] = useState(LIVE_FEED_SEED)
+  const [events, setEvents] = useState<FeedEvent[]>([])
 
   useEffect(() => {
-    let i = 0
-    const id = setInterval(() => {
-      const ev = LIVE_FEED_ROTATION[i % LIVE_FEED_ROTATION.length]
-      setEvents((prev) => [
-        { ...ev, time: 'just now' },
-        ...prev.slice(0, 14),
-      ])
-      i++
-    }, 4000)
-    return () => clearInterval(id)
+    let active = true
+
+    const load = async () => {
+      const next = await getLiveFeedEvents()
+      if (!active) return
+      setEvents(next)
+    }
+
+    void load()
+    const id = window.setInterval(load, 15_000)
+    return () => {
+      active = false
+      window.clearInterval(id)
+    }
   }, [])
+
+  const formatRelative = (at: number) => {
+    const deltaSec = Math.max(0, Math.round((Date.now() - at) / 1000))
+    if (deltaSec < 60) return `${deltaSec}s ago`
+    if (deltaSec < 3600) return `${Math.floor(deltaSec / 60)}m ago`
+    if (deltaSec < 86_400) return `${Math.floor(deltaSec / 3600)}h ago`
+    return `${Math.floor(deltaSec / 86_400)}d ago`
+  }
 
   return (
     <div className="rounded-2xl border border-border bg-card/60 h-full flex flex-col">
@@ -43,6 +53,11 @@ export function LiveFeed() {
       </div>
 
       <div className="flex-1 overflow-y-auto divide-y divide-border/30 max-h-[300px]">
+        {events.length === 0 && (
+          <div className="px-5 py-10 text-center text-sm text-muted-foreground">
+            No recent indexed events for the current network window.
+          </div>
+        )}
         {events.map((ev, i) => {
           const style = TYPE_STYLE[ev.type]
           return (
@@ -60,7 +75,7 @@ export function LiveFeed() {
                 <div className="text-xs font-medium text-primary">{ev.actor}</div>
                 <div className="text-xs text-muted-foreground leading-relaxed truncate">{ev.detail}</div>
               </div>
-              <span className="flex-shrink-0 text-xs text-muted-foreground font-mono">{ev.time}</span>
+              <span className="flex-shrink-0 text-xs text-muted-foreground font-mono">{formatRelative(ev.at)}</span>
             </div>
           )
         })}

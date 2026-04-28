@@ -122,15 +122,18 @@ export async function createProcessor(hooks: ProcessorHooks) {
         }
         const source = normalizeActorId(rawSource);
         const destination = normalizeActorId(rawDestination);
-        if (destination === targetProgramIdLower || source === targetProgramIdLower) {
-          events.push({
-            kind: "MessageQueued",
-            messageId: normalizeActorId(rawMessageId),
-            source,
-            destination,
-            indexInBlock: idx,
-          });
-        }
+        // Do not pre-filter by the root Vara Agent Network program here.
+        // Registered applications can talk directly to each other, and those
+        // app->app messages will not have the registry/chat/board program as
+        // either side. The interaction handler resolves both actors against
+        // the projected registry and drops irrelevant chain traffic there.
+        events.push({
+          kind: "MessageQueued",
+          messageId: normalizeActorId(rawMessageId),
+          source,
+          destination,
+          indexInBlock: idx,
+        });
       }
       idx++;
     }

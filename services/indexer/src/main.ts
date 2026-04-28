@@ -2,6 +2,7 @@
 import cron from "node-cron";
 import { config, requireProcessorConfig } from "./config.js";
 import { SailsDecoder } from "./decoder/sails-decoder.js";
+import { handleApplicationStatusChanged } from "./handlers/admin.js";
 import {
   handleAnnouncementArchived,
   handleAnnouncementEdited,
@@ -13,6 +14,7 @@ import { type HandlerContext } from "./handlers/common.js";
 import { handleMessageQueued } from "./handlers/interaction.js";
 import {
   handleApplicationRegistered,
+  handleApplicationSubmitted,
   handleApplicationUpdated,
   handleParticipantRegistered,
 } from "./handlers/registry.js";
@@ -39,20 +41,13 @@ async function main() {
 
   const processor = await createProcessor({
     onBlock: async (ctx: BlockContext) => {
-      // Pass 1: Gear.MessageQueued → interactions (cross-program call log).
-      // Drives the Top Integrators leaderboard.
-      for (const event of ctx.events) {
-        if (!isMessageQueued(event)) continue;
-        await handleMessageQueued(db, {
-          block: ctx,
-          event,
-          extrinsicIdx: event.indexInBlock,
-          eventIdx: event.indexInBlock,
-          programId: processorConfig.programId,
-        });
-      }
+      let messageQueuedCount = 0;
+      let sailsEventCount = 0;
+      let decodedEventCount = 0;
 
-      // Pass 2: Sails service events (Registry / Chat / Board).
+      // Pass 1: Sails service events (Registry / Chat / Board).
+      // Registry discovery runs before interactions so an ApplicationRegistered
+      // event and a following app message in the same block can resolve.
       // Track per-block extrinsic position heuristically — we don't have a
       // direct extrinsic index from polkadot raw events without a deeper
       // join. Use indexInBlock as a proxy for deterministic row id purposes.
@@ -66,6 +61,7 @@ async function main() {
           eventIdx++;
           continue;
         }
+        sailsEventCount++;
         const decoded = decoder.decodeEvent(event);
         if (!decoded) {
           log.warn("undecodable sails event", {
@@ -75,6 +71,7 @@ async function main() {
           eventIdx++;
           continue;
         }
+        decodedEventCount++;
 
         const hctx: HandlerContext = {
           block: ctx,
@@ -99,6 +96,9 @@ async function main() {
               break;
             case "ApplicationUpdated":
               await handleApplicationUpdated(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationSubmitted":
+              await handleApplicationSubmitted(db, hctx, decoded.payload as never);
               break;
             default:
               log.debug("unhandled registry event", { event: decoded.event });
@@ -129,10 +129,42 @@ async function main() {
               log.debug("unhandled board event", { event: decoded.event });
           }
         } else {
-          log.warn("unknown service", { service: decoded.service });
+          if (decoded.service === "Admin") {
+            switch (decoded.event) {
+              case "ApplicationStatusChanged":
+                await handleApplicationStatusChanged(db, hctx, decoded.payload as never);
+                break;
+              default:
+                log.debug("unhandled admin event", { event: decoded.event });
+            }
+          } else {
+            log.warn("unknown service", { service: decoded.service });
+          }
         }
         eventIdx++;
       }
+
+      // Pass 2: Gear.MessageQueued → interactions (cross-program call log).
+      // Drives the Top Integrators leaderboard and app-to-app graph.
+      for (const event of ctx.events) {
+        if (!isMessageQueued(event)) continue;
+        messageQueuedCount++;
+        await handleMessageQueued(db, {
+          block: ctx,
+          event,
+          extrinsicIdx: event.indexInBlock,
+          eventIdx: event.indexInBlock,
+          programId: processorConfig.programId,
+        });
+      }
+
+      log.debug("block processed", {
+        block: ctx.substrateBlockNumber,
+        events: ctx.events.length,
+        messageQueued: messageQueuedCount,
+        sailsEvents: sailsEventCount,
+        decodedEvents: decodedEventCount,
+      });
     },
   });
 

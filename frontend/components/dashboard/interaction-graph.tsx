@@ -1,23 +1,19 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
+import { useEffect, useMemo, useRef } from 'react'
+import { useInteractionGraph } from '@/hooks/use-interaction-graph'
 
 interface Node {
   id: string; x: number; y: number; vx: number; vy: number;
   radius: number; color: string; label: string; connections: string[]
 }
 
-const NODES: Node[] = [
-  { id: 'oracle',     x: 0, y: 0, vx: 0, vy: 0, radius: 22, color: '#4ade80', label: '@oracle-prime',    connections: ['audit', 'market', 'insure'] },
-  { id: 'audit',      x: 0, y: 0, vx: 0, vy: 0, radius: 18, color: '#22d3ee', label: '@audit-daemon',    connections: ['oracle', 'bounty'] },
-  { id: 'market',     x: 0, y: 0, vx: 0, vy: 0, radius: 16, color: '#facc15', label: '@market-agent',   connections: ['oracle', 'price'] },
-  { id: 'dao',        x: 0, y: 0, vx: 0, vy: 0, radius: 15, color: '#60a5fa', label: '@dao-weaver',     connections: ['reputation', 'split'] },
-  { id: 'price',      x: 0, y: 0, vx: 0, vy: 0, radius: 14, color: '#f472b6', label: '@price-hawk',     connections: ['market', 'insure'] },
-  { id: 'insure',     x: 0, y: 0, vx: 0, vy: 0, radius: 13, color: '#a78bfa', label: '@insure-agent',   connections: ['oracle', 'price'] },
-  { id: 'bounty',     x: 0, y: 0, vx: 0, vy: 0, radius: 13, color: '#fb923c', label: '@bounty-hunter',  connections: ['audit', 'reputation'] },
-  { id: 'reputation', x: 0, y: 0, vx: 0, vy: 0, radius: 12, color: '#4ade80', label: '@reputation-svc', connections: ['dao', 'bounty'] },
-  { id: 'split',      x: 0, y: 0, vx: 0, vy: 0, radius: 11, color: '#22d3ee', label: '@split-master',   connections: ['dao'] },
-]
+const TRACK_COLORS: Record<string, string> = {
+  'Agent Services': '#4ade80',
+  'Social & Coord': '#22d3ee',
+  'Economy & Markets': '#facc15',
+  'Open / Creative': '#f472b6',
+}
 
 /** Place nodes in a grid with enough padding so none overlap at init. */
 function scatterNodes(nodes: Node[], W: number, H: number): Node[] {
@@ -44,16 +40,43 @@ function scatterNodes(nodes: Node[], W: number, H: number): Node[] {
 }
 
 export function InteractionGraph() {
+  const { graph, loading } = useInteractionGraph()
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const nodesRef = useRef<Node[]>([])
   const animRef  = useRef<number>(0)
   const hoveredRef = useRef<string | null>(null)
+  const graphNodes = useMemo<Node[]>(() => {
+    const connectionsByNode = new Map<string, Set<string>>()
+
+    for (const edge of graph.edges) {
+      const sourceSet = connectionsByNode.get(edge.source) ?? new Set<string>()
+      sourceSet.add(edge.target)
+      connectionsByNode.set(edge.source, sourceSet)
+
+      const targetSet = connectionsByNode.get(edge.target) ?? new Set<string>()
+      targetSet.add(edge.source)
+      connectionsByNode.set(edge.target, targetSet)
+    }
+
+    return graph.nodes.map((node) => ({
+      id: node.id,
+      x: 0,
+      y: 0,
+      vx: 0,
+      vy: 0,
+      radius: Math.min(24, 12 + Math.sqrt(node.calls || 1) * 4),
+      color: TRACK_COLORS[node.track] ?? '#a78bfa',
+      label: node.label,
+      connections: [...(connectionsByNode.get(node.id) ?? [])],
+    }))
+  }, [graph])
 
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
     const ctx = canvas.getContext('2d')
     if (!ctx) return
+    if (graphNodes.length === 0) return
 
     let W = 0
     let H = 0
@@ -64,7 +87,7 @@ export function InteractionGraph() {
       canvas.width  = W * window.devicePixelRatio
       canvas.height = H * window.devicePixelRatio
       ctx.setTransform(window.devicePixelRatio, 0, 0, window.devicePixelRatio, 0, 0)
-      nodesRef.current = scatterNodes(NODES, W, H)
+      nodesRef.current = scatterNodes(graphNodes, W, H)
     }
     resize()
 
@@ -207,14 +230,14 @@ export function InteractionGraph() {
       ro.disconnect()
       window.removeEventListener('resize', resize)
     }
-  }, [])
+  }, [graphNodes])
 
   return (
     <div className="rounded-2xl border border-border bg-card/60 p-6">
       <div className="flex items-center justify-between mb-4">
         <div>
           <h3 className="font-semibold text-foreground">Interaction Graph</h3>
-          <p className="text-xs text-muted-foreground mt-0.5">Live agent-to-agent connection map · hover to highlight</p>
+          <p className="text-xs text-muted-foreground mt-0.5">Registered applications and app-to-app calls · hover to highlight</p>
         </div>
         <div className="flex items-center gap-2 text-xs text-muted-foreground">
           <span className="h-2 w-2 rounded-full bg-primary/60 inline-block" /> Services
@@ -222,11 +245,19 @@ export function InteractionGraph() {
           <span className="h-2 w-2 rounded-full bg-yellow-400/60 inline-block ml-2" /> Markets
         </div>
       </div>
-      <canvas
-        ref={canvasRef}
-        className="w-full rounded-xl"
-        style={{ height: 360 }}
-      />
+      {graphNodes.length === 0 ? (
+        <div className="flex h-[360px] items-center justify-center rounded-xl border border-dashed border-border/70 px-6 text-center text-sm text-muted-foreground">
+          {loading
+            ? 'Loading indexed interactions...'
+            : 'No registered applications indexed yet.'}
+        </div>
+      ) : (
+        <canvas
+          ref={canvasRef}
+          className="w-full rounded-xl"
+          style={{ height: 360 }}
+        />
+      )}
     </div>
   )
 }

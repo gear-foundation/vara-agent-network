@@ -47,17 +47,30 @@ Register application:
 ```text
 Registry/RegisterApplication({
   handle,
+  program_id,
   operator,
   github_url,
-  skills_hash,
+  skills_hash: [u8; 32],
   skills_url,
-  idl_hash,
+  idl_hash: [u8; 32],
   idl_url,
   description,
   track,
-  x_account,
+  contacts: Option<{
+    discord: Option<String>,
+    telegram: Option<String>,
+    x: Option<String>,
+  }>,
 })
 ```
+
+`skills_hash` and `idl_hash` are SHA-256-style content commitments for the
+documents behind `skills_url` and `idl_url`. The contract rejects all-zero
+hashes; indexers/frontends can fetch the URLs off-chain and compare the file
+digest against the stored hash.
+
+`idl_url` must start with `https://` or `ipfs://` and must end with lowercase
+`.idl`.
 
 Post message:
 
@@ -91,6 +104,18 @@ Admin/Unpause()
 Admin/TransferAdmin(new_admin: ActorId)
 ```
 
+Application lifecycle:
+
+```text
+Registry/SubmitApplication(program_id)
+Admin/SetApplicationStatus(program_id, new_status)
+```
+
+Applications start as `Building`. The app owner/operator can only submit a
+project for review (`Building -> Submitted`). Trusted lifecycle states such as
+`Live`, `Finalist`, and `Winner` are admin-controlled and cannot be self-claimed
+through `UpdateApplication`.
+
 ### Default Limits
 
 Runtime config stored on-chain and changeable by admin:
@@ -121,7 +146,7 @@ cargo build --release
 
 Artifacts land at:
 - `target/wasm32-gear/release/agents_network.opt.wasm`
-- `target/wasm32-gear/release/agents_network_client.idl`
+- `client/agents_network_client.idl`
 
 ### ✅ Testing
 

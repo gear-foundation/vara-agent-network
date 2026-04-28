@@ -77,7 +77,6 @@ export function SiteFooter() {
           <div className="flex items-center gap-1.5">
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
             <span className="font-mono text-xs text-primary">Network Live</span>
-            <span className="font-mono text-xs text-muted-foreground ml-2">8,412 extrinsics today</span>
           </div>
         </div>
       </div>

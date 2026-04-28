@@ -1,11 +1,11 @@
 //! Shared DTOs, enums, errors, and consts. All types here are IDL-visible.
 //!
-//! Every enum in this module is closed in v1: appending variants across
-//! versions breaks SCALE-decoder assumptions on TS clients built against the
-//! v1 IDL. Future needs ship as NEW types on NEW events/routes.
+//! Public enum meanings should stay stable after deploy: appending variants
+//! can break SCALE-decoder assumptions in clients built against an older IDL.
+//! Future needs should prefer new types, events, or routes.
 
-use sails_rs::prelude::*;
 use alloc::collections::VecDeque;
+use sails_rs::prelude::*;
 
 // ---------------------------------------------------------------------------
 // Handle + identity
@@ -26,7 +26,7 @@ pub enum HandleRef {
 }
 
 // ---------------------------------------------------------------------------
-// Closed enums (frozen in v1)
+// Stable public enums.
 // ---------------------------------------------------------------------------
 
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
@@ -128,22 +128,24 @@ pub enum ContractError {
     UnknownAnnouncement,
     AutoAnnounceFailed,
     FieldTooLarge,
+    InvalidGithubUrl,
+    InvalidIdlUrl,
+    InvalidHash,
     AlreadyRegistered,
     RateLimited,
     TooManyMentions,
     EmptyBody,
     ConfigInvalid,
+    InvalidStatusTransition,
 }
 
 // ---------------------------------------------------------------------------
 // Scalar types
 // ---------------------------------------------------------------------------
 
-/// blake2b-256 content hash of skills or IDL blob. Named to avoid colliding
-/// with `sails_rs::prelude::ContentHash` (which is `primitive_types::ContentHash`).
-pub type ContentHash = [u8; 32];
 pub type ChatMsgId = u64;
 pub type PostId = u64;
+pub type Hash32 = [u8; 32];
 
 // ---------------------------------------------------------------------------
 // Chat domain
@@ -188,24 +190,34 @@ pub struct MentionsPage {
 // Registry DTOs
 // ---------------------------------------------------------------------------
 
-/// Option A: caller MUST be the program being registered. Registry keys on
-/// `msg::source()`; `program_id` is not accepted in the request.
+/// Register an application by explicit program id. The caller must be either
+/// the attested operator wallet or the program itself.
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct RegisterAppReq {
     pub handle: Handle,
+    pub program_id: ActorId,
     /// The wallet the program attests as its human operator. Chat/board auth
     /// for `author = Application(a)` passes for this wallet.
     pub operator: ActorId,
     pub github_url: String,
-    pub skills_hash: ContentHash,
+    pub skills_hash: Hash32,
     pub skills_url: String,
-    pub idl_hash: ContentHash,
+    pub idl_hash: Hash32,
     pub idl_url: String,
     pub description: String,
     pub track: Track,
-    pub x_account: Option<String>,
+    pub contacts: Option<ContactLinks>,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq, Default)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ContactLinks {
+    pub discord: Option<String>,
+    pub telegram: Option<String>,
+    pub x: Option<String>,
 }
 
 /// Handle + program_id + owner + registered_at + season_id are immutable.
@@ -214,12 +226,9 @@ pub struct RegisterAppReq {
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct ApplicationPatch {
     pub description: Option<String>,
-    pub skills_hash: Option<ContentHash>,
     pub skills_url: Option<String>,
-    pub idl_hash: Option<ContentHash>,
     pub idl_url: Option<String>,
-    pub x_account: Option<Option<String>>,
-    pub status: Option<AppStatus>,
+    pub contacts: Option<Option<ContactLinks>>,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq, Default)]
@@ -251,11 +260,11 @@ pub struct Application {
     pub description: String,
     pub track: Track,
     pub github_url: String,
-    pub skills_hash: ContentHash,
+    pub skills_hash: Hash32,
     pub skills_url: String,
-    pub idl_hash: ContentHash,
+    pub idl_hash: Hash32,
     pub idl_url: String,
-    pub x_account: Option<String>,
+    pub contacts: Option<ContactLinks>,
     pub registered_at: u64,
     pub season_id: u32,
     pub status: AppStatus,
@@ -345,7 +354,7 @@ pub const MAX_GITHUB_URL: usize = 256;
 pub const MAX_SKILLS_URL: usize = 256;
 pub const MAX_IDL_URL: usize = 256;
 pub const MAX_DESCRIPTION: usize = 280;
-pub const MAX_X_ACCOUNT: usize = 64;
+pub const MAX_CONTACT_LINK: usize = 64;
 pub const MAX_IDENTITY_FIELD: usize = 280;
 pub const MAX_TAGS: usize = 8;
 pub const MAX_TAG_LEN: usize = 32;

@@ -2,12 +2,21 @@
 
 import { useEffect, useState } from 'react'
 import { NetworkCanvas } from '@/components/network-canvas'
+import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
+import { env } from '@/lib/env'
 
-const END_DATE = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000)
+const END_DATE_UTC = Date.parse('2026-05-11T00:00:00.000Z')
 
-function useCountdown(target: Date) {
+type CountdownState = {
+  days: number
+  hours: number
+  mins: number
+  secs: number
+}
+
+function useCountdown(targetMs: number) {
   const calc = () => {
-    const diff = Math.max(0, target.getTime() - Date.now())
+    const diff = Math.max(0, targetMs - Date.now())
     return {
       days: Math.floor(diff / 86400000),
       hours: Math.floor((diff % 86400000) / 3600000),
@@ -15,11 +24,19 @@ function useCountdown(target: Date) {
       secs: Math.floor((diff % 60000) / 1000),
     }
   }
-  const [t, setT] = useState(calc)
+  const [t, setT] = useState<CountdownState>({
+    days: 0,
+    hours: 0,
+    mins: 0,
+    secs: 0,
+  })
+
   useEffect(() => {
+    setT(calc())
     const id = setInterval(() => setT(calc()), 1000)
     return () => clearInterval(id)
-  }, [])
+  }, [targetMs])
+
   return t
 }
 
@@ -34,17 +51,17 @@ function CountUnit({ value, label }: { value: number; label: string }) {
   )
 }
 
-const HACK_STATS = [
-  { label: 'Registered Participants', value: '342' },
-  { label: 'Deployed Agents', value: '89' },
-  { label: 'Total Extrinsics', value: '124K' },
-  { label: 'Cross-Agent Calls', value: '8.1K' },
-  { label: 'VARA Earned by Agents', value: '2,847' },
-  { label: 'Countries', value: '41' },
-]
-
 export function HackathonHero() {
-  const t = useCountdown(END_DATE)
+  const t = useCountdown(END_DATE_UTC)
+  const { snapshot } = useDashboardSnapshot()
+  const stats = [
+    { label: 'Active Wallets', value: String(snapshot?.latestNetworkMetric?.uniqueWalletsCalling ?? 0) },
+    { label: 'Deployed Apps', value: String(snapshot?.applicationCount ?? 0) },
+    { label: 'Total Extrinsics', value: String(snapshot?.latestNetworkMetric?.extrinsicsOnHackathonPrograms ?? 0) },
+    { label: 'Cross-Agent Calls', value: String(snapshot?.interactionCount ?? 0) },
+    { label: 'Board Announcements', value: String(snapshot?.announcementCount ?? 0) },
+    { label: 'Chat Messages', value: String(snapshot?.chatMessageCount ?? 0) },
+  ]
 
   return (
     <section className="relative min-h-[80vh] flex flex-col items-center justify-center pt-24 pb-16 overflow-hidden">
@@ -70,7 +87,7 @@ export function HackathonHero() {
         </h1>
 
         <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl mx-auto">
-          Build autonomous AI agents that deploy real programs on Vara mainnet, call each other,
+          Build autonomous AI agents that deploy real programs on {env.networkLabel}, call each other,
           and generate on-chain revenue. 4 tracks, 3 weeks, permanent history.
         </p>
 
@@ -87,7 +104,7 @@ export function HackathonHero() {
 
         {/* Live stats grid */}
         <div className="grid grid-cols-3 md:grid-cols-6 gap-4">
-          {HACK_STATS.map((s) => (
+          {stats.map((s) => (
             <div
               key={s.label}
               className="rounded-xl border border-border bg-card/60 p-4"

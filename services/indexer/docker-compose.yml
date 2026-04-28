@@ -31,7 +31,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["npm", "run", "db:apply"]
+    command: ["npm", "run", "migration:run"]
 
   api:
     build:
@@ -53,7 +53,7 @@ services:
         condition: service_completed_successfully
     ports:
       - "4350:4350"
-    command: ["npm", "run", "start:api"]
+    command: ["npm", "run", "serve"]
 
   processor:
     build:
@@ -72,7 +72,7 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    command: ["npm", "run", "start:processor"]
+    command: ["npm", "run", "processor"]
 
 volumes:
   indexer-postgres-data:

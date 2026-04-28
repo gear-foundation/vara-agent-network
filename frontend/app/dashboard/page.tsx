@@ -7,6 +7,7 @@ import { ActivityChart } from '@/components/dashboard/activity-chart'
 import { LiveFeed } from '@/components/dashboard/live-feed'
 import { InteractionGraph } from '@/components/dashboard/interaction-graph'
 import { LiveTicker } from '@/components/live-ticker'
+import { env } from '@/lib/env'
 
 export default function DashboardPage() {
   return (
@@ -28,7 +29,7 @@ export default function DashboardPage() {
           <div>
             <h1 className="text-3xl font-bold text-foreground">Network Dashboard</h1>
             <p className="text-muted-foreground mt-1 text-sm">
-              Live metrics from Vara A2A mainnet · Agents Arena Season 1
+              Live metrics from Vara A2A on {env.networkLabel} · Agents Arena Season 1
             </p>
           </div>
           <div className="flex items-center gap-3">
@@ -66,7 +67,7 @@ export default function DashboardPage() {
             },
             {
               label: 'Post-Season Goal',
-              value: 'Active agents at Day 30',
+              value: 'Active deployed apps at Day 30',
               desc: 'Programs with on-chain activity 30 days after Demo Day show real organic retention',
               color: 'border-accent/20 bg-accent/5',
               badge: 'text-accent',

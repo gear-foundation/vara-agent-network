@@ -2,27 +2,28 @@
 
 mod common;
 
-use common::*;
 use agents_network_client::{
-    AnnouncementKind, AgentsNetworkClient, board::Board, registry::Registry,
+    AgentsNetworkClient, AnnouncementKind, board::Board, registry::Registry,
 };
+use common::*;
 use sails_rs::client::*;
 use sails_rs::prelude::*;
 
-async fn setup() -> sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv> {
+async fn setup()
+-> sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv> {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
     program
         .registry()
-        .register_participant("bob".to_string(), "github.com/bob".to_string())
+        .register_participant("bob".to_string(), "https://github.com/bob".to_string())
         .with_actor_id(BOB.into())
         .await
         .unwrap();
     program
         .registry()
-        .register_application(mk_register_req("nft", BOB))
+        .register_application(mk_register_req("nft", BOB, STUB_PROGRAM_ALPHA))
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
@@ -85,11 +86,7 @@ async fn post_announcement_happy_path() {
     // Registration auto-announce already has id=1; invitation is id=2.
     assert_eq!(id, 2);
 
-    let page = program
-        .board()
-        .list_announcements(None, 100)
-        .await
-        .unwrap();
+    let page = program.board().list_announcements(None, 100).await.unwrap();
     assert_eq!(page.items.len(), 2);
     // Sorted by PostId; registration (id=1) first, then invitation (id=2).
     assert_eq!(page.items[0].1.kind, AnnouncementKind::Registration);
@@ -136,11 +133,7 @@ async fn archive_announcement_manual() {
         .await
         .unwrap();
 
-    let page = program
-        .board()
-        .list_announcements(None, 100)
-        .await
-        .unwrap();
+    let page = program.board().list_announcements(None, 100).await.unwrap();
     // Only the registration auto-announcement remains.
     assert_eq!(page.items.len(), 1);
     assert_eq!(page.items[0].1.kind, AnnouncementKind::Registration);
@@ -152,12 +145,12 @@ async fn edit_announcement_happy_path() {
 
     let id = program
         .board()
-        .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("v1"))
+        .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("first"))
         .with_actor_id(BOB.into())
         .await
         .unwrap();
 
-    let mut edited = mk_announcement_req("v2");
+    let mut edited = mk_announcement_req("updated");
     edited.body = "new body".to_string();
     program
         .board()
@@ -166,17 +159,13 @@ async fn edit_announcement_happy_path() {
         .await
         .unwrap();
 
-    let page = program
-        .board()
-        .list_announcements(None, 100)
-        .await
-        .unwrap();
+    let page = program.board().list_announcements(None, 100).await.unwrap();
     let inv = page
         .items
         .iter()
         .find(|(_, a)| a.kind == AnnouncementKind::Invitation)
         .unwrap();
-    assert_eq!(inv.1.title, "v2");
+    assert_eq!(inv.1.title, "updated");
     assert_eq!(inv.1.body, "new body");
 }
 
@@ -191,11 +180,7 @@ async fn registration_path_emits_no_board_event() {
     // API. But we CAN assert the state: the announcement queue has exactly
     // 1 entry right after registration, and it's kind=Registration.
     let program = setup().await;
-    let page = program
-        .board()
-        .list_announcements(None, 100)
-        .await
-        .unwrap();
+    let page = program.board().list_announcements(None, 100).await.unwrap();
     assert_eq!(page.items.len(), 1);
     assert_eq!(page.items[0].1.kind, AnnouncementKind::Registration);
 }

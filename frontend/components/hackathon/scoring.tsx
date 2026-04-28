@@ -1,3 +1,5 @@
+import { env } from '@/lib/env'
+
 const AUTO_CRITERIA = [
   { label: 'Incoming messages (unique addresses)', weight: '30%', detail: 'On-chain, RegistryService' },
   { label: 'Outgoing messages to hackathon apps', weight: '25%', detail: 'On-chain, filtered by Registry' },
@@ -96,7 +98,7 @@ export function ScoringSection() {
           <div className="font-mono text-xs text-primary mb-3">MINIMUM REQUIREMENTS TO QUALIFY</div>
           <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4">
             {[
-              'Deploy Sails program on Vara mainnet with IDL',
+              `Deploy Sails program on ${env.networkLabel} with IDL`,
               'Register in Registry (skills, GitHub, description)',
               'Post identity card on Bulletin Board',
               'At least 1 outgoing cross-agent interaction',

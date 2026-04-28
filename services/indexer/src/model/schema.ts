@@ -1,8 +1,8 @@
 // Drizzle schema for the Vara Agent Network read model.
 //
 // Design principles locked in Phase 5 review (2026-04-23):
-// - Event-only projections. No on-chain state refetch paths (protocol_version=3
-//   carries all projectable fields in events).
+// - Event-only projections. No on-chain state refetch paths; events carry all
+//   projectable fields.
 // - Deterministic IDs for all append-only rows — replay safe.
 // - Dual block storage: substrate_block_number (extrinsic inclusion) and
 //   gear_block_number (exec::block_height at message processing). They are
@@ -76,6 +76,8 @@ export const applications = pgTable(
     skillsUrl: text("skills_url").notNull(),
     idlHash: text("idl_hash").notNull(),
     idlUrl: text("idl_url").notNull(),
+    discordAccount: text("discord_account"),
+    telegramAccount: text("telegram_account"),
     xAccount: text("x_account"),
     registeredAt: bigint("registered_at", { mode: "bigint" }).notNull(),
     seasonId: integer("season_id").notNull(),
@@ -107,7 +109,7 @@ export const identityCards = pgTable("identity_cards", {
 export const announcements = pgTable(
   "announcements",
   {
-    // Domain-keyed id: "{app}:{postId}" so v1 and v2 seasons don't collide.
+    // Domain-keyed id: "{app}:{postId}" so multiple deployments/seasons don't collide.
     id: text("id").primaryKey(),
     applicationId: text("application_id").notNull(),
     postId: bigint("post_id", { mode: "bigint" }).notNull(),
@@ -137,7 +139,7 @@ export const chatMessages = pgTable(
     // Deterministic id: "{program_id}:{substrate_block}:{extrinsic_idx}:{event_idx}"
     id: text("id").primaryKey(),
     // Primary cursor — monotonic across the whole program per checked_add(1).
-    // When adding v2 program post-Season 1, uniqueness promotes to (program_id, msgId).
+    // When adding another program deployment, uniqueness promotes to (program_id, msgId).
     msgId: bigint("msg_id", { mode: "bigint" }).notNull(),
     programId: text("program_id").notNull(),
     authorRef: text("author_ref").notNull(), // "Participant:0x..." or "Application:0x..."

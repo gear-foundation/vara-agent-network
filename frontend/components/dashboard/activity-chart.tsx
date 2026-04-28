@@ -1,36 +1,15 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import {
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, Legend
 } from 'recharts'
-
-const generateData = (days: number) => {
-  const data = []
-  let extr = 1200
-  let calls = 400
-  for (let i = days; i >= 0; i--) {
-    extr = Math.max(800, extr + (Math.random() - 0.4) * 400)
-    calls = Math.max(200, calls + (Math.random() - 0.4) * 150)
-    const d = new Date()
-    d.setDate(d.getDate() - i)
-    data.push({
-      date: d.toLocaleDateString('en', { month: 'short', day: 'numeric' }),
-      extrinsics: Math.round(extr),
-      crossCalls: Math.round(calls),
-    })
-  }
-  return data
-}
-
-const DATA_7 = generateData(7)
-const DATA_14 = generateData(14)
-const DATA_30 = generateData(30)
+import { getActivitySeries, type ActivityPoint } from '@/lib/indexer-client'
 
 const RANGES = [
-  { label: '7D', data: DATA_7 },
-  { label: '14D', data: DATA_14 },
-  { label: '30D', data: DATA_30 },
+  { label: '7D', days: 7 },
+  { label: '14D', days: 14 },
+  { label: '30D', days: 30 },
 ]
 
 function CustomTooltip({ active, payload, label }: any) {
@@ -51,7 +30,29 @@ function CustomTooltip({ active, payload, label }: any) {
 
 export function ActivityChart() {
   const [range, setRange] = useState('14D')
-  const data = RANGES.find((r) => r.label === range)?.data ?? DATA_14
+  const [series, setSeries] = useState<ActivityPoint[]>([])
+
+  useEffect(() => {
+    let active = true
+
+    const load = async () => {
+      const next = await getActivitySeries()
+      if (!active) return
+      setSeries(next)
+    }
+
+    void load()
+    const id = window.setInterval(load, 15_000)
+    return () => {
+      active = false
+      window.clearInterval(id)
+    }
+  }, [])
+
+  const data = useMemo(() => {
+    const days = RANGES.find((item) => item.label === range)?.days ?? 14
+    return series.slice(-days)
+  }, [range, series])
 
   return (
     <div className="rounded-2xl border border-border bg-card/60 p-6">
@@ -77,6 +78,11 @@ export function ActivityChart() {
         </div>
       </div>
 
+      {data.length === 0 ? (
+        <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed border-border/70 text-sm text-muted-foreground">
+          No historical network metrics indexed yet.
+        </div>
+      ) : (
       <ResponsiveContainer width="100%" height={280}>
         <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
           <defs>
@@ -103,24 +109,12 @@ export function ActivityChart() {
             width={45}
           />
           <Tooltip content={<CustomTooltip />} />
-          <Area
-            type="monotone"
-            dataKey="extrinsics"
-            name="Extrinsics"
-            stroke="oklch(0.72 0.22 155)"
-            strokeWidth={2}
-            fill="url(#gradExtr)"
-          />
-          <Area
-            type="monotone"
-            dataKey="crossCalls"
-            name="Cross-Program Calls"
-            stroke="oklch(0.65 0.20 200)"
-            strokeWidth={2}
-            fill="url(#gradCalls)"
-          />
+          <Legend />
+          <Area type="monotone" dataKey="extrinsics" name="Extrinsics" stroke="oklch(0.72 0.22 155)" strokeWidth={2} fill="url(#gradExtr)" />
+          <Area type="monotone" dataKey="crossCalls" name="Cross-Program Calls" stroke="oklch(0.65 0.20 200)" strokeWidth={2} fill="url(#gradCalls)" />
         </AreaChart>
       </ResponsiveContainer>
+      )}
     </div>
   )
 }

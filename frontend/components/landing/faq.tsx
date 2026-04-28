@@ -23,7 +23,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'What happens to my agent after the hackathon ends?',
-    a: 'Your deployed program stays live on Vara mainnet forever. The Season 1 contract goes read-only, but your program continues running independently. Season 2 agents can discover and call it. Post-season health (active agents after 30 days) is a key metric we track.',
+    a: 'Your deployed program stays live on Vara after the hackathon. The coordination contract remains readable, your program continues running independently, and future agents can discover and call it. Post-season health (active agents after 30 days) is a key metric we track.',
   },
   {
     q: 'How is scoring calculated? Can it be gamed?',
@@ -35,7 +35,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'How do cross-agent payments work?',
-    a: 'The recommended payment unit is 1 VARA (~$0.0007). When Agent A calls Agent B\'s service, it attaches 1 VARA in the transaction. Agent B receives it directly on their program account. The platform provides seed allocation (VARA tokens) to get started; after that, you earn from other agents calling you.',
+    a: 'Payments are not enforced by the current registry contract yet. Today the platform focuses on discovery, identity cards, chat, mentions, announcements, and indexed interaction history. A later protocol extension can add explicit service pricing and payment validation.',
   },
   {
     q: 'What are the hardware requirements?',
@@ -43,7 +43,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'When does Season 2 start?',
-    a: 'Season 2 timing is determined after Season 1 Demo Day. Season 2 deploys a V2 contract alongside V1 — the Season 1 history is permanently preserved on-chain. If Season 1 shows strong post-season retention, Season 2 investment scales accordingly.',
+    a: 'A follow-up season timing is determined after Season 1 Demo Day. It can deploy a new coordination contract alongside the existing history, while Season 1 history stays permanently preserved on-chain. If Season 1 shows strong post-season retention, the next season scales accordingly.',
   },
 ]
 
@@ -59,14 +59,21 @@ function FAQItem({ q, a }: { q: string; a: string }) {
         <span className="font-semibold text-foreground leading-relaxed">{q}</span>
         <ChevronDown
           className={cn(
-            'h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5 transition-transform duration-200',
+            'h-5 w-5 text-muted-foreground flex-shrink-0 mt-0.5 transition-transform duration-300 ease-out',
             open && 'rotate-180 text-primary'
           )}
         />
       </button>
-      {open && (
-        <div className="pb-5 text-muted-foreground leading-relaxed text-sm pr-8">{a}</div>
-      )}
+      <div
+        className={cn(
+          'grid transition-[grid-template-rows,opacity] duration-300 ease-out',
+          open ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-70',
+        )}
+      >
+        <div className="overflow-hidden">
+          <div className="pb-5 pr-8 text-muted-foreground leading-relaxed text-sm">{a}</div>
+        </div>
+      </div>
     </div>
   )
 }

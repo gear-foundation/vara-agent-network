@@ -3,23 +3,53 @@
 import { useEffect, useState } from 'react'
 import { env } from '@/lib/env'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
-import { NETWORK_PULSE_BASE } from '@/lib/site-data'
+import { getLatestBlockNumber } from '@/lib/vara-program'
+
+type PulseStats = {
+  extr: number
+  wallets: number
+  apps: number
+  block: number | null
+}
+
+const EMPTY_STATS: PulseStats = {
+  extr: 0,
+  wallets: 0,
+  apps: 0,
+  block: null,
+}
+
+function formatNumber(value: number | null) {
+  if (value === null) return '...'
+  return new Intl.NumberFormat('en-US').format(value)
+}
 
 export function NetworkPulse() {
-  const [stats, setStats] = useState(NETWORK_PULSE_BASE)
-  const networkLabel = env.varaNetwork === 'mainnet' ? 'Vara Mainnet' : 'Vara Testnet'
+  const [stats, setStats] = useState<PulseStats>(EMPTY_STATS)
   const { snapshot } = useDashboardSnapshot()
 
   useEffect(() => {
-    const id = setInterval(() => {
-      setStats((s) => ({
-        extr: s.extr + Math.floor(Math.random() * 8),
-        wallets: s.wallets + (Math.random() > 0.85 ? 1 : 0),
-        apps: s.apps + (Math.random() > 0.97 ? 1 : 0),
-        block: s.block + 1,
-      }))
-    }, 2800)
-    return () => clearInterval(id)
+    let active = true
+
+    const loadBlock = async () => {
+      try {
+        const block = await getLatestBlockNumber()
+        if (!active) return
+        setStats((current) => ({
+          ...current,
+          block,
+        }))
+      } catch {
+        // Keep the previous block number if RPC polling fails.
+      }
+    }
+
+    void loadBlock()
+    const id = window.setInterval(loadBlock, 8_000)
+    return () => {
+      active = false
+      window.clearInterval(id)
+    }
   }, [])
 
   useEffect(() => {
@@ -30,16 +60,16 @@ export function NetworkPulse() {
       ?? snapshot.chatMessageCount + snapshot.interactionCount + snapshot.announcementCount
     const wallets =
       snapshot.latestNetworkMetric?.uniqueWalletsCalling
-      ?? NETWORK_PULSE_BASE.wallets
+      ?? 0
     const apps =
       snapshot.latestNetworkMetric?.deployedProgramCount
       ?? snapshot.applicationCount
 
     setStats((current) => ({
       ...current,
-      extr: extrinsics || current.extr,
-      wallets: wallets || current.wallets,
-      apps: apps || current.apps,
+      extr: extrinsics,
+      wallets,
+      apps,
     }))
   }, [snapshot])
 
@@ -49,15 +79,15 @@ export function NetworkPulse() {
         <div className="flex items-center justify-between h-9 overflow-x-auto gap-6 text-xs font-mono">
           <div className="flex items-center gap-1.5 flex-shrink-0">
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
-            <span className="text-primary font-semibold">{networkLabel}</span>
+            <span className="text-primary font-semibold">{env.networkLabel}</span>
           </div>
           <div className="flex items-center gap-6 text-muted-foreground flex-shrink-0">
             <span>
-              Block <span className="text-foreground">#{stats.block.toLocaleString()}</span>
+              Block <span className="text-foreground">#{formatNumber(stats.block)}</span>
             </span>
             <span className="text-border/60">·</span>
             <span>
-              Extrinsics <span className="text-primary">{stats.extr.toLocaleString()}</span>/day
+              Extrinsics <span className="text-primary">{formatNumber(stats.extr)}</span>/day
             </span>
             <span className="text-border/60">·</span>
             <span>
