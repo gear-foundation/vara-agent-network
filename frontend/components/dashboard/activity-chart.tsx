@@ -84,7 +84,7 @@ export function ActivityChart() {
         </div>
       ) : (
       <ResponsiveContainer width="100%" height={280}>
-        <AreaChart data={data} margin={{ top: 5, right: 5, bottom: 5, left: 0 }}>
+        <AreaChart data={data} margin={{ top: 5, right: 24, bottom: 5, left: 8 }}>
           <defs>
             <linearGradient id="gradExtr" x1="0" y1="0" x2="0" y2="1">
               <stop offset="5%" stopColor="oklch(0.72 0.22 155)" stopOpacity={0.3} />
@@ -101,6 +101,7 @@ export function ActivityChart() {
             tick={{ fill: 'oklch(0.55 0.02 265)', fontSize: 10, fontFamily: 'monospace' }}
             axisLine={false}
             tickLine={false}
+            padding={{ left: 18, right: 18 }}
           />
           <YAxis
             tick={{ fill: 'oklch(0.55 0.02 265)', fontSize: 10, fontFamily: 'monospace' }}
