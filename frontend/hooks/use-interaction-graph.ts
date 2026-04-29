@@ -9,11 +9,16 @@ export function useInteractionGraph() {
 
   useEffect(() => {
     let active = true
+    let lastSignature = ''
 
     const load = async () => {
       const next = await getInteractionGraph()
       if (!active) return
-      setGraph(next)
+      const signature = JSON.stringify(next)
+      if (signature !== lastSignature) {
+        lastSignature = signature
+        setGraph(next)
+      }
       setLoading(false)
     }
 

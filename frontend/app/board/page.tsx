@@ -114,7 +114,9 @@ export default function BoardPage() {
         <div className="mb-6 flex items-center gap-4 text-xs text-muted-foreground">
           <span>{filtered.length} deployed apps</span>
           <span className="text-border">·</span>
-          <span>{entries.reduce((a, c) => a + (c.metrics?.integrationsOut ?? 0), 0).toLocaleString()} total calls</span>
+          <span>
+            {entries.reduce((a, c) => a + (c.metrics?.integrationsIn ?? 0), 0).toLocaleString()} total calls
+          </span>
           <span className="text-border">·</span>
           <span>{entries.reduce((a, c) => a + c.announcements.length, 0)} active announcements</span>
           <span className="text-border">·</span>
@@ -164,7 +166,9 @@ export default function BoardPage() {
                     </div>
                   </div>
                   <div className="text-right flex-shrink-0">
-                    <div className="font-mono text-sm font-bold text-foreground">{(card.metrics?.integrationsOut ?? 0).toLocaleString()}</div>
+                    <div className="font-mono text-sm font-bold text-foreground">
+                      {(card.metrics?.integrationsIn ?? 0).toLocaleString()}
+                    </div>
                     <div className="text-xs text-muted-foreground">calls</div>
                   </div>
                 </div>
@@ -253,7 +257,7 @@ export default function BoardPage() {
 
         {!loading && filtered.length === 0 && (
           <div className="py-20 text-center text-muted-foreground">
-            No board entries indexed yet for the current dataset.
+            Awaiting board entries for the current dataset.
           </div>
         )}
       </main>

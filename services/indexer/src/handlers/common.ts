@@ -2,7 +2,7 @@
 import { eq, sql } from "drizzle-orm";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
-import type { HandleRef } from "../helpers/event-payloads.js";
+import { normalizeActorId, type HandleRef } from "../helpers/event-payloads.js";
 import type { BlockContext, UserMessageSentEvent } from "../helpers/types.js";
 
 export interface HandlerContext<TEvent = UserMessageSentEvent> {
@@ -46,12 +46,13 @@ export async function claimHandleOrThrow(
   seasonId: number,
   claimedAt: bigint,
 ): Promise<void> {
+  const normalizedOwnerId = normalizeActorId(ownerId as `0x${string}`);
   const inserted = await db
     .insert(schema.handleClaims)
     .values({
       handle,
       ownerKind,
-      ownerId,
+      ownerId: normalizedOwnerId,
       seasonId,
       claimedAt,
     })
@@ -72,9 +73,9 @@ export async function claimHandleOrThrow(
   if (!claim) {
     throw new Error(`handle claim conflict for ${handle}: insert skipped but no existing row found`);
   }
-  if (claim.ownerKind !== ownerKind || claim.ownerId !== ownerId) {
+  if (claim.ownerKind !== ownerKind || claim.ownerId !== normalizedOwnerId) {
     throw new Error(
-      `global handle namespace violation for ${handle}: existing=${claim.ownerKind}:${claim.ownerId}, incoming=${ownerKind}:${ownerId}`,
+      `global handle namespace violation for ${handle}: existing=${claim.ownerKind}:${claim.ownerId}, incoming=${ownerKind}:${normalizedOwnerId}`,
     );
   }
 }
@@ -162,22 +163,23 @@ export interface ResolvedActor {
  * Runs the two lookups in parallel.
  */
 export async function resolveActor(db: Db, id: string): Promise<ResolvedActor> {
+  const normalizedId = normalizeActorId(id as `0x${string}`);
   const [appRows, partRows] = await Promise.all([
     db
       .select({ handle: schema.applications.handle, seasonId: schema.applications.seasonId })
       .from(schema.applications)
-      .where(eq(schema.applications.id, id))
+      .where(eq(schema.applications.id, normalizedId))
       .limit(1),
     db
       .select({ handle: schema.participants.handle })
       .from(schema.participants)
-      .where(eq(schema.participants.id, id))
+      .where(eq(schema.participants.id, normalizedId))
       .limit(1),
   ]);
   const application = appRows[0] ?? null;
   const participant = partRows[0] ?? null;
   return {
-    id,
+    id: normalizedId,
     handle: participant?.handle ?? application?.handle ?? null,
     seasonId: application?.seasonId ?? null,
     isApplication: application !== null,
@@ -193,17 +195,19 @@ export async function resolveHandleRef(
   ref: HandleRef,
 ): Promise<string | null> {
   if ("participant" in ref) {
+    const participantId = normalizeActorId(ref.participant);
     const rows = await db
       .select({ handle: schema.participants.handle })
       .from(schema.participants)
-      .where(eq(schema.participants.id, ref.participant))
+      .where(eq(schema.participants.id, participantId))
       .limit(1);
     return rows[0]?.handle ?? null;
   }
+  const applicationId = normalizeActorId(ref.application);
   const rows = await db
     .select({ handle: schema.applications.handle })
     .from(schema.applications)
-    .where(eq(schema.applications.id, ref.application))
+    .where(eq(schema.applications.id, applicationId))
     .limit(1);
   return rows[0]?.handle ?? null;
 }

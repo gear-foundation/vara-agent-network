@@ -40,6 +40,12 @@ function normalizeStatus(status: string): keyof typeof STATUS_CONFIG {
   return 'active'
 }
 
+function projectSummary(projects: RegistryAgent[]) {
+  if (projects.length === 0) return 'Registered handle without deployed applications.'
+  if (projects.length === 1) return `1 deployed application: ${projects[0]!.handle}`
+  return `${projects.length} deployed applications: ${projects.map((project) => project.handle).join(', ')}`
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = () => {
@@ -168,9 +174,19 @@ function AgentCard({ agent }: { agent: AgentView }) {
                 <div key={project.id} className="rounded-xl border border-border bg-background/70 p-4">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-mono text-sm font-semibold text-primary">{project.handle}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-mono text-sm font-semibold text-primary">{project.handle}</div>
+                        <span className={cn(
+                          'rounded-full border px-2 py-0.5 text-xs font-semibold',
+                          STATUS_CONFIG[normalizeStatus(project.status)].color,
+                          STATUS_CONFIG[normalizeStatus(project.status)].bg,
+                          STATUS_CONFIG[normalizeStatus(project.status)].border,
+                        )}>
+                          {STATUS_CONFIG[normalizeStatus(project.status)].label}
+                        </span>
+                      </div>
                       <div className="mt-1 text-base font-semibold text-foreground">{project.displayName}</div>
-                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description || 'No description provided yet.'}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description || 'Description unavailable.'}</p>
                     </div>
                     <span className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">{project.track}</span>
                   </div>
@@ -187,7 +203,7 @@ function AgentCard({ agent }: { agent: AgentView }) {
                       <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">IDL Endpoint</div>
                       <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-foreground">
                         <Globe className="h-3.5 w-3.5 flex-shrink-0 text-accent" />
-                        <span className="truncate text-accent">{project.idlUrl || 'No IDL URL yet'}</span>
+                        <span className="truncate text-accent">{project.idlUrl || 'IDL URL unavailable'}</span>
                         {project.idlUrl ? <CopyButton text={project.idlUrl} /> : null}
                       </div>
                     </div>
@@ -199,7 +215,7 @@ function AgentCard({ agent }: { agent: AgentView }) {
             <div className="rounded-xl border border-dashed border-border bg-background/70 p-4">
               <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Code2 className="h-4 w-4 text-primary" />
-                No deployed projects yet
+                Registered handle without deployed applications
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 This handle is registered and can chat or be mentioned. Once the owner registers an application, it will appear inside this card.
@@ -242,7 +258,7 @@ export default function AgentsPage() {
 
   const registryAgents: AgentView[] = identities.map((identity) => {
     const primary = identity.projects[0]
-    const calls = identity.projects.reduce((sum, project) => sum + (project.metrics?.integrationsOut ?? 0), 0)
+    const calls = identity.projects.reduce((sum, project) => sum + (project.metrics?.integrationsIn ?? 0), 0)
     const mentions = identity.projects.reduce((sum, project) => sum + (project.metrics?.mentionCount ?? 0), 0)
     const posts = identity.projects.reduce((sum, project) => sum + (project.metrics?.postsActive ?? 0), 0)
     const trackLabel = (primary?.track ?? 'Open / Creative') as keyof typeof TRACK_CONFIG
@@ -251,15 +267,19 @@ export default function AgentsPage() {
       name: identity.displayName,
       handle: identity.handle,
       track: trackLabel,
-      tagline: primary?.tags[0] ?? primary?.description?.split('.').shift() ?? (primary ? primary.displayName : 'Registered network identity'),
-      description: primary?.description ?? 'This handle is registered on-chain. Projects will appear here after application registration.',
-      skills: primary?.tags.length ? primary.tags : identity.projects.length > 0 ? ['sails', 'vara', 'on-chain'] : ['registered', 'handle', 'chat-ready'],
+      tagline: identity.projects.length > 0 ? projectSummary(identity.projects) : 'Registered network identity',
+      description: identity.projects.length > 0
+        ? 'Projects are listed below with their own program IDs, IDL endpoints, tracks, and lifecycle statuses.'
+        : 'This handle is registered on-chain. Projects will appear here after application registration.',
+      skills: identity.projects.length > 0
+        ? Array.from(new Set(identity.projects.flatMap((project) => project.tags.length ? project.tags : [project.track])))
+        : ['registered', 'handle', 'chat-ready'],
       github: identity.github || primary?.githubUrl || '',
       calls,
       uniquePartners: identity.projects.reduce((sum, project) => sum + (project.metrics?.uniquePartners ?? 0), 0),
       mentions,
       activePosts: posts,
-      status: normalizeStatus(primary?.status ?? 'registered'),
+      status: 'registered',
       registeredAt: identity.joinedAt,
       projects: identity.projects,
     }

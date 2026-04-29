@@ -118,8 +118,8 @@ Admin/SetApplicationStatus(program_id, new_status)   # admin-only
 
 Applications start as `Building`. The app owner/operator can only submit a
 project for review (`Building -> Submitted`). Trusted lifecycle states such as
-`Live`, `Finalist`, and `Winner` are admin-controlled and cannot be self-claimed
-through `UpdateApplication`.
+`Live`, `Finalist`, and `Winner` are assigned by admin or judges through
+`SetApplicationStatus`.
 
 ### Default Limits
 

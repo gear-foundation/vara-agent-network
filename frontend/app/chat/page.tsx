@@ -95,6 +95,8 @@ export default function ChatPage() {
       })
       .slice(0, 6)
     : []
+  const participantSuggestions = mentionSuggestions.filter((target) => target.ownerKind === 'Participant')
+  const applicationSuggestions = mentionSuggestions.filter((target) => target.ownerKind === 'Application')
   const showMentionPicker = inputFocused && Boolean(mentionMatch)
 
   useEffect(() => {
@@ -287,7 +289,7 @@ export default function ChatPage() {
               ))}
               {recentAuthors.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
-                  No indexed chat authors yet.
+                  Awaiting indexed chat authors.
                 </div>
               )}
             </div>
@@ -337,7 +339,7 @@ export default function ChatPage() {
                   type="text"
                   value={registerHandle}
                   onChange={(e) => setRegisterHandle(e.target.value)}
-                  placeholder="handle, e.g. timur"
+                  placeholder="handle, e.g. agent-handle"
                   className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none"
                 />
                 <input
@@ -432,7 +434,7 @@ export default function ChatPage() {
                   <div className="border-b border-border/80 px-4 py-2.5">
                     <div className="flex items-center justify-between gap-3">
                       <span className="font-mono text-xs uppercase tracking-wider text-primary">
-                        Mention agent
+                        Mention handle
                       </span>
                       <span className="text-xs text-muted-foreground">
                         ↑↓ choose · Enter insert
@@ -441,36 +443,56 @@ export default function ChatPage() {
                   </div>
                   {mentionSuggestions.length > 0 ? (
                     <div className="max-h-72 overflow-y-auto p-1.5">
-                      {mentionSuggestions.map((agent, index) => (
-                        <button
-                          key={`${agent.ownerKind}:${agent.ownerId}`}
-                          type="button"
-                          onMouseDown={(e) => {
-                            e.preventDefault()
-                            insertMention(agent.handle)
-                          }}
-                          onMouseEnter={() => setActiveMentionIndex(index)}
-                          className={cn(
-                            'flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-all',
-                            index === activeMentionIndex
-                              ? 'bg-primary/10 text-foreground'
-                              : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
-                          )}
-                        >
-                          <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />
-                          <span className="min-w-0 flex-1">
-                            <span className="flex items-center gap-2">
-                              <span className="font-mono text-sm font-semibold text-primary">{agent.handle}</span>
-                              <span className="truncate text-xs text-muted-foreground">
-                                {agent.track ?? agent.ownerKind}
-                              </span>
-                            </span>
-                            <span className="mt-0.5 block truncate text-xs">
-                              {agent.description || agent.displayName}
-                            </span>
-                          </span>
-                        </button>
-                      ))}
+                      {[
+                        { label: 'Participants', items: participantSuggestions },
+                        { label: 'Applications', items: applicationSuggestions },
+                      ].map((group, groupIndex, groups) => {
+                        if (group.items.length === 0) return null
+                        const startIndex = groups
+                          .slice(0, groupIndex)
+                          .reduce((sum, current) => sum + current.items.length, 0)
+
+                        return (
+                          <div key={group.label} className="mb-1.5 last:mb-0">
+                            <div className="px-3 py-1.5 font-mono text-[11px] uppercase tracking-[0.18em] text-muted-foreground">
+                              {group.label}
+                            </div>
+                            {group.items.map((agent, index) => {
+                              const suggestionIndex = startIndex + index
+                              return (
+                                <button
+                                  key={`${agent.ownerKind}:${agent.ownerId}`}
+                                  type="button"
+                                  onMouseDown={(e) => {
+                                    e.preventDefault()
+                                    insertMention(agent.handle)
+                                  }}
+                                  onMouseEnter={() => setActiveMentionIndex(suggestionIndex)}
+                                  className={cn(
+                                    'flex w-full items-start gap-3 rounded-xl px-3 py-2.5 text-left transition-all',
+                                    suggestionIndex === activeMentionIndex
+                                      ? 'bg-primary/10 text-foreground'
+                                      : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+                                  )}
+                                >
+                                  <span className="mt-1 h-2 w-2 flex-shrink-0 rounded-full bg-primary" />
+                                  <span className="min-w-0 flex-1">
+                                    <span className="flex items-center gap-2">
+                                      <span className="font-mono text-sm font-semibold text-primary">{agent.handle}</span>
+                                      <span className="truncate text-xs text-muted-foreground">
+                                        {agent.track ?? agent.ownerKind}
+                                      </span>
+                                    </span>
+                                    <span className="mt-0.5 block truncate text-xs">
+                                      {agent.description || agent.displayName}
+                                    </span>
+                                  </span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        )
+                      })}
                     </div>
                   ) : (
                     <div className="px-4 py-5 text-sm text-muted-foreground">
@@ -536,7 +558,7 @@ export default function ChatPage() {
               ))}
               {recentAuthors.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border/70 px-2.5 py-3 text-xs text-muted-foreground">
-                  No handles indexed yet.
+                  Awaiting indexed handles.
                 </div>
               )}
             </div>

@@ -57,6 +57,13 @@
       "when": 1777290000000,
       "tag": "0007_restore_application_hashes",
       "breakpoints": true
+    },
+    {
+      "idx": 8,
+      "version": "7",
+      "when": 1777395600000,
+      "tag": "0008_lowercase_actor_ids",
+      "breakpoints": true
     }
   ]
 }

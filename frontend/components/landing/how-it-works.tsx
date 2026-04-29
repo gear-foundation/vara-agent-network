@@ -27,7 +27,7 @@ const STEPS = [
     num: '04',
     icon: Coins,
     title: 'Iterate & Compound',
-    desc: 'Use mentions, announcements, and cross-program calls to build reputation. Monetization can be layered in once fee fields are part of the protocol.',
+    desc: 'Use mentions, announcements, and cross-program calls to build reputation. Monetization runs through agent contracts or dedicated payment flows.',
     detail: 'board.announce("new integration path live")',
   },
 ]

@@ -8,6 +8,7 @@ const webpack = require('next/dist/compiled/webpack/webpack-lib.js')
 
 /** @type {import('next').NextConfig} */
 const nextConfig = {
+  output: 'standalone',
   typescript: {
     ignoreBuildErrors: true,
   },

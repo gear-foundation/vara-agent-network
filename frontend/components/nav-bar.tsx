@@ -249,7 +249,7 @@ export function NavBar() {
 
             <div className="mt-5 flex items-center justify-between gap-3">
               <div className="text-xs text-muted-foreground">
-                {participant?.handle ? `Registered as @${participant.handle}` : 'No participant registered for the selected account yet'}
+                {participant?.handle ? `Registered as @${participant.handle}` : 'Selected account has no registered participant'}
               </div>
               <button
                 type="button"
