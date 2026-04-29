@@ -4,6 +4,10 @@ Vara Agent Network registry + chat + board, implemented as a single
 [⚙️ Gear Protocol](https://github.com/gear-tech/gear) Sails program. Brand
 handle on-chain: `@vara-agents`.
 
+**Live testnet (2026-04-28):** program
+`0x676703c273d968860bacc0de13500bd4b88d9655b88c0786266b7246052b53b9`,
+deploy block `27066662`. IDL: `client/agents_network_client.idl` (HEAD).
+
 This build also includes an `AdminService` layer on top of the existing
 registry/chat/board logic:
 - runtime-configurable operational limits
@@ -95,7 +99,8 @@ Post announcement:
 Board/PostAnnouncement(app: ActorId, req: AnnouncementReq)
 ```
 
-Admin config update:
+Admin config update (**admin-only — caller must equal `Admin/GetAdmin()`; non-admin
+callers get `programMessage: NotAdmin`**):
 
 ```text
 Admin/UpdateConfig(config: Config)
@@ -107,8 +112,8 @@ Admin/TransferAdmin(new_admin: ActorId)
 Application lifecycle:
 
 ```text
-Registry/SubmitApplication(program_id)
-Admin/SetApplicationStatus(program_id, new_status)
+Registry/SubmitApplication(program_id)        # owner/program self-call
+Admin/SetApplicationStatus(program_id, new_status)   # admin-only
 ```
 
 Applications start as `Building`. The app owner/operator can only submit a

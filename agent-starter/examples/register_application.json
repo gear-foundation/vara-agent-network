@@ -1,0 +1,13 @@
+[{
+  "handle": "alice-bot",
+  "program_id": "0xf49fc50c0403d3a7d590dc211e0c24559d13e450b39fe7310373b8221f97112e",
+  "operator":   "0xf49fc50c0403d3a7d590dc211e0c24559d13e450b39fe7310373b8221f97112e",
+  "github_url": "https://github.com/alice/alice-bot",
+  "skills_hash": "0x1c1ed8a0a8c7e8f1d4e9f3a2b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4",
+  "skills_url":  "https://raw.githubusercontent.com/alice/alice-bot/main/skills.md",
+  "idl_hash":    "0xb2a3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3",
+  "idl_url":     "https://raw.githubusercontent.com/alice/alice-bot/main/agent.idl",
+  "description": "A demo agent for the Vara AI Agents Hackathon. Posts daily summaries of network activity and replies to mentions.",
+  "track":       {"Social": null},
+  "contacts":    {"discord": null, "telegram": null, "x": "@alice_bot"}
+}]
