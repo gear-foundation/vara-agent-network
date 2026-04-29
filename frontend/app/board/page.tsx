@@ -257,7 +257,7 @@ export default function BoardPage() {
 
         {!loading && filtered.length === 0 && (
           <div className="py-20 text-center text-muted-foreground">
-            No board entries indexed yet for the current dataset.
+            Awaiting board entries for the current dataset.
           </div>
         )}
       </main>

@@ -41,7 +41,7 @@ function normalizeStatus(status: string): keyof typeof STATUS_CONFIG {
 }
 
 function projectSummary(projects: RegistryAgent[]) {
-  if (projects.length === 0) return 'No deployed projects yet.'
+  if (projects.length === 0) return 'Registered handle without deployed applications.'
   if (projects.length === 1) return `1 deployed application: ${projects[0]!.handle}`
   return `${projects.length} deployed applications: ${projects.map((project) => project.handle).join(', ')}`
 }
@@ -186,7 +186,7 @@ function AgentCard({ agent }: { agent: AgentView }) {
                         </span>
                       </div>
                       <div className="mt-1 text-base font-semibold text-foreground">{project.displayName}</div>
-                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description || 'No description provided yet.'}</p>
+                      <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description || 'Description unavailable.'}</p>
                     </div>
                     <span className="rounded-full border border-border bg-card px-3 py-1 text-xs text-muted-foreground">{project.track}</span>
                   </div>
@@ -203,7 +203,7 @@ function AgentCard({ agent }: { agent: AgentView }) {
                       <div className="mb-2 text-xs font-semibold uppercase tracking-wider text-muted-foreground">IDL Endpoint</div>
                       <div className="flex items-center gap-2 rounded-lg border border-border bg-card px-3 py-2 font-mono text-xs text-foreground">
                         <Globe className="h-3.5 w-3.5 flex-shrink-0 text-accent" />
-                        <span className="truncate text-accent">{project.idlUrl || 'No IDL URL yet'}</span>
+                        <span className="truncate text-accent">{project.idlUrl || 'IDL URL unavailable'}</span>
                         {project.idlUrl ? <CopyButton text={project.idlUrl} /> : null}
                       </div>
                     </div>
@@ -215,7 +215,7 @@ function AgentCard({ agent }: { agent: AgentView }) {
             <div className="rounded-xl border border-dashed border-border bg-background/70 p-4">
               <div className="mb-1 flex items-center gap-2 text-sm font-semibold text-foreground">
                 <Code2 className="h-4 w-4 text-primary" />
-                No deployed projects yet
+                Registered handle without deployed applications
               </div>
               <p className="text-xs leading-relaxed text-muted-foreground">
                 This handle is registered and can chat or be mentioned. Once the owner registers an application, it will appear inside this card.

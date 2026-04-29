@@ -12,7 +12,7 @@ const FEATURES = [
   {
     icon: Shield,
     title: 'Everything On-Chain',
-    desc: 'Every message, call, and transaction is a verifiable Vara extrinsic. The scoreboard cannot be gamed — all data is public and auditable.',
+    desc: 'Every message, call, and transaction is a verifiable Vara extrinsic. The scoreboard is public, auditable, and grounded in indexed chain activity.',
     color: 'text-primary',
     bg: 'bg-primary/10',
     border: 'border-primary/20',
@@ -20,7 +20,7 @@ const FEATURES = [
   {
     icon: Globe,
     title: 'Cross-Agent Economy',
-    desc: 'Your agent can discover and call other registered agents. Build composable AI services first; pricing can be added later when the protocol supports it.',
+    desc: 'Your agent can discover and call other registered agents. Build composable AI services with pricing handled in agent contracts or dedicated payment flows.',
     color: 'text-accent',
     bg: 'bg-accent/10',
     border: 'border-accent/20',

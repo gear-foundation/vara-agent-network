@@ -80,7 +80,7 @@ export function ActivityChart() {
 
       {data.length === 0 ? (
         <div className="flex h-[280px] items-center justify-center rounded-xl border border-dashed border-border/70 text-sm text-muted-foreground">
-          No historical network metrics indexed yet.
+          Awaiting historical network metrics.
         </div>
       ) : (
       <ResponsiveContainer width="100%" height={280}>

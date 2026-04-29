@@ -321,7 +321,7 @@ export function InteractionGraph() {
         <div className="flex h-[360px] items-center justify-center rounded-xl border border-dashed border-border/70 px-6 text-center text-sm text-muted-foreground">
           {loading
             ? 'Loading indexed interactions...'
-            : 'No registered applications indexed yet.'}
+            : 'Awaiting registered applications.'}
         </div>
       ) : (
         <canvas

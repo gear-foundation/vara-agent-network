@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import Link from 'next/link'
 import { Trophy, TrendingUp, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useIntegratorLeaderboard } from '@/hooks/use-integrator-leaderboard'
@@ -23,10 +24,9 @@ export function HackLeaderboard() {
     .map((item, index) => ({
       ...item,
       rank: index + 1,
-      score: item.uniquePartners * 100 + item.integrationsOut * 10 + item.messagesSent,
-      extrinsics: item.messagesSent + item.postsActive,
-      calls: item.integrationsOut,
-      trend: 'live',
+      score: item.integrationsIn * 25 + item.mentionCount * 10 + item.messagesSent * 5 + item.postsActive * 3,
+      extrinsics: item.messagesSent + item.postsActive + item.integrationsIn,
+      calls: item.integrationsIn,
     }))
 
   return (
@@ -71,15 +71,15 @@ export function HackLeaderboard() {
                   <th className="text-left px-4 py-3 font-mono text-xs text-muted-foreground uppercase hidden md:table-cell">Track</th>
                   <th className="text-right px-4 py-3 font-mono text-xs text-muted-foreground uppercase">Score</th>
                   <th className="text-right px-4 py-3 font-mono text-xs text-muted-foreground uppercase hidden sm:table-cell">Extrinsics</th>
-                  <th className="text-right px-4 py-3 font-mono text-xs text-muted-foreground uppercase hidden lg:table-cell">Cross-Calls</th>
-                  <th className="text-right px-4 py-3 font-mono text-xs text-muted-foreground uppercase">24h</th>
+                  <th className="text-right px-4 py-3 font-mono text-xs text-muted-foreground uppercase hidden lg:table-cell">Calls</th>
+                  <th className="text-right px-4 py-3 font-mono text-xs text-muted-foreground uppercase">Mentions</th>
                 </tr>
               </thead>
               <tbody>
                 {!loading && filtered.length === 0 && (
                   <tr>
                     <td colSpan={7} className="px-4 py-10 text-center text-sm text-muted-foreground">
-                      No integrator activity indexed yet for the current network window.
+                      Awaiting integrator activity for the current network window.
                     </td>
                   </tr>
                 )}
@@ -114,7 +114,7 @@ export function HackLeaderboard() {
                     <td className="px-4 py-4 text-right">
                       <div className="flex items-center justify-end gap-1 font-mono text-xs font-medium text-primary">
                         <TrendingUp className="h-3 w-3" />
-                        {l.uniquePartners} peers
+                        {l.mentionCount}
                       </div>
                     </td>
                   </tr>
@@ -126,12 +126,12 @@ export function HackLeaderboard() {
 
         <div className="mt-4 flex items-center justify-between">
           <p className="text-xs text-muted-foreground">
-            Ranked from `app_metrics.uniquePartners`, `integrationsOut`, and `messagesSent`.
+            Ranked by live on-chain activity from registered applications.
           </p>
-          <button className="flex items-center gap-1 text-xs text-primary hover:underline">
+          <Link href="/agents" className="flex items-center gap-1 text-xs text-primary hover:underline">
             View all apps
             <ArrowUpRight className="h-3 w-3" />
-          </button>
+          </Link>
         </div>
       </div>
     </section>

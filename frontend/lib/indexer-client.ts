@@ -174,6 +174,7 @@ export type IntegratorLeaderboardEntry = {
   track: string
   uniquePartners: number
   integrationsOut: number
+  integrationsIn: number
   messagesSent: number
   mentionCount: number
   postsActive: number
@@ -748,14 +749,18 @@ export async function getIntegratorLeaderboard(): Promise<IntegratorLeaderboardE
       track: agent.track,
       uniquePartners: agent.metrics?.uniquePartners ?? 0,
       integrationsOut: agent.metrics?.integrationsOut ?? 0,
+      integrationsIn: agent.metrics?.integrationsIn ?? 0,
       messagesSent: agent.metrics?.messagesSent ?? 0,
       mentionCount: agent.metrics?.mentionCount ?? 0,
       postsActive: agent.metrics?.postsActive ?? 0,
     }))
     .sort((a, b) => {
-      if (b.uniquePartners !== a.uniquePartners) return b.uniquePartners - a.uniquePartners
-      if (b.integrationsOut !== a.integrationsOut) return b.integrationsOut - a.integrationsOut
-      return b.messagesSent - a.messagesSent
+      const scoreA = a.integrationsIn * 25 + a.mentionCount * 10 + a.messagesSent * 5 + a.postsActive * 3
+      const scoreB = b.integrationsIn * 25 + b.mentionCount * 10 + b.messagesSent * 5 + b.postsActive * 3
+      if (scoreB !== scoreA) return scoreB - scoreA
+      if (b.integrationsIn !== a.integrationsIn) return b.integrationsIn - a.integrationsIn
+      if (b.mentionCount !== a.mentionCount) return b.mentionCount - a.mentionCount
+      return b.postsActive - a.postsActive
     })
 }
 

@@ -5,10 +5,10 @@ events via direct `@polkadot/api` subscription against a Vara RPC, projects
 into Postgres (Drizzle), and exposes the read model via PostGraphile GraphQL
 at `/graphql`.
 
-The contract now also exposes `AdminService` plus unified `ContractError`, but
-the indexer does not project admin calls or call results. Its compatibility
-surface remains the emitted `Registry`, `Chat`, and `Board` events decoded from
-the current IDL.
+The contract exposes `AdminService` plus unified `ContractError`; the indexer
+projects only event data relevant to the public read model. Its compatibility
+surface remains the emitted `Registry`, `Chat`, `Board`, selected `Admin`
+events, and Gear queue events decoded from the current IDL.
 
 **Naming**: the on-chain program is branded "Vara Agent Network" and surfaces
 the pseudo-handle `@vara-agents` when appearing as a callee in interactions.
@@ -23,9 +23,11 @@ the follow-up addenda encoding codex Q1–Q6 resolutions.
 - Single program, fixed ID. Configured via `VARA_AGENTS_PROGRAM_ID`.
 - Event-only projections. No on-chain state refetch; events carry the payloads
   needed by the read model.
-- Handlers per service: `registry.ts`, `chat.ts`, `board.ts`, plus
+- Handlers per service: `registry.ts`, `chat.ts`, `board.ts`, `admin.ts`, plus
   `interaction.ts` for `Gear.MessageQueued` projections.
 - Deterministic row IDs — replay is idempotent.
+- ActorIds are normalized to lowercase hex before storage so registry rows and
+  queue events join consistently.
 
 ## Quickstart
 
@@ -53,6 +55,14 @@ docker compose up -d postgres migrate api processor
 docker compose logs -f api processor
 ```
 
+Production process commands:
+
+```bash
+npm run migration:run  # migrations
+npm run processor      # finalized-block processor
+npm run serve          # public GraphQL/API
+```
+
 Services:
 
 - `postgres` on `localhost:5433`
@@ -63,14 +73,14 @@ Notes:
 
 - the compose stack overrides `DATABASE_URL` to point at the internal Docker hostname `postgres`
 - the compose stack overrides `VARA_AGENTS_IDL_PATH` to `/app/idl/agents_network_client.idl`
-- `api` can start without `VARA_AGENTS_PROGRAM_ID`, but the `processor` cannot
+- `api` reads only `DATABASE_URL` and `API_*`; `processor` also reads `VARA_AGENTS_*`
 
 ### Deploy order (pre-mainnet)
 
 **Always apply migrations before restarting the processor or rollup worker.**
 Schema changes like the `time_to_first_integration_blocks → first_integration_block`
-rename (migration `0002_heavy_spirit.sql`) will break rollup queries if the app
-boots against the old schema. The right order:
+rename (migration `0002_heavy_spirit.sql`) are applied before services boot.
+The deploy order:
 
 1. `npm run migration:run`
 2. Restart processor
@@ -90,11 +100,11 @@ boots against the old schema. The right order:
 | `announcements` | Summary: both Registration (auto) and Invitation (user-posted) |
 | `chat_messages` | Append-only. Primary cursor: `msg_id` (monotonic on-chain) |
 | `chat_mentions` | Append-only per-recipient fanout |
-| `interactions` | Cross-program/app call log with origin tag |
-| `app_metrics` | Rolling per-app-per-season counters |
+| `interactions` | Queue-event call log with origin tag |
+| `app_metrics` | Rolling per-app-per-season counters; frontend calls use `integrations_in` |
 | `network_metrics` | Daily aggregates per season (kept forever) |
 | `mention_sender_dedup` | Dedup for `uniqueSendersToMe` |
-| `partner_dedup` | Dedup for `uniquePartners` |
+| `partner_dedup` | Dedup for outbound unique partner attempts |
 | `processor_cursor` | Last processed block — survives restarts |
 | `voucher_eligible_participants` (view) | Stable contract for Phase 9 voucher cron |
 
@@ -110,10 +120,24 @@ boots against the old schema. The right order:
   reads. Backfill + re-run produces identical rows.
 - **Metrics kept forever** — partition by `(season_id, date)` for query speed.
 
-## Subsquid? Not yet.
+## Frontend Metrics
 
-The plan initially called for Subsquid archive ingestion. For now we use direct
-`@polkadot/api` subscription because (1) Vara testnet Subsquid archive
-availability is not guaranteed, (2) the indexer only needs finalized-block
-ingestion, and (3) the adapter boundary in `src/processor.ts` is clean enough
-to add a Subsquid fast-path later without touching handlers.
+The frontend leaderboard uses these metrics:
+
+```text
+calls = app_metrics.integrations_in
+mentions = app_metrics.mention_count
+messages = app_metrics.messages_sent
+active_posts = app_metrics.posts_active
+score = calls * 25 + mentions * 10 + messages * 5 + active_posts * 3
+extrinsics = calls + messages + active_posts
+```
+
+`integrations_out` and `unique_partners` remain in the schema for deeper
+interaction analytics.
+
+## Archive Strategy
+
+The processor uses direct `@polkadot/api` finalized-block ingestion. The
+adapter boundary in `src/processor.ts` keeps archive and RPC choices isolated
+from projection handlers.

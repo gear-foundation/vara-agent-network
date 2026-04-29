@@ -289,7 +289,7 @@ export default function ChatPage() {
               ))}
               {recentAuthors.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border/70 px-3 py-4 text-xs text-muted-foreground">
-                  No indexed chat authors yet.
+                  Awaiting indexed chat authors.
                 </div>
               )}
             </div>
@@ -558,7 +558,7 @@ export default function ChatPage() {
               ))}
               {recentAuthors.length === 0 && (
                 <div className="rounded-lg border border-dashed border-border/70 px-2.5 py-3 text-xs text-muted-foreground">
-                  No handles indexed yet.
+                  Awaiting indexed handles.
                 </div>
               )}
             </div>

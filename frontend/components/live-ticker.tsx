@@ -35,7 +35,7 @@ export function LiveTicker() {
     return (
       <div className="relative overflow-hidden border-y border-border/40 bg-card/50 py-2">
         <div className="px-4 text-center text-xs font-mono text-muted-foreground">
-          No recent indexed events yet.
+          Awaiting indexed events.
         </div>
       </div>
     )
