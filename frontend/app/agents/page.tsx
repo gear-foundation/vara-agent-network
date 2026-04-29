@@ -40,6 +40,12 @@ function normalizeStatus(status: string): keyof typeof STATUS_CONFIG {
   return 'active'
 }
 
+function projectSummary(projects: RegistryAgent[]) {
+  if (projects.length === 0) return 'No deployed projects yet.'
+  if (projects.length === 1) return `1 deployed application: ${projects[0]!.handle}`
+  return `${projects.length} deployed applications: ${projects.map((project) => project.handle).join(', ')}`
+}
+
 function CopyButton({ text }: { text: string }) {
   const [copied, setCopied] = useState(false)
   const handleCopy = () => {
@@ -168,7 +174,17 @@ function AgentCard({ agent }: { agent: AgentView }) {
                 <div key={project.id} className="rounded-xl border border-border bg-background/70 p-4">
                   <div className="mb-4 flex items-start justify-between gap-3">
                     <div>
-                      <div className="font-mono text-sm font-semibold text-primary">{project.handle}</div>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <div className="font-mono text-sm font-semibold text-primary">{project.handle}</div>
+                        <span className={cn(
+                          'rounded-full border px-2 py-0.5 text-xs font-semibold',
+                          STATUS_CONFIG[normalizeStatus(project.status)].color,
+                          STATUS_CONFIG[normalizeStatus(project.status)].bg,
+                          STATUS_CONFIG[normalizeStatus(project.status)].border,
+                        )}>
+                          {STATUS_CONFIG[normalizeStatus(project.status)].label}
+                        </span>
+                      </div>
                       <div className="mt-1 text-base font-semibold text-foreground">{project.displayName}</div>
                       <p className="mt-1 text-sm leading-relaxed text-muted-foreground">{project.description || 'No description provided yet.'}</p>
                     </div>
@@ -251,15 +267,19 @@ export default function AgentsPage() {
       name: identity.displayName,
       handle: identity.handle,
       track: trackLabel,
-      tagline: primary?.tags[0] ?? primary?.description?.split('.').shift() ?? (primary ? primary.displayName : 'Registered network identity'),
-      description: primary?.description ?? 'This handle is registered on-chain. Projects will appear here after application registration.',
-      skills: primary?.tags.length ? primary.tags : identity.projects.length > 0 ? ['sails', 'vara', 'on-chain'] : ['registered', 'handle', 'chat-ready'],
+      tagline: identity.projects.length > 0 ? projectSummary(identity.projects) : 'Registered network identity',
+      description: identity.projects.length > 0
+        ? 'Projects are listed below with their own program IDs, IDL endpoints, tracks, and lifecycle statuses.'
+        : 'This handle is registered on-chain. Projects will appear here after application registration.',
+      skills: identity.projects.length > 0
+        ? Array.from(new Set(identity.projects.flatMap((project) => project.tags.length ? project.tags : [project.track])))
+        : ['registered', 'handle', 'chat-ready'],
       github: identity.github || primary?.githubUrl || '',
       calls,
       uniquePartners: identity.projects.reduce((sum, project) => sum + (project.metrics?.uniquePartners ?? 0), 0),
       mentions,
       activePosts: posts,
-      status: normalizeStatus(primary?.status ?? 'registered'),
+      status: 'registered',
       registeredAt: identity.joinedAt,
       projects: identity.projects,
     }
