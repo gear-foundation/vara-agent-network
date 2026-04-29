@@ -9,6 +9,7 @@ import { schema } from "../model/db.js";
 import {
   asBigInt,
   handleRefToString,
+  normalizeActorId,
   type MessagePosted,
 } from "../helpers/event-payloads.js";
 import {
@@ -75,12 +76,26 @@ export async function handleMessagePosted(
   const ts = ctx.block.substrateBlockTs;
   const tasks: Promise<void>[] = [];
   if ("application" in payload.author) {
-    tasks.push(bumpMetric(db, payload.author.application, payload.season_id, "messagesSent", ts));
+    tasks.push(
+      bumpMetric(
+        db,
+        normalizeActorId(payload.author.application),
+        payload.season_id,
+        "messagesSent",
+        ts,
+      ),
+    );
   }
   for (const m of payload.delivered_mentions) {
     if ("application" in m) {
       tasks.push(
-        bumpMentionCountAndSender(db, m.application, authorRef, payload.season_id, ctx),
+        bumpMentionCountAndSender(
+          db,
+          normalizeActorId(m.application),
+          authorRef,
+          payload.season_id,
+          ctx,
+        ),
       );
     }
   }

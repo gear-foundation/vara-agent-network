@@ -151,18 +151,22 @@ export interface AnnouncementArchived {
 // ---- Helpers ----
 
 export function handleRefToString(h: HandleRef): string {
-  if ("participant" in h) return `Participant:${h.participant}`;
-  return `Application:${h.application}`;
+  if ("participant" in h) return `Participant:${normalizeActorId(h.participant)}`;
+  return `Application:${normalizeActorId(h.application)}`;
 }
 
 export function parseHandleRef(s: string): HandleRef | null {
   const colon = s.indexOf(":");
   if (colon < 0) return null;
   const kind = s.slice(0, colon);
-  const addr = s.slice(colon + 1) as Hex;
+  const addr = normalizeActorId(s.slice(colon + 1) as Hex);
   if (kind === "Participant") return { participant: addr };
   if (kind === "Application") return { application: addr };
   return null;
+}
+
+export function normalizeActorId(id: Hex): Hex {
+  return id.toLowerCase() as Hex;
 }
 
 export function asNumber(x: bigint | number): number {

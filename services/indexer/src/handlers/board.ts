@@ -8,6 +8,7 @@ import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import {
   asBigInt,
+  normalizeActorId,
   type AnnouncementArchived,
   type AnnouncementEdited,
   type AnnouncementPosted,
@@ -28,11 +29,13 @@ export async function handleIdentityCardUpdated(
 ): Promise<void> {
   const card = payload.card;
   const updatedAt = asBigInt(card.updated_at);
+  const appId = normalizeActorId(payload.app);
+  const updatedBy = normalizeActorId(payload.updated_by);
   await db
     .insert(schema.identityCards)
     .values({
-      id: payload.app,
-      updatedBy: payload.updated_by,
+      id: appId,
+      updatedBy,
       whoIAm: card.who_i_am,
       whatIDo: card.what_i_do,
       howToInteract: card.how_to_interact,
@@ -44,7 +47,7 @@ export async function handleIdentityCardUpdated(
     .onConflictDoUpdate({
       target: schema.identityCards.id,
       set: {
-        updatedBy: payload.updated_by,
+        updatedBy,
         whoIAm: card.who_i_am,
         whatIDo: card.what_i_do,
         howToInteract: card.how_to_interact,
@@ -59,7 +62,7 @@ export async function handleIdentityCardUpdated(
   await db
     .update(schema.applications)
     .set({ tags: card.tags, identityCardUpdatedAt: updatedAt })
-    .where(eq(schema.applications.id, payload.app));
+    .where(eq(schema.applications.id, appId));
 }
 
 export async function handleAnnouncementPosted(
@@ -69,12 +72,13 @@ export async function handleAnnouncementPosted(
 ): Promise<void> {
   const postedAt = asBigInt(payload.ts);
   const postId = asBigInt(payload.id);
-  const id = `${payload.app}:${postId}`;
+  const appId = normalizeActorId(payload.app);
+  const id = `${appId}:${postId}`;
   await db
     .insert(schema.announcements)
     .values({
       id,
-      applicationId: payload.app,
+      applicationId: appId,
       postId,
       title: payload.title,
       body: payload.body,
@@ -97,7 +101,7 @@ export async function handleAnnouncementPosted(
     });
 
   if (!(await isFirstTimeEvent(db, `board:posted:${makeRowId(ctx)}`))) return;
-  await bumpMetric(db, payload.app, payload.season_id, "postsActive", postedAt);
+  await bumpMetric(db, appId, payload.season_id, "postsActive", postedAt);
 }
 
 export async function handleAnnouncementEdited(
@@ -105,7 +109,8 @@ export async function handleAnnouncementEdited(
   _ctx: HandlerContext,
   payload: AnnouncementEdited,
 ): Promise<void> {
-  const id = `${payload.app}:${asBigInt(payload.id)}`;
+  const appId = normalizeActorId(payload.app);
+  const id = `${appId}:${asBigInt(payload.id)}`;
   await db
     .update(schema.announcements)
     .set({
@@ -121,12 +126,13 @@ export async function handleAnnouncementArchived(
   ctx: HandlerContext,
   payload: AnnouncementArchived,
 ): Promise<void> {
-  const id = `${payload.app}:${asBigInt(payload.id)}`;
+  const appId = normalizeActorId(payload.app);
+  const id = `${appId}:${asBigInt(payload.id)}`;
   await db
     .update(schema.announcements)
     .set({ archived: true, archivedReason: payload.reason })
     .where(eq(schema.announcements.id, id));
 
   if (!(await isFirstTimeEvent(db, `board:archived:${makeRowId(ctx)}`))) return;
-  await decMetric(db, payload.app, payload.season_id, "postsActive");
+  await decMetric(db, appId, payload.season_id, "postsActive");
 }

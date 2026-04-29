@@ -15,7 +15,7 @@ import type {
   ApplicationUpdated,
   ParticipantRegistered,
 } from "../helpers/event-payloads.js";
-import { asBigInt, hashToHex } from "../helpers/event-payloads.js";
+import { asBigInt, hashToHex, normalizeActorId } from "../helpers/event-payloads.js";
 import {
   bumpMetric,
   claimHandleOrThrow,
@@ -30,18 +30,19 @@ export async function handleParticipantRegistered(
   payload: ParticipantRegistered,
 ): Promise<void> {
   const joinedAt = asBigInt(payload.joined_at);
+  const wallet = normalizeActorId(payload.wallet);
   await claimHandleOrThrow(
     db,
     payload.handle,
     "Participant",
-    payload.wallet,
+    wallet,
     payload.season_id,
     joinedAt,
   );
   await db
     .insert(schema.participants)
     .values({
-      id: payload.wallet,
+      id: wallet,
       handle: payload.handle,
       github: payload.github,
       joinedAt,
@@ -70,11 +71,13 @@ export async function handleApplicationRegistered(
   payload: ApplicationRegistered,
 ): Promise<void> {
   const registeredAt = asBigInt(payload.registered_at);
+  const programId = normalizeActorId(payload.program_id);
+  const owner = normalizeActorId(payload.owner);
   await claimHandleOrThrow(
     db,
     payload.handle,
     "Application",
-    payload.program_id,
+    programId,
     payload.season_id,
     registeredAt,
   );
@@ -83,9 +86,9 @@ export async function handleApplicationRegistered(
   await db
     .insert(schema.applications)
     .values({
-      id: payload.program_id,
+      id: programId,
       handle: payload.handle,
-      owner: payload.owner,
+      owner,
       description: payload.description,
       track: payload.track,
       githubUrl: payload.github_url,
@@ -105,7 +108,7 @@ export async function handleApplicationRegistered(
       target: schema.applications.id,
       set: {
         handle: payload.handle,
-        owner: payload.owner,
+        owner,
         description: payload.description,
         track: payload.track,
         githubUrl: payload.github_url,
@@ -123,12 +126,12 @@ export async function handleApplicationRegistered(
     });
 
   const registrationPostId = asBigInt(payload.registration_announcement_id);
-  const announcementId = `${payload.program_id}:${registrationPostId}`;
+  const announcementId = `${programId}:${registrationPostId}`;
   await db
     .insert(schema.announcements)
     .values({
       id: announcementId,
-      applicationId: payload.program_id,
+      applicationId: programId,
       postId: registrationPostId,
       title: payload.registration_announcement_title,
       body: payload.registration_announcement_body,
@@ -141,7 +144,7 @@ export async function handleApplicationRegistered(
     .onConflictDoNothing({ target: schema.announcements.id });
 
   if (!(await isFirstTimeEvent(db, `registry:app-registered:${makeRowId(ctx)}`))) return;
-  await bumpMetric(db, payload.program_id, payload.season_id, "postsActive", registeredAt);
+  await bumpMetric(db, programId, payload.season_id, "postsActive", registeredAt);
 }
 
 export async function handleApplicationUpdated(
@@ -173,12 +176,13 @@ export async function handleApplicationUpdated(
     updates.xAccount = null;
   }
 
+  const programId = normalizeActorId(payload.program_id);
   if (Object.keys(updates).length === 0) return;
 
   await db
     .update(schema.applications)
     .set(updates)
-    .where(sql`${schema.applications.id} = ${payload.program_id}`);
+    .where(sql`${schema.applications.id} = ${programId}`);
 }
 
 export async function handleApplicationSubmitted(
@@ -186,8 +190,9 @@ export async function handleApplicationSubmitted(
   _ctx: HandlerContext,
   payload: ApplicationSubmitted,
 ): Promise<void> {
+  const programId = normalizeActorId(payload.program_id);
   await db
     .update(schema.applications)
     .set({ status: "Submitted" })
-    .where(sql`${schema.applications.id} = ${payload.program_id}`);
+    .where(sql`${schema.applications.id} = ${programId}`);
 }
