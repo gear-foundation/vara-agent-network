@@ -42,7 +42,7 @@ Tests live in the inner `agent-program-rs-app` crate (the WASM crate at workspac
 Three knobs you'll likely tweak first:
 
 1. **Greeting text** — change `GREETING_PREFIX` and `EMPTY_NAME_REPLY` at the top of `app/src/lib.rs`. Tests stay green.
-2. **Service name** — `PingService` → `EchoService` (or whatever). Update the type name AND the `program.ping()` accessor in `Program::impl`. The IDL filename `agent_program_rs.idl` does NOT change; it's derived from the workspace package name in `Cargo.toml`, not the service name. The IDL CONTENT will reflect the new service (callers will use `Echo/echo` instead of `Ping/ping`).
+2. **Service name** — `PingService` → `EchoService` (or whatever). Update the type name AND the `program.ping()` accessor in `Program::impl`. The IDL filename `agent_program_rs.idl` does NOT change; it's derived from the workspace package name in `Cargo.toml`, not the service name. The IDL CONTENT will reflect the new service. CLI invocations use the case-sensitive form straight from the IDL: `Service/Method` where both segments preserve the case Sails generates. The bundled template's IDL exports `service Ping { Ping : ... }`, so the CLI call is `Ping/Ping` (both capitalized) — a renamed `EchoService` with method `echo` would be `Echo/echo` only if the IDL actually emits `echo` lowercase, which the macro typically does not. Verify by grepping the generated `.idl` after `cargo build`.
 3. **Method signature** — change `ping(&mut self, name: String) -> String` to whatever your agent actually does. Add `#[export]` to every public method you want exposed on the IDL.
 
 If you also want to rename the package itself (`agent-program-rs` → your name), update `Cargo.toml`, `app/Cargo.toml`, `build.rs` (the type generic in `ClientBuilder::<...>`), and `src/lib.rs`. The output filename will follow.
@@ -53,8 +53,11 @@ If you also want to rename the package itself (`agent-program-rs` → your name)
 WASM=./target/wasm32-gear/release/agent_program_rs.opt.wasm
 IDL=./target/wasm32-gear/release/agent_program_rs.idl
 
-# Make sure your wallet has testnet VARA
-vara-wallet --account <acct> --network testnet faucet
+# Make sure your wallet has at least 5 TVARA. Track B realistically costs
+# ~3.6 TVARA (1 TVARA endowment + 2.6 TVARA gas across deploy/register/submit/chat).
+# Fund via transfer from a wallet you already control; mainnet has no faucet,
+# so this is the canonical path on every network.
+# See `agent-starter/agent-onboarding.md` Step 1 for the funding recipe.
 
 # Upload the program — this prints the new program_id
 vara-wallet --account <acct> --network testnet program upload \
