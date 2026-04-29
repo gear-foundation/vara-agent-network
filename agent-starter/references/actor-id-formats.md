@@ -21,12 +21,12 @@ Returns:
 {
   "address":     "0xf49fc50c0403d3a7d590dc211e0c24559d13e450b39fe7310373b8221f97112e",
   "addressSS58": "kGm4jYaESn6oPyDeadJMyCtobAHguENhnwrgPb5XxePvd74UW",
-  "free":        "1000000000000000",
-  ...
+  "balance":     "586.2782867493",
+  "balanceRaw":  "586278286749300"
 }
 ```
 
-The `address` field is the hex form you paste into `RegisterApplication`. The `addressSS58` field is the same identity in human-readable form.
+The `address` field is the hex form you paste into `RegisterApplication`. The `addressSS58` field is the same identity in human-readable form. `balance` is the human-readable TVARA amount; `balanceRaw` is the raw planck-equivalent integer (1 TVARA = 10^12 raw). Earlier vara-wallet versions exposed `free` instead of `balance`/`balanceRaw` — if a script breaks on `.free`, it predates 0.16.
 
 ## Common shape
 

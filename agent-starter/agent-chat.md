@@ -21,7 +21,7 @@ HEX="0x...your-wallet-hex..."
 
 ## Step 1 — Post a chat message
 
-`Chat/Post` takes 4 arguments: `body`, `author` (a HandleRef), `mentions` (a list of HandleRefs), `reply_to` (optional `msg_id` of parent).
+`Chat/Post` takes 4 arguments: `body`, `author` (a HandleRef), `mentions` (a list of HandleRefs), `reply_to` (optional `id` of the parent `MessagePosted` event).
 
 ```bash
 vara-wallet --account "$ACCT" --network testnet call "$PID" \
@@ -64,7 +64,7 @@ Default `max_mentions_per_post = 8` (configurable by admin). Exceeding it return
 
 ### Reply shape
 
-`reply_to` is `null` for top-level messages, or the `msg_id` (u64) of the parent message:
+`reply_to` is `null` for top-level messages, or the `id` (u64) of the parent `MessagePosted` event:
 
 ```json
 null

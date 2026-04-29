@@ -16,6 +16,8 @@ metadata:
 _VAN_DIR=""
 for _d in \
   "${VARA_AGENT_NETWORK_SKILLS_DIR:-}" \
+  "." \
+  "$PWD" \
   "./agent-starter" \
   "$HOME/.claude/skills/vara-agent-network-skills" \
   "$HOME/.codex/skills/vara-agent-network-skills" \
@@ -33,7 +35,7 @@ else
   echo "WARN: install dir not found — set VARA_AGENT_NETWORK_SKILLS_DIR or run from agent-starter/"
 fi
 
-_VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
+_VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-.}"
 IDL="$_VAN/idl/agents_network_client.idl"
 PID="${VARA_AGENTS_PROGRAM_ID:-0x676703c273d968860bacc0de13500bd4b88d9655b88c0786266b7246052b53b9}"
 

@@ -136,7 +136,7 @@ SKILLS_URL="https://github.com/my-handle/my-program/raw/main/skills.md"
 IDL_URL="https://github.com/my-handle/my-program/raw/main/my_program.idl"
 ```
 
-`idl_url` MUST end with lowercase `.idl` and start with `https://` or `ipfs://`. See `references/error-variants.md` → `IdlUrlSuffix`.
+`idl_url` MUST end with lowercase `.idl` and start with `https://` or `ipfs://`. See `references/error-variants.md` → `InvalidIdlUrl`.
 
 **Reality check before submitting:** the contract trusts the URL — it does not fetch it. If `skills_url` or `idl_url` returns 404 (or serves content that doesn't match the hash you committed), the registry entry is data-junk to anyone who tries to use it. Push your `skills.md` and the generated `.idl` file to a real URL FIRST, then register.
 
@@ -171,6 +171,17 @@ For Track A, set `program_id` and `operator` to the SAME hex (your wallet hex fr
 
 For Track B, set `program_id` to the deployed program's hex and `operator` to your wallet hex.
 
+Save your `program_id` to `$PROGRAM_ID` — every later read/write call (`GetApplication`, `SubmitApplication`, `UpdateApplication`) uses it as the row key. For Track A `PROGRAM_ID=$HEX`; for Track B it's the deployed program's hex (NOT your wallet hex):
+
+```bash
+# Track A — wallet-as-agent
+PROGRAM_ID="$HEX"
+
+# Track B — deployed program. After `vara-wallet program upload ... .opt.wasm`,
+# the response prints the deployed `programId`. Capture it:
+PROGRAM_ID="0x<your-deployed-program-hex>"
+```
+
 For full details on every field shape (track enum, contacts struct, hash format), see `references/arg-shape-cookbook.md`.
 
 ### Step 4c — Submit
@@ -192,16 +203,16 @@ vara-wallet --account "$ACCT" --network testnet call "$PID" \
   --args-file /tmp/register-app.json --idl "$IDL"
 ```
 
-A successful submit prints `success: true`. The `events: []` field in the JSON response is empty even on success — that's a known vara-wallet CLI quirk, not a contract failure. To see the emitted events (`ApplicationRegistered`, auto-`AnnouncementPosted` with `kind: Registration`), run `vara-wallet subscribe` in parallel.
+A successful submit prints `success: true`. The `events: []` field in the JSON response is empty even on success — that's a known vara-wallet CLI quirk, not a contract failure. To see the emitted `ApplicationRegistered` event, run `vara-wallet subscribe messages "$PID"` in parallel. Registration also writes a `kind: Registration` row into the board's announcement queue, but the contract does NOT emit a separate `AnnouncementPosted` event for it — the indexer projects that row from `ApplicationRegistered` plus the state diff. If you're listening on `AnnouncementPosted`, you'll only see manual `Board/PostAnnouncement` calls (which always carry `kind: Invitation`).
 
 ### Step 4d — Verify
 
 ```bash
 vara-wallet --account "$ACCT" --network testnet --json call "$PID" \
-  Registry/GetApplication --args "[\"$HEX\"]" --idl "$IDL"
+  Registry/GetApplication --args "[\"$PROGRAM_ID\"]" --idl "$IDL"
 ```
 
-Should return your Application struct with `status: {"Building": null}`. If `null`, the registration didn't land — check the previous step's response.
+Should return your Application struct with `status: {"Building": null}`. If `null`, the registration didn't land — check the previous step's response. Note `GetApplication` is keyed on `program_id` (the contract row key), not the operator wallet hex — for Track B these are different.
 
 ## Step 5 — Submit for review
 
@@ -210,11 +221,11 @@ After registering, your application is in `Building` status. To move it to `Subm
 ```bash
 vara-wallet --account "$ACCT" --network testnet call "$PID" \
   Registry/SubmitApplication \
-  --args "[\"$HEX\"]" \
+  --args "[\"$PROGRAM_ID\"]" \
   --idl "$IDL"
 ```
 
-This is an owner self-call (caller must be the `operator` wallet). Trusted statuses (`Live`, `Finalist`, `Winner`) are admin-only via `Admin/SetApplicationStatus` — you cannot self-promote.
+This is an owner self-call (caller must be the `operator` wallet) but the call argument is `program_id`, not the operator's hex. Trusted statuses (`Live`, `Finalist`, `Winner`) are admin-only via `Admin/SetApplicationStatus` — you cannot self-promote.
 
 ## Step 6 — Update later (optional)
 
@@ -222,7 +233,7 @@ To edit your application's description, skills_url, idl_url, or contacts after r
 
 ```bash
 PATCH='[
-  "'"$HEX"'",
+  "'"$PROGRAM_ID"'",
   {"description": "Updated description here", "skills_url": null, "idl_url": null, "contacts": null}
 ]'
 
@@ -272,12 +283,12 @@ Six commands. Should run end-to-end in under 3 minutes.
 | programMessage | Cause | Fix |
 |---|---|---|
 | `InvalidGithubUrl` | github_url is `github.com/me` (no scheme) | use `https://github.com/me` |
-| `IdlUrlSuffix` | idl_url ends in `.IDL` or `.idl.txt` | rename to lowercase `.idl` extension |
-| `AllZeroHash` | `skills_hash` or `idl_hash` is `0x000...000` | generate with `openssl dgst -sha256 file` |
+| `InvalidIdlUrl` | idl_url ends in `.IDL` or `.idl.txt`, or doesn't start with `https://`/`ipfs://` | rename to lowercase `.idl` extension; host on https or ipfs |
+| `InvalidHash` | `skills_hash` or `idl_hash` is `0x000...000` (or wrong length) | generate with `openssl dgst -sha256 file` |
 | `HandleTaken` | someone already registered that handle | pick a different one (handles are unified across Participants and Applications) |
-| `HandleTooShort` / `HandleTooLong` | handle outside [3, 32] chars | adjust |
-| `InvalidHandle` | handle has uppercase, underscores, or other chars | use `[a-z0-9-]+` only |
-| `Unauthorized` (on UpdateApplication / SubmitApplication) | not signed by the operator wallet | use the same `--account` you registered with |
+| `HandleMalformed` | handle outside `[3, 32]` chars OR uses chars outside `[a-z0-9-_]` (uppercase, dots all rejected; underscores ARE allowed) | trim/lowercase |
+| `Unauthorized` / `NotOwner` (on UpdateApplication / SubmitApplication) | not signed by the operator wallet | use the same `--account` you registered with |
+| `UnknownApplication` (on GetApplication / SubmitApplication / UpdateApplication) | the `program_id` you passed isn't in the registry | check you're using the program_id (not operator wallet) and that registration succeeded |
 
 For the full error catalog, see `references/error-variants.md`.
 

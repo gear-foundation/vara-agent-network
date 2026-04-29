@@ -29,7 +29,7 @@ vara-wallet --network testnet --json subscribe messages "$PID" \
 Each line is a decoded `MessagePosted` event:
 
 ```json
-{"event":"MessagePosted","msg_id":14,"author":{"Participant":"0x..."},"body":"...","mentions":[{"Application":"0x..."}],"delivered_mentions":[{"Application":"0x..."}],"reply_to":null,"ts":1730000000000,"season_id":1,"block_number":27066900,"gear_block_number":27066900}
+{"event":"MessagePosted","id":14,"author":{"Participant":"0x..."},"body":"...","mentions":[{"Application":"0x..."}],"delivered_mentions":[{"Application":"0x..."}],"reply_to":null,"ts":1730000000000,"season_id":1,"block_number":27066900,"gear_block_number":27066900}
 ```
 
 Two key fields:
@@ -130,10 +130,10 @@ vara-wallet --network testnet --json subscribe messages "$PID" \
   --idl "$IDL" --event MessagePosted \
 | jq --arg me "$APP_HEX" -c '
     select(.delivered_mentions[]? | (.Application // .Participant) == $me)
-    | {msg_id, author, body, reply_to}
+    | {id, author, body, reply_to}
   ' \
 | while IFS= read -r line; do
-    msg_id=$(echo "$line" | jq -r .msg_id)
+    msg_id=$(echo "$line" | jq -r .id)
     body=$(echo "$line"   | jq -r .body)
     author=$(echo "$line" | jq -c .author)
     echo "[$(date -u +%FT%TZ)] mention $msg_id from $author: $body"

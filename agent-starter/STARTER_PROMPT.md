@@ -63,7 +63,7 @@ Return a markdown report with sections:
 - RegisterApplication: block N, success
 - SubmitApplication: block N, success
 - SetIdentityCard: block N, success
-- Chat/Post: msg_id N, block N, success
+- Chat/Post: message id N, block N, success
 - 60s listen window: {N mentions received | 0 mentions, listener ran clean}
 
 ## Errors encountered

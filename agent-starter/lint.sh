@@ -150,29 +150,53 @@ SUBSCRIBE_SUB='^subscribe[[:space:]]+(blocks|messages|mailbox|balance|transfers|
 # flags, leaving just the subcommand portion. Write to a temp file so the
 # while-loop runs in the parent shell (avoids the pipe-subshell variable trap).
 INVALID_LINES=$(mktemp /tmp/lint-vara-XXXX.txt)
-for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md README.md STARTER_PROMPT.md; do
+for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md README.md STARTER_PROMPT.md smoke.sh; do
   [ -f "$f" ] || continue
-  # Only match lines that BEGIN with `vara-wallet ` (after optional indent).
-  # Prose mentions like "Run `vara-wallet subscribe` in parallel" don't match
-  # because of the leading backtick. Real command invocations always start the
-  # line with the binary name. Skip lines containing a backtick before the
-  # binary name (inline code in prose).
+  # Match lines invoking vara-wallet, including the common compound forms:
+  #   vara-wallet ...                          (bare)
+  #   if ! vara-wallet ...                     (conditional)
+  #   out=$(vara-wallet ...)                   (capture)
+  #   timeout 60 vara-wallet ...               (wrapper)
+  #   $(...)/vara-wallet ...                   (path-prefixed)
+  # Skip prose: lines where vara-wallet appears inside backticks before any
+  # actual call site (`vara-wallet subscribe`).
   awk -v file="$f" '
-    /^[[:space:]]*vara-wallet[[:space:]]/ && !/`[^`]*vara-wallet/ {
-      line = $0
+    function strip_globals(line,    matched) {
+      while (match(line, /^(--account|--network|--seed|--mnemonic|--ws)[[:space:]]+[^[:space:]]+/)) {
+        line = substr(line, RLENGTH+1); sub(/^[[:space:]]+/, "", line); matched = 1
+      }
+      while (match(line, /^(--json|--human|--quiet|--verbose|--light|--timing)([[:space:]]|$)/)) {
+        line = substr(line, RLENGTH+1); sub(/^[[:space:]]+/, "", line); matched = 1
+      }
+      return line
+    }
+    {
+      orig = $0
+      # Skip lines that look like prose (backtick-wrapped vara-wallet mention,
+      # no follow-on shell context). Allow backtick code spans containing real
+      # commands by also matching cases where vara-wallet appears at the start
+      # of a code block line.
+      if (orig ~ /`[^`]*vara-wallet[^`]*`/ && orig !~ /^[[:space:]]*vara-wallet[[:space:]]/) next
+      # Strip leading conditional prefixes / wrappers / capture syntax.
+      tmp = orig
+      sub(/^[[:space:]]*/, "", tmp)
+      # if [!] vara-wallet
+      sub(/^if[[:space:]]+!?[[:space:]]*/, "", tmp)
+      # var=$(vara-wallet  OR  $(vara-wallet
+      sub(/^[A-Za-z_][A-Za-z0-9_]*=\$\([[:space:]]*/, "", tmp)
+      sub(/^\$\([[:space:]]*/, "", tmp)
+      # timeout N
+      sub(/^timeout[[:space:]]+[0-9]+[[:space:]]+/, "", tmp)
+      # path/to/vara-wallet → strip to bare binary
+      sub(/^[^[:space:]]*\//, "", tmp)
+      if (tmp !~ /^vara-wallet[[:space:]]/) next
+      line = tmp
       while (sub(/\\$/, "", line) > 0) {
         getline next_line
         line = line " " next_line
       }
-      sub(/^[[:space:]]*vara-wallet[[:space:]]+/, "", line)
-      while (match(line, /^(--account|--network|--seed|--mnemonic|--ws)[[:space:]]+[^[:space:]]+/)) {
-        line = substr(line, RLENGTH+1)
-        sub(/^[[:space:]]+/, "", line)
-      }
-      while (match(line, /^(--json|--human|--quiet|--verbose|--light|--timing)([[:space:]]|$)/)) {
-        line = substr(line, RLENGTH+1)
-        sub(/^[[:space:]]+/, "", line)
-      }
+      sub(/^vara-wallet[[:space:]]+/, "", line)
+      line = strip_globals(line)
       print file "\t" line
     }
   ' "$f"

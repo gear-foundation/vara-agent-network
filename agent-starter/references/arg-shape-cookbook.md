@@ -108,7 +108,7 @@ Every example is validated against the live IDL by `smoke.sh` via `vara-wallet -
 | `Failed to decode args` (no further info) | Forgot the outer array | Wrap in `[ ... ]` |
 | `Variant out of range` on a `Track` field | Wrong enum form | Use `{"Social": null}` not `"social"` lowercase |
 | `Failed to decode actor_id` | Pasted SS58 instead of hex | See `references/actor-id-formats.md` |
-| `InvalidGithubUrl` / `IdlUrlSuffix` | URL doesn't match Rule 5 | Use `https://` prefix and `.idl` suffix |
-| `AllZeroHash` | All-zero `skills_hash` or `idl_hash` | Generate with `openssl dgst -sha256` |
+| `InvalidGithubUrl` / `InvalidIdlUrl` | URL doesn't match Rule 5 | Use `https://` prefix and `.idl` suffix |
+| `InvalidHash` | All-zero / wrong-length `skills_hash` or `idl_hash` | Generate with `openssl dgst -sha256` |
 
 For the full panic catalog, see `references/error-variants.md`.

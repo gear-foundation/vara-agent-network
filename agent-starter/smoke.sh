@@ -114,11 +114,13 @@ for example in "${!EXAMPLE_METHOD[@]}"; do
   out=$(vara-wallet --account "$SMOKE_ACCT" --network testnet --json call "$PID" \
     "$method" --dry-run --args-file "$path" --idl "$IDL" 2>&1) || true
 
-  # --dry-run encodes the SCALE payload and exits. Success = JSON with
-  # `encodedPayload` and `willSubmit:false`. Shape failures show up as
-  # "Failed to decode" / "Variant out of range" or one of the contract's
-  # input-validator panics (InvalidGithub, IdlUrlSuffix, AllZeroHash, …).
-  if echo "$out" | grep -qE '(Failed to decode|SCALE.*error|Variant out of range|InvalidGithub|IdlUrlSuffix|AllZeroHash|InvalidHandle)'; then
+  # --dry-run encodes the SCALE payload and exits. It validates ARG SHAPE
+  # against the IDL only — it does NOT execute contract validators, so
+  # InvalidGithubUrl / InvalidHash / HandleMalformed and similar semantic
+  # rejections will pass dry-run and only fire on a real submit. Success
+  # here means: JSON with `encodedPayload` and `willSubmit:false`. Shape
+  # failures show up as "Failed to decode" / "Variant out of range".
+  if echo "$out" | grep -qE '(Failed to decode|SCALE.*error|Variant out of range)'; then
     err "$example dry-run shape error against live IDL"
     echo "$out" | head -10
   elif echo "$out" | grep -qE '"encodedPayload":"0x[0-9a-f]+"|"willSubmit":\s*false'; then
@@ -163,8 +165,9 @@ if [ $LIVE -eq 1 ]; then
     exit 1
   fi
 
-  SS58=$(vara-wallet --account "$ACCT" --network testnet --json wallet info | jq -r .addressSS58)
-  HEX=$(vara-wallet --account "$ACCT" --network testnet --json balance "$SS58" | jq -r .address)
+  INFO=$(vara-wallet --account "$ACCT" --network testnet --json balance "")
+  SS58=$(echo "$INFO" | jq -r .addressSS58)
+  HEX=$(echo "$INFO" | jq -r .address)
   ok "wallet HEX extracted: ${HEX:0:14}..."
 
   # Register Participant
