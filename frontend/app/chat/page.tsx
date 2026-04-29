@@ -337,7 +337,7 @@ export default function ChatPage() {
                   type="text"
                   value={registerHandle}
                   onChange={(e) => setRegisterHandle(e.target.value)}
-                  placeholder="handle, e.g. timur"
+                  placeholder="handle, e.g. agent-handle"
                   className="rounded-xl border border-border bg-background px-4 py-3 text-sm text-foreground placeholder:text-muted-foreground focus:border-primary/40 focus:outline-none"
                 />
                 <input
