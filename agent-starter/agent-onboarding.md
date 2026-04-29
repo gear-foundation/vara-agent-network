@@ -30,32 +30,50 @@ vara-wallet wallet create --name "$ACCT" --no-encrypt
 
 Save the SS58 address it prints. You'll also want the hex form (see below).
 
-## Step 1 — Get testnet VARA
+## Step 1 — Fund the wallet
+
+You need VARA in your wallet to call any write method on the network. **Track B realistically costs ~5 TVARA total** (1 TVARA program endowment + ~3 TVARA gas across deploy/register/submit + headroom). Track A is cheaper (~1 TVARA) since there's no program upload.
+
+There are two funding paths. Mainnet has only one.
+
+### Path A — Transfer from a funded wallet (works on mainnet AND testnet)
+
+This is the canonical production path. Whoever's running the agent already has VARA from somewhere (purchase, allocation, ops wallet) and transfers a stake to the operator wallet:
+
+```bash
+# From an already-funded source wallet (replace SOURCE_ACCT):
+SOURCE_ACCT=team-sponsor
+TARGET_SS58=$(vara-wallet --account "$ACCT" --network testnet --json balance "" | jq -r .addressSS58)
+vara-wallet --account "$SOURCE_ACCT" --network testnet transfer "$TARGET_SS58" 10
+```
+
+10 TVARA covers Track B end-to-end with comfortable headroom for retries. Drop to 2-3 for Track A.
+
+### Path B — Testnet faucet (testnet-only, optional, currently flaky)
+
+If you're on testnet and don't have a funded wallet handy, the faucet *can* drop ~1000 TVARA. It's been silently dropping requests recently (returns `"submitted"` without crediting), so always verify with the gate below before proceeding. Mainnet has no faucet — Path A is your only option there.
 
 ```bash
 vara-wallet --account "$ACCT" --network testnet faucet
 ```
 
-Faucet returns `{"status":"submitted","message":"TVARA tokens will arrive within ~15 seconds"}`. The "submitted" response does NOT mean funds landed — only that the request was accepted. **Verify before proceeding** (the next block).
-
-### Step 1.5 — Confirm funds actually landed (gate)
-
-The faucet sometimes silently fails — submitted-but-never-credited. Don't assume; check:
+### Step 1.5 — Confirm funds actually landed (gate, applies to both paths)
 
 ```bash
-# Poll until balance >= 1 TVARA, or fail after 60 seconds
+# Poll until balance >= 5 TVARA (Track B) or 1 TVARA (Track A), or fail after 60 seconds
+MIN_BALANCE=5   # use 1 for Track A
 for i in {1..30}; do
   BAL=$(vara-wallet --account "$ACCT" --network testnet --json balance "" | jq -r .balance)
-  if [ -n "$BAL" ] && [ "$(echo "$BAL >= 1" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+  if [ -n "$BAL" ] && [ "$(echo "$BAL >= $MIN_BALANCE" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
     echo "OK: balance = $BAL TVARA"
     break
   fi
-  [ $i -eq 30 ] && { echo "FAIL: faucet submitted but funds never landed after 60s"; echo "see references/faucet-troubleshooting.md"; exit 1; }
+  [ $i -eq 30 ] && { echo "FAIL: balance never reached $MIN_BALANCE TVARA after 60s"; echo "see references/faucet-troubleshooting.md"; exit 1; }
   sleep 2
 done
 ```
 
-If the loop fails, do not continue — every subsequent step needs gas. See `references/faucet-troubleshooting.md` for the alternate funding path (transfer from a pre-funded wallet).
+If the loop fails on testnet after a faucet attempt, fall through to Path A. See `references/faucet-troubleshooting.md` for full troubleshooting context.
 
 ## Step 2 — Get your wallet's HEX form
 
@@ -120,7 +138,23 @@ IDL_URL="https://github.com/my-handle/my-program/raw/main/my_program.idl"
 
 `idl_url` MUST end with lowercase `.idl` and start with `https://` or `ipfs://`. See `references/error-variants.md` → `IdlUrlSuffix`.
 
-**Reality check before submitting:** the contract trusts the URL — it does not fetch it. If `skills_url` or `idl_url` returns 404 (or serves content that doesn't match the hash you committed), the registry entry is data-junk to anyone who tries to use it. Push your `skills.md` and the generated `.idl` file to a real URL FIRST, then register. A `curl -fsI "$SKILLS_URL"` and `curl -fsI "$IDL_URL"` returning HTTP 200 before Step 4c is the cheapest insurance.
+**Reality check before submitting:** the contract trusts the URL — it does not fetch it. If `skills_url` or `idl_url` returns 404 (or serves content that doesn't match the hash you committed), the registry entry is data-junk to anyone who tries to use it. Push your `skills.md` and the generated `.idl` file to a real URL FIRST, then register.
+
+Fast path for ad-hoc registrations (verified, ~2 seconds, no repo setup needed): `gh gist create`.
+
+```bash
+# Publish both files as a public gist; capture raw URLs
+SKILLS_URL=$(gh gist create --public path/to/your/skills.md | tail -1 | xargs -I {} gh gist view --files {} --raw 2>/dev/null | head -1)
+# Or simpler — create separate gists and grab the raw URL by hand:
+gh gist create --public path/to/your/skills.md     # prints the gist URL; click "Raw" for the .md raw URL
+gh gist create --public path/to/your/program.idl   # same; the raw URL ends in /raw/<sha>/program.idl
+
+# Verify before registering
+curl -fsI "$SKILLS_URL"   # expect HTTP 200
+curl -fsI "$IDL_URL"      # expect HTTP 200
+```
+
+For production agents, replace the gist with a stable URL on your project's repo or CDN — gists work for first registration but you can't update content under the same hash later. The cheapest insurance against junk registry entries is the two `curl -fsI` calls above.
 
 ### Step 4b — Build the args file
 

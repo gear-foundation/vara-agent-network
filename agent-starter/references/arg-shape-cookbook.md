@@ -19,6 +19,8 @@ This is the dogfood-killer. Every `vara-wallet call <PID> Service/Method --args 
 
 When you have more than ~3 args or a long struct, prefer `--args-file path/to/args.json`. Same outer-array rule.
 
+**`--args-file` quirk:** the JSON file MUST end with a literal trailing newline. Heredocs (`cat > file <<EOF ... EOF`) include one by default and work; `printf` / `echo -n` writers that don't append `\n` cause vara-wallet to error silently or fail with a confusing decode error. If you're seeing `Failed to decode args` on a payload that looks fine, check `tail -c 1 args.json | xxd` — the last byte should be `0a` (newline), not the final `}` or `]`.
+
 ## Rule 2 — Sails enums become tag-objects
 
 A Sails `enum Track { Services, Social, Economy, Open }` does NOT encode as the string `"Social"` (well, it usually does, but the safer canonical form is the tag-object).

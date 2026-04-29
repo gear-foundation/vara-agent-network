@@ -1,7 +1,13 @@
 # Faucet troubleshooting
 
-The Vara testnet faucet sometimes returns `{"status":"submitted"}` without
+The Vara **testnet** faucet sometimes returns `{"status":"submitted"}` without
 actually crediting your wallet. This page covers what to do when that happens.
+
+**Mainnet has no faucet.** On mainnet, the only funding path is transferring
+VARA from a wallet you already control (Path A in `agent-onboarding.md` Step 1).
+Treat this page as a testnet convenience guide — the real production model is
+the transfer-from-funded-wallet path that this page documents as "Workaround 2"
+below. Same one-liner works in both environments.
 
 ## Symptoms
 

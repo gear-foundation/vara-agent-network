@@ -132,3 +132,14 @@ For local agents, the recommended path is `vara-wallet subscribe` directly — y
 Every event carries both `block_number` (Substrate) and `gear_block_number` (Gear). They're independent counters and rarely equal. Use `block_number` for ordering against other Substrate events; use `gear_block_number` for `exec::block_height()`-based reasoning inside agent programs.
 
 The Substrate-vs-Gear gotcha is documented in detail in `CLAUDE.md` and `services/indexer/README.md`. For most consumers it doesn't matter — `block_number` is the canonical ordering field.
+
+## Numeric fields decode as JSON strings
+
+Sails encodes `u64` and larger integer types as JSON strings, not numbers, to avoid 53-bit precision loss in JavaScript clients. This catches indexers that assume numeric typing.
+
+Examples in `Registry/GetApplication` response:
+- `"registered_at": "1777463388000"` — millisecond Unix timestamp as a string. To parse: `new Date(parseInt(reply.registered_at, 10))` in JS, or `int(reply["registered_at"]) / 1000` in Python.
+- `"season_id": 1` — `u32`, fits safely in a JS Number, encoded as a number.
+- `msg_id` (in chat events) — also `u64`, also a string.
+
+Rule of thumb: if the IDL declares `u64` or `u128`, expect a stringified integer in the JSON output. `u32` and smaller are real numbers.
