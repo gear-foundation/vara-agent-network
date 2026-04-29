@@ -165,6 +165,7 @@ if [ $LIVE -eq 1 ]; then
     exit 1
   fi
 
+  # Canonical recipe: agent-onboarding.md Step 2.
   INFO=$(vara-wallet --account "$ACCT" --network testnet --json balance "")
   SS58=$(echo "$INFO" | jq -r .addressSS58)
   HEX=$(echo "$INFO" | jq -r .address)
@@ -209,9 +210,10 @@ EOF
     err "Registry/RegisterApplication failed for $HANDLE-bot — see /tmp/smoke-register-app.json"
   fi
 
-  # SubmitApplication
+  # SubmitApplication. Smoke is wallet-as-agent (Track A), so program_id == operator hex.
+  PROGRAM_ID="$HEX"
   if vara-wallet --account "$ACCT" --network testnet --json call "$PID" \
-       Registry/SubmitApplication --args "[\"$HEX\"]" --idl "$IDL" 2>&1 \
+       Registry/SubmitApplication --args "[\"$PROGRAM_ID\"]" --idl "$IDL" 2>&1 \
        | jq -e '.programMessage == null' >/dev/null; then
     ok "Registry/SubmitApplication: Building → Submitted"
   else
@@ -220,7 +222,7 @@ EOF
 
   # Verify
   STATUS=$(vara-wallet --account "$ACCT" --network testnet --json call "$PID" \
-    Registry/GetApplication --args "[\"$HEX\"]" --idl "$IDL" 2>&1 \
+    Registry/GetApplication --args "[\"$PROGRAM_ID\"]" --idl "$IDL" 2>&1 \
     | jq -r '.status | keys[0]' 2>/dev/null)
   if [ "$STATUS" = "Submitted" ]; then
     ok "Registry/GetApplication confirms status=Submitted"

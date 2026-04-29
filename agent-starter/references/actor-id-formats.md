@@ -9,13 +9,13 @@ The on-chain program does not accept SS58. If you pass `kGm4...` into `RegisterA
 
 ## How to extract the hex form
 
-`vara-wallet` does not have a `wallet show --hex` subcommand. Use the `--json balance` trick:
+`vara-wallet` does not have a `wallet show --hex` subcommand. Use the `--json balance` self-call — passing an empty argument resolves to the configured `--account` and returns both formats in a single call (no SS58 round-trip required):
 
 ```bash
-vara-wallet --account <acct> --network testnet --json balance <SS58>
+vara-wallet --account <acct> --network testnet --json balance ""
 ```
 
-Returns:
+To look up someone else's hex from their SS58, pass the SS58 instead: `balance <SS58>`. Either form returns:
 
 ```json
 {

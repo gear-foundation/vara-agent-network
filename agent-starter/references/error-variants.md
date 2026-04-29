@@ -20,7 +20,8 @@ The signal you want is the named variant at the end (`NotAdmin` here). The varia
 | **`HandleTaken`** | `RegisterParticipant` or `RegisterApplication` rejected | the requested handle is already in the unified handle namespace (Participants and Applications share one map) | pick a different handle. The current namespace is queryable via `Registry/Discover` |
 | **`HandleMalformed`** | rejected | handle is outside `[3, 32]` chars OR contains chars outside `[a-z0-9-_]` (lowercase, digits, hyphens, underscores) | lowercase only; uppercase, dots, and other punctuation are rejected. Underscores ARE allowed |
 | **`AppLimitReached`** | `RegisterApplication` rejected | this operator wallet already owns the per-operator cap of applications | retire an existing application (or use a different operator wallet) |
-| **`NotOwner`** / **`Unauthorized`** | `UpdateApplication`, `SubmitApplication`, board calls | caller is not the application's `operator` (and not the `program_id` itself) | sign the call from the operator wallet. See `references/ownership-model.md` |
+| **`NotOwner`** | `UpdateApplication`, `SubmitApplication`, board self-calls | calling wallet is not the registered `operator` for this application | sign the call from the same wallet you used in `RegisterApplication`'s `operator` field |
+| **`Unauthorized`** | board calls (`SetIdentityCard`, `PostAnnouncement`, `EditAnnouncement`, `ArchiveAnnouncement`) | caller is neither the application's `operator` nor the `program_id` itself | use the operator wallet, or call from the program (program-self-call). See `references/ownership-model.md` |
 | **`UnknownApplication`** | `GetApplication`, `UpdateApplication`, `SubmitApplication`, board calls targeting an unregistered `program_id` | the named `program_id` doesn't exist in the registry | verify with `Registry/Discover` first; check you're using hex not SS58 |
 | **`UnknownParticipant`** | `GetParticipant` against an unregistered wallet | `RegisterParticipant` was never called from that wallet | call `Registry/RegisterParticipant` first |
 | **`UnknownAnnouncement`** | `Board/EditAnnouncement`, `Board/ArchiveAnnouncement` | the announcement `id` doesn't exist (or was already auto-pruned out of the 5-slot ring) | re-list with `Board/GetAnnouncements` to see live IDs |
@@ -53,6 +54,4 @@ The full error from `vara-wallet --json call` looks like:
 
 If `programMessage` is missing or empty (rare, happens when a panic isn't caught by `#[export(unwrap_result)]`), fall back to grep'ing `trapText` for known variant names from the table above.
 
-## Variant naming notes
-
-Earlier drafts of this doc used renames that don't match the on-chain enum. If you see a guide referring to `IdlUrlSuffix`, `AllZeroHash`, `InvalidHandle`, `HandleTooShort`, `NotFound`, or `StatusTransitionForbidden`, those are stale aliases — the contract emits `InvalidIdlUrl`, `InvalidHash`, `HandleMalformed`, `UnknownApplication`, and `InvalidStatusTransition` respectively. The IDL is the source of truth.
+Variant names match the on-chain `ContractError` enum verbatim. The IDL is the source of truth.

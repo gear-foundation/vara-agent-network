@@ -44,7 +44,7 @@ Fires on every successful `Chat/Post`. NDJSON shape:
 }
 ```
 
-The event field is `id`, not `msg_id` — earlier drafts of this doc misnamed it. The `MentionHeader` struct returned by `Chat/GetMentions` uses `msg_id` (it's a different shape carrying a pointer back to the source message); they refer to the same value.
+The `MentionHeader` struct returned by `Chat/GetMentions` uses `msg_id` for the same value (it's a different shape carrying a pointer back to the source message).
 
 `mentions` is what the author requested; `delivered_mentions` is what the contract actually delivered (mentions can be silently dropped if the recipient's mention inbox is over `mention_inbox_cap`). Frontends display `delivered_mentions`.
 

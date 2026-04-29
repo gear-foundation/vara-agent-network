@@ -149,46 +149,31 @@ SUBSCRIBE_SUB='^subscribe[[:space:]]+(blocks|messages|mailbox|balance|transfers|
 # continuation lines joined), strip the leading `vara-wallet ` and any global
 # flags, leaving just the subcommand portion. Write to a temp file so the
 # while-loop runs in the parent shell (avoids the pipe-subshell variable trap).
-INVALID_LINES=$(mktemp /tmp/lint-vara-XXXX.txt)
+CANDIDATES=$(mktemp /tmp/lint-vara-XXXX.txt)
 for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md README.md STARTER_PROMPT.md smoke.sh; do
   [ -f "$f" ] || continue
   # Match lines invoking vara-wallet, including the common compound forms:
-  #   vara-wallet ...                          (bare)
-  #   if ! vara-wallet ...                     (conditional)
-  #   out=$(vara-wallet ...)                   (capture)
-  #   timeout 60 vara-wallet ...               (wrapper)
-  #   $(...)/vara-wallet ...                   (path-prefixed)
-  # Skip prose: lines where vara-wallet appears inside backticks before any
-  # actual call site (`vara-wallet subscribe`).
+  # bare, `if ! vara-wallet`, `out=$(vara-wallet`, `timeout 60 vara-wallet`,
+  # `path/to/vara-wallet`. Skip prose: lines where vara-wallet appears inside
+  # backticks AND not at the start of a shell line (e.g. "Run `vara-wallet
+  # subscribe` in parallel.").
   awk -v file="$f" '
-    function strip_globals(line,    matched) {
+    function strip_globals(line) {
       while (match(line, /^(--account|--network|--seed|--mnemonic|--ws)[[:space:]]+[^[:space:]]+/)) {
-        line = substr(line, RLENGTH+1); sub(/^[[:space:]]+/, "", line); matched = 1
+        line = substr(line, RLENGTH+1); sub(/^[[:space:]]+/, "", line)
       }
       while (match(line, /^(--json|--human|--quiet|--verbose|--light|--timing)([[:space:]]|$)/)) {
-        line = substr(line, RLENGTH+1); sub(/^[[:space:]]+/, "", line); matched = 1
+        line = substr(line, RLENGTH+1); sub(/^[[:space:]]+/, "", line)
       }
       return line
     }
     {
       orig = $0
-      # Skip lines that look like prose (backtick-wrapped vara-wallet mention,
-      # no follow-on shell context). Allow backtick code spans containing real
-      # commands by also matching cases where vara-wallet appears at the start
-      # of a code block line.
       if (orig ~ /`[^`]*vara-wallet[^`]*`/ && orig !~ /^[[:space:]]*vara-wallet[[:space:]]/) next
-      # Strip leading conditional prefixes / wrappers / capture syntax.
       tmp = orig
-      sub(/^[[:space:]]*/, "", tmp)
-      # if [!] vara-wallet
-      sub(/^if[[:space:]]+!?[[:space:]]*/, "", tmp)
-      # var=$(vara-wallet  OR  $(vara-wallet
-      sub(/^[A-Za-z_][A-Za-z0-9_]*=\$\([[:space:]]*/, "", tmp)
-      sub(/^\$\([[:space:]]*/, "", tmp)
-      # timeout N
-      sub(/^timeout[[:space:]]+[0-9]+[[:space:]]+/, "", tmp)
-      # path/to/vara-wallet → strip to bare binary
-      sub(/^[^[:space:]]*\//, "", tmp)
+      # Strip leading whitespace + any of the supported call-site prefixes in
+      # one pass: `if [!] `, `var=$(`, `$(`, `timeout N `, or `path/`.
+      sub(/^[[:space:]]*(if[[:space:]]+!?[[:space:]]*|[A-Za-z_][A-Za-z0-9_]*=\$\([[:space:]]*|\$\([[:space:]]*|timeout[[:space:]]+[0-9]+[[:space:]]+|[^[:space:]]*\/)?/, "", tmp)
       if (tmp !~ /^vara-wallet[[:space:]]/) next
       line = tmp
       while (sub(/\\$/, "", line) > 0) {
@@ -200,9 +185,10 @@ for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discove
       print file "\t" line
     }
   ' "$f"
-done > "$INVALID_LINES.candidates"
+done > "$CANDIDATES"
 
 # Stage 2: each candidate's subcommand portion must match an allowlist entry.
+INVALID=$(mktemp /tmp/lint-vara-bad-XXXX.txt)
 while IFS=$'\t' read -r file cmd; do
   [ -z "$cmd" ] && continue
   case "$cmd" in
@@ -213,18 +199,18 @@ while IFS=$'\t' read -r file cmd; do
      || echo "$cmd" | grep -qE "$SUBSCRIBE_SUB"; then
     continue
   fi
-  echo "$file: $cmd" >> "$INVALID_LINES"
-done < "$INVALID_LINES.candidates"
-rm -f "$INVALID_LINES.candidates"
+  echo "$file: $cmd" >> "$INVALID"
+done < "$CANDIDATES"
+rm -f "$CANDIDATES"
 
-if [ -s "$INVALID_LINES" ]; then
+if [ -s "$INVALID" ]; then
   while IFS= read -r entry; do
     err "vara-wallet subcommand not in allowlist — $entry"
-  done < "$INVALID_LINES"
+  done < "$INVALID"
 else
   ok "vara-wallet subcommands match allowlist"
 fi
-rm -f "$INVALID_LINES"
+rm -f "$INVALID"
 
 echo ""
 echo "----------------------------------------"
