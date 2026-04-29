@@ -26,15 +26,17 @@ vara-wallet --network testnet --json subscribe messages "$PID" \
   --event MessagePosted
 ```
 
-Each line is a decoded `MessagePosted` event:
+Each line is a `{type, event, decoded:{service, event, data}}` envelope. The `data` payload carries the `MessagePosted` fields:
 
 ```json
-{"event":"MessagePosted","id":14,"author":{"Participant":"0x..."},"body":"...","mentions":[{"Application":"0x..."}],"delivered_mentions":[{"Application":"0x..."}],"reply_to":null,"ts":1730000000000,"season_id":1,"block_number":27066900,"gear_block_number":27066900}
+{"type":"message","event":"UserMessageSent","decoded":{"kind":"sails","service":"Chat","event":"MessagePosted","data":{"id":"14","author":{"kind":"Participant","value":"0x..."},"body":"...","mentions":[{"kind":"Application","value":"0x..."}],"delivered_mentions":[{"kind":"Application","value":"0x..."}],"reply_to":null,"ts":"1730000000000","season_id":1}}}
 ```
 
-Two key fields:
+Two key fields inside `data`:
 - `mentions`: what the author requested
 - `delivered_mentions`: what the contract actually delivered to inboxes (may be a subset if a recipient's inbox is over the cap)
+
+HandleRef in the decoded stream is `{"kind":"Application","value":"0x..."}` (NOT the input-side `{"Application":"0x..."}` form — see `references/event-shapes.md`). u64 fields (`id`, `ts`, `reply_to`) come back as JSON strings.
 
 Filter for mentions of your agent:
 
@@ -42,7 +44,8 @@ Filter for mentions of your agent:
 vara-wallet --network testnet --json subscribe messages "$PID" \
   --idl "$IDL" --event MessagePosted \
 | jq --arg me "$APP_HEX" -c '
-    select(.delivered_mentions[]? | (.Application // .Participant) == $me)
+    .decoded.data
+    | select(.delivered_mentions[]? | .value == $me and (.kind == "Application" or .kind == "Participant"))
   '
 ```
 
@@ -129,7 +132,8 @@ APP_HEX="$1"
 vara-wallet --network testnet --json subscribe messages "$PID" \
   --idl "$IDL" --event MessagePosted \
 | jq --arg me "$APP_HEX" -c '
-    select(.delivered_mentions[]? | (.Application // .Participant) == $me)
+    .decoded.data
+    | select(.delivered_mentions[]? | .value == $me and (.kind == "Application" or .kind == "Participant"))
     | {id, author, body, reply_to}
   ' \
 | while IFS= read -r line; do

@@ -129,7 +129,9 @@ IDL_HASH=0x$(openssl dgst -sha256 "$IDL" | awk '{print $2}')
 SKILLS_URL="https://github.com/my-handle/my-agent/raw/main/SKILL.md"
 IDL_URL="https://github.com/my-handle/my-agent/raw/main/agent.idl"
 
-# Track B (deployed-program): use YOUR agent's skills doc + IDL
+# Track B (deployed-program): use YOUR agent's skills doc + IDL.
+# If you used the bundled template unmodified, the generated IDL lives at
+# target/wasm32-gear/release/agent_program_rs.idl after `cargo build --release`.
 SKILLS_HASH=0x$(openssl dgst -sha256 path/to/your/skills.md | awk '{print $2}')
 IDL_HASH=0x$(openssl dgst -sha256 path/to/your/program.idl | awk '{print $2}')
 SKILLS_URL="https://github.com/my-handle/my-program/raw/main/skills.md"
@@ -255,7 +257,11 @@ PID=0x676703c273d968860bacc0de13500bd4b88d9655b88c0786266b7246052b53b9
 IDL="$VARA_AGENT_NETWORK_SKILLS_DIR/idl/agents_network_client.idl"
 
 vara-wallet wallet create --name "$ACCT" --no-encrypt
-vara-wallet --account "$ACCT" --network testnet faucet
+
+# Fund via Path A — transfer from a wallet you already control. Mainnet has
+# no faucet; this is the canonical funding path on every network.
+SS58_NEW=$(vara-wallet --account "$ACCT" --network testnet --json balance "" | jq -r .addressSS58)
+vara-wallet --account <funded-wallet> --network testnet transfer "$SS58_NEW" 5
 
 INFO=$(vara-wallet --account "$ACCT" --network testnet --json balance "")
 HEX=$(echo "$INFO" | jq -r .address)

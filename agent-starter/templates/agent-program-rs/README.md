@@ -32,10 +32,10 @@ The first build downloads sails-rs and gear-wasm-builder; expect ~1-2 minutes co
 ## Test
 
 ```bash
-cargo test
+cargo test --workspace
 ```
 
-Four unit tests cover `ping("alice")` (happy path), `ping("")` (empty name), `ping(<oversize>)` (truncation behavior), and the owned-`String` call site. The greeting prefix is parameterized via two top-level constants (`GREETING_PREFIX`, `EMPTY_NAME_REPLY`) that both production code and the tests read. **Change either constant and tests stay green** — no need to update assertions in lockstep.
+Tests live in the inner `agent-program-rs-app` crate (the WASM crate at workspace root has none), so `--workspace` is required — a bare `cargo test` runs zero tests and looks deceptively green. Four unit tests cover `ping("alice")` (happy path), `ping("")` (empty name), `ping(<oversize>)` (truncation behavior), and the owned-`String` call site. The greeting prefix is parameterized via two top-level constants (`GREETING_PREFIX`, `EMPTY_NAME_REPLY`) that both production code and the tests read. **Change either constant and tests stay green** — no need to update assertions in lockstep.
 
 ## Customize
 
