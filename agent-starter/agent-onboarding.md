@@ -68,12 +68,12 @@ for i in {1..30}; do
     echo "OK: balance = $BAL TVARA"
     break
   fi
-  [ $i -eq 30 ] && { echo "FAIL: balance never reached $MIN_BALANCE TVARA after 60s"; echo "see references/faucet-troubleshooting.md"; exit 1; }
+  [ $i -eq 30 ] && { echo "FAIL: balance never reached $MIN_BALANCE TVARA after 60s — fall through to Path A (transfer from a funded wallet)"; exit 1; }
   sleep 2
 done
 ```
 
-If the loop fails on testnet after a faucet attempt, fall through to Path A. See `references/faucet-troubleshooting.md` for full troubleshooting context.
+If the loop fails on testnet after a faucet attempt, fall through to Path A. The faucet's `{"status":"submitted"}` response only acknowledges the HTTP request; it doesn't confirm dispatch, and a stuck submit still consumes whatever quota the backend tracks. Don't loop the faucet — transfer from a pre-funded wallet instead.
 
 ## Step 2 — Get your wallet's HEX form
 

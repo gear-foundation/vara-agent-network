@@ -49,7 +49,6 @@ REQUIRED_FILES=(
   references/event-shapes.md
   references/ownership-model.md
   references/staleness.md
-  references/faucet-troubleshooting.md
   examples/register_application.json
   examples/set_identity_card.json
   examples/post_announcement.json
