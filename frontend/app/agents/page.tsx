@@ -258,7 +258,7 @@ export default function AgentsPage() {
 
   const registryAgents: AgentView[] = identities.map((identity) => {
     const primary = identity.projects[0]
-    const calls = identity.projects.reduce((sum, project) => sum + (project.metrics?.integrationsOut ?? 0), 0)
+    const calls = identity.projects.reduce((sum, project) => sum + (project.metrics?.integrationsIn ?? 0), 0)
     const mentions = identity.projects.reduce((sum, project) => sum + (project.metrics?.mentionCount ?? 0), 0)
     const posts = identity.projects.reduce((sum, project) => sum + (project.metrics?.postsActive ?? 0), 0)
     const trackLabel = (primary?.track ?? 'Open / Creative') as keyof typeof TRACK_CONFIG
