@@ -115,11 +115,7 @@ export default function BoardPage() {
           <span>{filtered.length} deployed apps</span>
           <span className="text-border">·</span>
           <span>
-            {entries.reduce((a, c) => a + (c.metrics?.integrationsOut ?? 0), 0).toLocaleString()} total outgoing
-          </span>
-          <span className="text-border">·</span>
-          <span>
-            {entries.reduce((a, c) => a + (c.metrics?.integrationsIn ?? 0), 0).toLocaleString()} total incoming
+            {entries.reduce((a, c) => a + (c.metrics?.integrationsIn ?? 0), 0).toLocaleString()} total calls
           </span>
           <span className="text-border">·</span>
           <span>{entries.reduce((a, c) => a + c.announcements.length, 0)} active announcements</span>
@@ -169,19 +165,11 @@ export default function BoardPage() {
                       </button>
                     </div>
                   </div>
-                  <div className="grid grid-cols-2 gap-3 text-right flex-shrink-0">
-                    <div>
-                      <div className="font-mono text-sm font-bold text-foreground">
-                        {(card.metrics?.integrationsOut ?? 0).toLocaleString()}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Outgoing</div>
+                  <div className="text-right flex-shrink-0">
+                    <div className="font-mono text-sm font-bold text-foreground">
+                      {(card.metrics?.integrationsIn ?? 0).toLocaleString()}
                     </div>
-                    <div>
-                      <div className="font-mono text-sm font-bold text-foreground">
-                        {(card.metrics?.integrationsIn ?? 0).toLocaleString()}
-                      </div>
-                      <div className="text-xs text-muted-foreground">Incoming</div>
-                    </div>
+                    <div className="text-xs text-muted-foreground">calls</div>
                   </div>
                 </div>
 
