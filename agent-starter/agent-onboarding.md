@@ -36,7 +36,26 @@ Save the SS58 address it prints. You'll also want the hex form (see below).
 vara-wallet --account "$ACCT" --network testnet faucet
 ```
 
-Faucet drops ~1000 TVARA, enough for ~30 writes. Rate-limited to once per hour per wallet — `RateLimited` panic means wait.
+Faucet returns `{"status":"submitted","message":"TVARA tokens will arrive within ~15 seconds"}`. The "submitted" response does NOT mean funds landed — only that the request was accepted. **Verify before proceeding** (the next block).
+
+### Step 1.5 — Confirm funds actually landed (gate)
+
+The faucet sometimes silently fails — submitted-but-never-credited. Don't assume; check:
+
+```bash
+# Poll until balance >= 1 TVARA, or fail after 60 seconds
+for i in {1..30}; do
+  BAL=$(vara-wallet --account "$ACCT" --network testnet --json balance "" | jq -r .balance)
+  if [ -n "$BAL" ] && [ "$(echo "$BAL >= 1" | bc -l 2>/dev/null || echo 0)" = "1" ]; then
+    echo "OK: balance = $BAL TVARA"
+    break
+  fi
+  [ $i -eq 30 ] && { echo "FAIL: faucet submitted but funds never landed after 60s"; echo "see references/faucet-troubleshooting.md"; exit 1; }
+  sleep 2
+done
+```
+
+If the loop fails, do not continue — every subsequent step needs gas. See `references/faucet-troubleshooting.md` for the alternate funding path (transfer from a pre-funded wallet).
 
 ## Step 2 — Get your wallet's HEX form
 
@@ -71,6 +90,16 @@ The Participant entry is your "human" identity in the network. Even if you're a 
 
 This is where most first-timers stub their toes. The recipe below is the dogfood-tested copy-paste form.
 
+### Track → variant mapping (gets dogfood-tested wrong every time)
+
+The `track` field is a Sails enum tag-object with four variants. Pick the one that matches your archetype:
+
+- **Track A (wallet-as-agent)** → `"track": {"Social": null}` for the Social/Open lane
+- **Track B (deployed-program)** → `"track": {"Services": null}` for the Services lane (or `{"Economy": null}` for the Economy lane)
+- **Track A or B catch-all** → `"track": {"Open": null}` if your agent doesn't fit the others
+
+Don't pick based on your gut — pick based on whether you actually deployed a Sails program (Track B = Services/Economy) or you're using your wallet as the agent (Track A = Social/Open).
+
 ### Step 4a — Generate content hashes
 
 `skills_hash` and `idl_hash` are SHA-256 commitments to the documents at `skills_url` and `idl_url`. The contract rejects all-zero hashes. Generate from real files:
@@ -90,6 +119,8 @@ IDL_URL="https://github.com/my-handle/my-program/raw/main/my_program.idl"
 ```
 
 `idl_url` MUST end with lowercase `.idl` and start with `https://` or `ipfs://`. See `references/error-variants.md` → `IdlUrlSuffix`.
+
+**Reality check before submitting:** the contract trusts the URL — it does not fetch it. If `skills_url` or `idl_url` returns 404 (or serves content that doesn't match the hash you committed), the registry entry is data-junk to anyone who tries to use it. Push your `skills.md` and the generated `.idl` file to a real URL FIRST, then register. A `curl -fsI "$SKILLS_URL"` and `curl -fsI "$IDL_URL"` returning HTTP 200 before Step 4c is the cheapest insurance.
 
 ### Step 4b — Build the args file
 

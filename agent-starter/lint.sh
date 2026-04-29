@@ -49,6 +49,7 @@ REQUIRED_FILES=(
   references/event-shapes.md
   references/ownership-model.md
   references/staleness.md
+  references/faucet-troubleshooting.md
   examples/register_application.json
   examples/set_identity_card.json
   examples/post_announcement.json
@@ -131,6 +132,76 @@ if make -s check-idl 2>&1 | grep -q ERROR; then
 else
   ok "IDL in sync with programs/agents-network/client/"
 fi
+
+# 7. vara-wallet subcommand allowlist
+# `bash -n` only catches syntax. It can't detect a `vara-wallet wallet info`
+# call where the subcommand doesn't exist. This grep-based check catches the
+# class of bug where docs reference a subcommand that vara-wallet doesn't have.
+# Allowlist below matches `vara-wallet [global flags] <subcommand>` patterns
+# that actually exist in vara-wallet 0.16.0. Update on CLI version bumps.
+# Allowlist: top-level vara-wallet subcommands + the inner subcommand for the
+# two-level commands (wallet/subscribe). Match against `first1` OR `first1+first2`.
+# Update on vara-wallet CLI version bumps.
+TOP_LEVEL='^(call|faucet|balance|transfer|node|init|message|mailbox|program|code|state|wait|watch|discover|idl|metadata|vft|voucher|encode|decode|sign|verify|tx|query)([[:space:]]|$)'
+WALLET_SUB='^wallet[[:space:]]+(create|import|list|export|keys|default)([[:space:]]|$)'
+SUBSCRIBE_SUB='^subscribe[[:space:]]+(blocks|messages|mailbox|balance|transfers|program)([[:space:]]|$)'
+
+# Stage 1: extract candidate lines (one per vara-wallet invocation, with
+# continuation lines joined), strip the leading `vara-wallet ` and any global
+# flags, leaving just the subcommand portion. Write to a temp file so the
+# while-loop runs in the parent shell (avoids the pipe-subshell variable trap).
+INVALID_LINES=$(mktemp /tmp/lint-vara-XXXX.txt)
+for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md README.md STARTER_PROMPT.md; do
+  [ -f "$f" ] || continue
+  # Only match lines that BEGIN with `vara-wallet ` (after optional indent).
+  # Prose mentions like "Run `vara-wallet subscribe` in parallel" don't match
+  # because of the leading backtick. Real command invocations always start the
+  # line with the binary name. Skip lines containing a backtick before the
+  # binary name (inline code in prose).
+  awk -v file="$f" '
+    /^[[:space:]]*vara-wallet[[:space:]]/ && !/`[^`]*vara-wallet/ {
+      line = $0
+      while (sub(/\\$/, "", line) > 0) {
+        getline next_line
+        line = line " " next_line
+      }
+      sub(/^[[:space:]]*vara-wallet[[:space:]]+/, "", line)
+      while (match(line, /^(--account|--network|--seed|--mnemonic|--ws)[[:space:]]+[^[:space:]]+/)) {
+        line = substr(line, RLENGTH+1)
+        sub(/^[[:space:]]+/, "", line)
+      }
+      while (match(line, /^(--json|--human|--quiet|--verbose|--light|--timing)([[:space:]]|$)/)) {
+        line = substr(line, RLENGTH+1)
+        sub(/^[[:space:]]+/, "", line)
+      }
+      print file "\t" line
+    }
+  ' "$f"
+done > "$INVALID_LINES.candidates"
+
+# Stage 2: each candidate's subcommand portion must match an allowlist entry.
+while IFS=$'\t' read -r file cmd; do
+  [ -z "$cmd" ] && continue
+  case "$cmd" in
+    \"*|\'*|\`*) continue ;;
+  esac
+  if echo "$cmd" | grep -qE "$TOP_LEVEL" \
+     || echo "$cmd" | grep -qE "$WALLET_SUB" \
+     || echo "$cmd" | grep -qE "$SUBSCRIBE_SUB"; then
+    continue
+  fi
+  echo "$file: $cmd" >> "$INVALID_LINES"
+done < "$INVALID_LINES.candidates"
+rm -f "$INVALID_LINES.candidates"
+
+if [ -s "$INVALID_LINES" ]; then
+  while IFS= read -r entry; do
+    err "vara-wallet subcommand not in allowlist — $entry"
+  done < "$INVALID_LINES"
+else
+  ok "vara-wallet subcommands match allowlist"
+fi
+rm -f "$INVALID_LINES"
 
 echo ""
 echo "----------------------------------------"

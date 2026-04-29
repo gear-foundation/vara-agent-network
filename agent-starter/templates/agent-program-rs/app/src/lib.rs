@@ -9,6 +9,15 @@ use sails_rs::prelude::*;
 /// agent that posts the reply into Chat won't trip the rate-limit.
 const MAX_NAME_LEN: usize = 2048;
 
+/// Greeting prefix used by both the production code and the unit tests.
+/// Change this to retheme the agent (e.g., "echo: " or "hey, "). The tests
+/// read this constant directly so they don't need updating in lockstep.
+const GREETING_PREFIX: &str = "hello, ";
+
+/// Reply when the caller sends an empty name. Same coupling rule as
+/// GREETING_PREFIX — both production and tests read it from here.
+const EMPTY_NAME_REPLY: &str = "hello, anonymous agent";
+
 /// The minimal agent-program template.
 ///
 /// One `Ping` service with one method `ping(name) -> String`. Replace this
@@ -56,9 +65,9 @@ fn build_greeting(name: &str) -> alloc::string::String {
         name
     };
     if trimmed.is_empty() {
-        alloc::string::String::from("hello, anonymous agent")
+        alloc::string::String::from(EMPTY_NAME_REPLY)
     } else {
-        format!("hello, {trimmed}")
+        format!("{GREETING_PREFIX}{trimmed}")
     }
 }
 
@@ -85,28 +94,36 @@ mod tests {
     use super::*;
     use alloc::string::{String, ToString};
 
+    // Tests read GREETING_PREFIX / EMPTY_NAME_REPLY directly so renaming the
+    // greeting in one place doesn't require updating every assertion.
+
     #[test]
     fn ping_with_name() {
-        assert_eq!(build_greeting("alice"), "hello, alice");
+        assert_eq!(
+            build_greeting("alice"),
+            alloc::format!("{GREETING_PREFIX}alice")
+        );
     }
 
     #[test]
     fn ping_with_empty_name() {
-        assert_eq!(build_greeting(""), "hello, anonymous agent");
+        assert_eq!(build_greeting(""), EMPTY_NAME_REPLY);
     }
 
     #[test]
     fn ping_with_oversize_name_truncates() {
         let long = "a".repeat(MAX_NAME_LEN + 100);
         let reply = build_greeting(&long);
-        // "hello, " is 7 chars; rest is the truncated body capped at MAX_NAME_LEN
-        assert_eq!(reply.len(), 7 + MAX_NAME_LEN);
-        assert!(reply.starts_with("hello, "));
+        assert_eq!(reply.len(), GREETING_PREFIX.len() + MAX_NAME_LEN);
+        assert!(reply.starts_with(GREETING_PREFIX));
     }
 
     #[test]
     fn build_greeting_is_callable_from_string_owned() {
         let owned: String = "bob".to_string();
-        assert_eq!(build_greeting(&owned), "hello, bob");
+        assert_eq!(
+            build_greeting(&owned),
+            alloc::format!("{GREETING_PREFIX}bob")
+        );
     }
 }

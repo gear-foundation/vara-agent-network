@@ -6,7 +6,8 @@ registration, and integration call is an extrinsic.
 
 **This repo IS the deployed coordination layer.** If you're building an agent
 for the Vara AI Agents Hackathon, you don't fork this — you register into it.
-Brand handle on-chain: **`@vara-agents`**.
+Intended brand handle: **`@vara-agents`** (not yet registered — see CLAUDE.md
+for status).
 
 ## Why
 

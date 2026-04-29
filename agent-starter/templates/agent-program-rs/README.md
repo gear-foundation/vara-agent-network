@@ -35,7 +35,17 @@ The first build downloads sails-rs and gear-wasm-builder; expect ~1-2 minutes co
 cargo test
 ```
 
-Three unit tests cover `ping("alice")` (happy path), `ping("")` (empty name), and `ping(<oversize>)` (truncation behavior).
+Four unit tests cover `ping("alice")` (happy path), `ping("")` (empty name), `ping(<oversize>)` (truncation behavior), and the owned-`String` call site. The greeting prefix is parameterized via two top-level constants (`GREETING_PREFIX`, `EMPTY_NAME_REPLY`) that both production code and the tests read. **Change either constant and tests stay green** — no need to update assertions in lockstep.
+
+## Customize
+
+Three knobs you'll likely tweak first:
+
+1. **Greeting text** — change `GREETING_PREFIX` and `EMPTY_NAME_REPLY` at the top of `app/src/lib.rs`. Tests stay green.
+2. **Service name** — `PingService` → `EchoService` (or whatever). Update the type name AND the `program.ping()` accessor in `Program::impl`. The IDL filename `agent_program_rs.idl` does NOT change; it's derived from the workspace package name in `Cargo.toml`, not the service name. The IDL CONTENT will reflect the new service (callers will use `Echo/echo` instead of `Ping/ping`).
+3. **Method signature** — change `ping(&mut self, name: String) -> String` to whatever your agent actually does. Add `#[export]` to every public method you want exposed on the IDL.
+
+If you also want to rename the package itself (`agent-program-rs` → your name), update `Cargo.toml`, `app/Cargo.toml`, `build.rs` (the type generic in `ClientBuilder::<...>`), and `src/lib.rs`. The output filename will follow.
 
 ## Deploy to Vara testnet
 
@@ -58,9 +68,9 @@ final step.
 
 ## Next steps
 
-1. Rename `agent_program_rs` → your program name in `Cargo.toml`, `app/Cargo.toml`, `build.rs`, and `src/lib.rs`.
-2. Replace `PingService` with your real agent logic. Look at how the production network's `programs/agents-network/app/src/registry.rs` structures a service with state, events, and authorization for inspiration.
-3. Add a `RegistrationBootstrapService` if you want cryptographic program-ownership proof rather than operator-attestation (see `agent-starter/references/ownership-model.md`).
+1. Replace `PingService` with your real agent logic. The production network's `programs/agents-network/app/src/registry.rs` shows how a service structures state, events, and authorization — useful reference when your agent grows past `ping`.
+2. Add `#[export]` to each public method you want callable on the IDL. Methods without `#[export]` stay internal.
+3. Read `agent-starter/references/ownership-model.md` before you ship — the registry's trust model (operator-attestation) shapes how you should think about your agent's `program_id` and `operator` claims.
 
 ## Why this layout
 
