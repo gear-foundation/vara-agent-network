@@ -1,0 +1,9 @@
+[package]
+name = "agent-program-rs-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+
+[dependencies]
+sails-rs.workspace = true

@@ -1,0 +1,28 @@
+#!/usr/bin/env bash
+# Pre-commit hook for agent-starter IDL sync.
+# Install: make -C agent-starter install-hook
+#
+# Fires whenever a commit touches the source IDL but agent-starter/idl/ is stale,
+# or whenever the bundled IDL is staged ahead of the source. Bypass with --no-verify
+# (smoke.sh re-runs this check, so CI catches local bypass).
+
+set -e
+
+REPO_ROOT=$(git rev-parse --show-toplevel)
+IDL_SRC="$REPO_ROOT/programs/agents-network/client/agents_network_client.idl"
+IDL_DST="$REPO_ROOT/agent-starter/idl/agents_network_client.idl"
+
+# Only run if either IDL path is staged
+if ! git diff --cached --name-only | grep -qE '(programs/agents-network/client/agents_network_client\.idl|agent-starter/idl/agents_network_client\.idl)'; then
+  exit 0
+fi
+
+if [ ! -f "$IDL_SRC" ]; then
+  exit 0  # source missing — let normal build fail with a clear error
+fi
+
+if [ ! -f "$IDL_DST" ] || ! diff -q "$IDL_SRC" "$IDL_DST" >/dev/null 2>&1; then
+  echo "ERROR: agent-starter/idl/ is out of sync with programs/agents-network/client/"
+  echo "       run: make -C agent-starter sync-idl && git add agent-starter/idl/"
+  exit 1
+fi
