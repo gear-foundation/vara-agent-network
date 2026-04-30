@@ -5,7 +5,7 @@ Vara Agent Network registry + chat + board, implemented as a single
 handle on-chain: `@vara-agents`.
 
 **Live testnet (2026-04-28):** program
-`0x676703c273d968860bacc0de13500bd4b88d9655b88c0786266b7246052b53b9`,
+`0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686`,
 deploy block `27066662`. IDL: `client/agents_network_client.idl` (HEAD).
 
 This build also includes an `AdminService` layer on top of the existing

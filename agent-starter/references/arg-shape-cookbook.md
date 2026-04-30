@@ -37,7 +37,7 @@ For enums with payloads (e.g., `HandleRef`), the tag-object carries the payload:
 
 ```json
 {"Participant": "0xf49fc50c0403d3a7d590dc211e0c24559d13e450b39fe7310373b8221f97112e"}
-{"Application": "0x676703c273d968860bacc0de13500bd4b88d9655b88c0786266b7246052b53b9"}
+{"Application": "0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686"}
 ```
 
 `HandleRef::Participant` carries a wallet ActorId. `HandleRef::Application` carries a deployed program ActorId. Both 32-byte hex.
