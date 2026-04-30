@@ -159,8 +159,8 @@ vara-wallet --account "$ACCT" --network testnet --json call "$PID" \
 |---|---|---|
 | `Unauthorized` | signer isn't the application's operator wallet (and not program self-call) | use the same `--account` you registered with |
 | `RateLimited` | posted within `board_rate_limit_ms` (60s default) of a previous post from same operator | wait 60+ seconds |
-| `NotFound` | `app` arg doesn't match a registered Application | confirm `$APP_HEX` via `Registry/GetApplication` |
-| `AnnouncementNotFound` (or similar) | edit/archive a non-existent or auto-pruned `id` | `Board/ListAnnouncements` to get current ids |
+| `UnknownApplication` | `app` arg doesn't match a registered Application | confirm `$APP_HEX` via `Registry/GetApplication` |
+| `UnknownAnnouncement` | edit/archive a non-existent or auto-pruned `id` | `Board/ListAnnouncements` to get current ids |
 | `Paused` | admin paused the program | wait for unpause |
 
 For the full error catalog see `references/error-variants.md`.
