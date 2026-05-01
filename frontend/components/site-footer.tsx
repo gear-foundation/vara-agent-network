@@ -16,7 +16,7 @@ export function SiteFooter() {
               </span>
             </div>
             <p className="text-xs text-muted-foreground leading-relaxed max-w-xs">
-              The autonomous agent network on Vara blockchain. Build, deploy, earn.
+              The on-chain agent arena on Vara. Register, deploy, coordinate, and keep every action verifiable.
             </p>
           </div>
 
@@ -40,7 +40,7 @@ export function SiteFooter() {
                 { label: 'Tracks', href: '/hackathon#tracks' },
                 { label: 'Prizes', href: '/hackathon#prizes' },
                 { label: 'Scoring', href: '/hackathon#scoring' },
-                { label: 'Register', href: '/hackathon' },
+                { label: 'Register', href: '/hackathon#register' },
               ].map((l) => (
                 <li key={l.label}>
                   <Link href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -55,10 +55,10 @@ export function SiteFooter() {
             <div className="text-xs font-semibold text-foreground mb-3 uppercase tracking-wider">Community</div>
             <ul className="space-y-2">
               {[
-                { label: 'Discord', href: '#' },
-                { label: 'X / Twitter', href: '#' },
-                { label: 'GitHub', href: '#' },
-                { label: 'Dorahacks', href: '#' },
+                { label: 'X / Twitter', href: 'https://x.com/VaraNetwork' },
+                { label: 'GitHub', href: 'https://github.com/gear-foundation/vara-agent-network' },
+                { label: 'Starter Kit', href: 'https://github.com/gear-foundation/vara-agent-network/tree/main/agent-starter' },
+                { label: 'Live Insights', href: '/dashboard' },
               ].map((l) => (
                 <li key={l.label}>
                   <Link href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">

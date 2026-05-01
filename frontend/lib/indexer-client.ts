@@ -99,6 +99,7 @@ type AnnouncementRow = {
 
 export type DashboardSnapshot = {
   latestNetworkMetric: NetworkMetricRow | null
+  participantCount: number
   applicationCount: number
   chatMessageCount: number
   interactionCount: number
@@ -172,6 +173,7 @@ export type IntegratorLeaderboardEntry = {
   handle: string
   displayName: string
   track: string
+  description: string
   uniquePartners: number
   integrationsOut: number
   integrationsIn: number
@@ -229,6 +231,9 @@ const DASHBOARD_QUERY = `
         track
       }
     }
+    participants: allParticipants {
+      totalCount
+    }
     chatMessages: allChatMessages {
       totalCount
     }
@@ -244,6 +249,7 @@ const DASHBOARD_QUERY = `
 type DashboardQueryResult = {
   latestNetworkMetrics: { nodes: NetworkMetricRow[] }
   applications: Connection<ApplicationRow>
+  participants: { totalCount: number }
   chatMessages: { totalCount: number }
   interactions: { totalCount: number }
   announcements: { totalCount: number }
@@ -408,6 +414,24 @@ const NETWORK_HISTORY_QUERY = `
         substrateBlockTs
       }
     }
+    applications: allApplications(first: 1000, orderBy: REGISTERED_AT_ASC) {
+      nodes {
+        id
+        registeredAt
+      }
+    }
+    chatMessages: allChatMessages(first: 1000, orderBy: TS_ASC) {
+      nodes {
+        id
+        ts
+      }
+    }
+    announcements: allAnnouncements(first: 1000, orderBy: POSTED_AT_ASC) {
+      nodes {
+        id
+        postedAt
+      }
+    }
   }
 `
 
@@ -514,6 +538,9 @@ type BoardQueryResult = {
 type NetworkHistoryQueryResult = {
   allNetworkMetrics: Connection<NetworkMetricRow>
   interactions: Connection<Pick<InteractionRow, 'id' | 'substrateBlockTs'>>
+  applications: Connection<Pick<ApplicationRow, 'id' | 'registeredAt'>>
+  chatMessages: Connection<Pick<ChatMessageRow, 'id' | 'ts'>>
+  announcements: Connection<Pick<AnnouncementRow, 'id' | 'postedAt'>>
 }
 
 type LiveFeedQueryResult = {
@@ -561,13 +588,6 @@ function shortRef(ref: string) {
 
 function utcDateKey(ms: number) {
   return new Date(ms).toISOString().slice(0, 10)
-}
-
-function activityDateLabel(dateKey: string) {
-  return new Date(`${dateKey}T00:00:00.000Z`).toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-  })
 }
 
 function normalizeRatio(value: number) {
@@ -747,6 +767,7 @@ export async function getIntegratorLeaderboard(): Promise<IntegratorLeaderboardE
       handle: agent.handle,
       displayName: agent.displayName,
       track: agent.track,
+      description: agent.description,
       uniquePartners: agent.metrics?.uniquePartners ?? 0,
       integrationsOut: agent.metrics?.integrationsOut ?? 0,
       integrationsIn: agent.metrics?.integrationsIn ?? 0,
@@ -755,13 +776,25 @@ export async function getIntegratorLeaderboard(): Promise<IntegratorLeaderboardE
       postsActive: agent.metrics?.postsActive ?? 0,
     }))
     .sort((a, b) => {
-      const scoreA = a.integrationsIn * 25 + a.mentionCount * 10 + a.messagesSent * 5 + a.postsActive * 3
-      const scoreB = b.integrationsIn * 25 + b.mentionCount * 10 + b.messagesSent * 5 + b.postsActive * 3
+      const scoreA = getIntegratorLeaderboardScore(a)
+      const scoreB = getIntegratorLeaderboardScore(b)
       if (scoreB !== scoreA) return scoreB - scoreA
       if (b.integrationsIn !== a.integrationsIn) return b.integrationsIn - a.integrationsIn
       if (b.mentionCount !== a.mentionCount) return b.mentionCount - a.mentionCount
       return b.postsActive - a.postsActive
     })
+}
+
+export function getIntegratorLeaderboardScore(
+  entry: Pick<IntegratorLeaderboardEntry, 'integrationsIn' | 'mentionCount' | 'messagesSent' | 'postsActive'>,
+) {
+  return entry.integrationsIn * 25 + entry.mentionCount * 10 + entry.messagesSent * 5 + entry.postsActive * 3
+}
+
+export function getIntegratorExtrinsics(
+  entry: Pick<IntegratorLeaderboardEntry, 'messagesSent' | 'postsActive' | 'integrationsIn'>,
+) {
+  return entry.messagesSent + entry.postsActive + entry.integrationsIn
 }
 
 export async function getDashboardSnapshot(): Promise<DashboardSnapshot | null> {
@@ -770,6 +803,7 @@ export async function getDashboardSnapshot(): Promise<DashboardSnapshot | null> 
 
   return {
     latestNetworkMetric: data.latestNetworkMetrics.nodes[0] ?? null,
+    participantCount: data.participants.totalCount,
     applicationCount: data.applications.totalCount,
     chatMessageCount: data.chatMessages.totalCount,
     interactionCount: data.interactions.totalCount,
@@ -782,33 +816,55 @@ export async function getActivitySeries(): Promise<ActivityPoint[]> {
   const data = await fetchIndexerGraphql<NetworkHistoryQueryResult>(NETWORK_HISTORY_QUERY)
   if (!data) return []
 
+  const liveExtrinsicsByDate = new Map<string, number>()
   const liveCallsByDate = new Map<string, number>()
+
+  const addExtrinsic = (ms: number, amount = 1) => {
+    if (!Number.isFinite(ms) || ms <= 0) return
+    const key = utcDateKey(ms)
+    liveExtrinsicsByDate.set(key, (liveExtrinsicsByDate.get(key) ?? 0) + amount)
+  }
+
   for (const interaction of data.interactions.nodes) {
     const ts = Number(interaction.substrateBlockTs)
-    if (!Number.isFinite(ts)) continue
+    if (!Number.isFinite(ts) || ts <= 0) continue
     const key = utcDateKey(ts)
     liveCallsByDate.set(key, (liveCallsByDate.get(key) ?? 0) + 1)
+    addExtrinsic(ts)
+  }
+
+  for (const app of data.applications.nodes) {
+    addExtrinsic(Number(app.registeredAt))
+  }
+
+  for (const message of data.chatMessages.nodes) {
+    addExtrinsic(Number(message.ts))
+  }
+
+  for (const announcement of data.announcements.nodes) {
+    addExtrinsic(Number(announcement.postedAt))
   }
 
   const byDate = new Map<string, ActivityPoint>()
   for (const row of data.allNetworkMetrics.nodes) {
     const metricCalls = Math.round(row.extrinsicsOnHackathonPrograms * normalizeRatio(row.crossProgramCallPct))
+    const liveExtrinsics = liveExtrinsicsByDate.get(row.date) ?? 0
     const liveCalls = liveCallsByDate.get(row.date) ?? 0
     byDate.set(row.date, {
-      date: activityDateLabel(row.date),
-      extrinsics: Math.max(row.extrinsicsOnHackathonPrograms, liveCalls),
+      date: row.date,
+      extrinsics: Math.max(row.extrinsicsOnHackathonPrograms, liveExtrinsics),
       crossCalls: Math.max(metricCalls, liveCalls),
       activeWallets: row.uniqueWalletsCalling,
       deployedApps: row.deployedProgramCount,
     })
   }
 
-  for (const [dateKey, calls] of liveCallsByDate) {
+  for (const [dateKey, extrinsics] of liveExtrinsicsByDate) {
     if (byDate.has(dateKey)) continue
     byDate.set(dateKey, {
-      date: activityDateLabel(dateKey),
-      extrinsics: calls,
-      crossCalls: calls,
+      date: dateKey,
+      extrinsics,
+      crossCalls: liveCallsByDate.get(dateKey) ?? 0,
       activeWallets: 0,
       deployedApps: 0,
     })
