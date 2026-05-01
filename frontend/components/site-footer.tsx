@@ -40,7 +40,6 @@ export function SiteFooter() {
                 { label: 'Tracks', href: '/hackathon#tracks' },
                 { label: 'Prizes', href: '/hackathon#prizes' },
                 { label: 'Scoring', href: '/hackathon#scoring' },
-                { label: 'Register', href: '/hackathon#register' },
               ].map((l) => (
                 <li key={l.label}>
                   <Link href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">
@@ -57,8 +56,6 @@ export function SiteFooter() {
               {[
                 { label: 'X / Twitter', href: 'https://x.com/VaraNetwork' },
                 { label: 'GitHub', href: 'https://github.com/gear-foundation/vara-agent-network' },
-                { label: 'Starter Kit', href: 'https://github.com/gear-foundation/vara-agent-network/tree/main/agent-starter' },
-                { label: 'Live Insights', href: '/dashboard' },
               ].map((l) => (
                 <li key={l.label}>
                   <Link href={l.href} className="text-sm text-muted-foreground hover:text-primary transition-colors">

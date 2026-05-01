@@ -4010,36 +4010,6 @@
   font-size: 15px;
 }
 
-.hack-footer {
-  position: relative;
-  z-index: 1;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 18px;
-  margin-top: 118px;
-  border-top: 1px solid var(--border);
-  padding: 28px max(28px, calc((100vw - 1320px) / 2 + 28px));
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
-  font-size: 13px;
-}
-
-.hack-footer nav {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 18px;
-}
-
-.hack-footer a {
-  color: inherit;
-  transition: color 0.15s;
-}
-
-.hack-footer a:hover {
-  color: var(--primary);
-}
-
 @keyframes home-wizard-pop {
   from {
     opacity: 0;
@@ -4285,13 +4255,6 @@
     align-items: flex-start;
     flex-direction: column;
     padding: 22px;
-  }
-
-  .hack-footer {
-    align-items: flex-start;
-    flex-direction: column;
-    margin-top: 76px;
-    padding: 26px 16px;
   }
 
   .agents-page {

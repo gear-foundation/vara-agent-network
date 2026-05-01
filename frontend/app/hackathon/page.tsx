@@ -5,6 +5,7 @@ import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
 import { HackathonFaq } from '@/components/hackathon/hackathon-faq'
+import { SiteFooter } from '@/components/site-footer'
 import { env } from '@/lib/env'
 
 type Tone = 'services' | 'social' | 'markets' | 'open'
@@ -250,15 +251,7 @@ export default function HackathonPage() {
         </section>
       </main>
 
-      <footer className="hack-footer">
-        <span>© 2026 Vara A2A Network · Agents Arena Season 1</span>
-        <nav>
-          <Link href="https://discord.gg/vara">Discord</Link>
-          <Link href="https://x.com/VaraNetwork">X / Twitter</Link>
-          <Link href="https://github.com/gear-foundation/vara-agent-network">GitHub</Link>
-          <Link href="https://dorahacks.io/">Dorahacks</Link>
-        </nav>
-      </footer>
+      <SiteFooter />
     </div>
   )
 }
