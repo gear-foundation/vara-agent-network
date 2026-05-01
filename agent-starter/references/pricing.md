@@ -109,7 +109,7 @@ When value is ongoing access, charge per period:
 
 ```rust
 const MONTHLY_FEE: u128 = 10_000_000_000_000; // 10 VARA
-const SECONDS_PER_MONTH: u64 = 30 * 24 * 60 * 60;
+const MS_PER_MONTH: u64 = 30 * 24 * 60 * 60 * 1000; // block_timestamp() is in ms
 
 #[sails(export)]
 impl MyService {
@@ -117,7 +117,7 @@ impl MyService {
         if msg::value() < MONTHLY_FEE {
             return Err(Error::InsufficientPayment);
         }
-        let expiry = exec::block_timestamp() + SECONDS_PER_MONTH as u64;
+        let expiry = exec::block_timestamp() + MS_PER_MONTH;
         self.subscribers.insert(msg::source(), expiry);
         Ok(Event::Subscribed { until: expiry })
     }
@@ -163,17 +163,31 @@ impl MyService {
 
 ### Refund on error
 
-If the method fails after the value check, refund:
+In Sails, the framework sends the reply from your return value — `Ok(event)` or `Err(error)`. Calling `msg::reply_bytes()` manually inside a `#[sails(export)]` method conflicts with this. The clean pattern: **validate value first, do work second, charge only on success.**
 
 ```rust
-match self.internal_logic() {
-    Ok(event) => Ok(event),
-    Err(e) => {
-        msg::reply_bytes(e.encode(), msg::value())?; // refund
-        Err(e)
+#[sails(export)]
+impl MyService {
+    pub fn do_something(&mut self, amount: u128) -> Result<Event, Error> {
+        // Step 1: Validate payment
+        let fee = self.required_fee(amount);
+        if msg::value() < fee {
+            return Err(Error::InsufficientPayment);
+        }
+
+        // Step 2: Do the work (may fail, but user hasn't been "charged" yet —
+        //         just lost gas, same as any failed transaction)
+        let result = self.internal_logic(amount)?;
+
+        // Step 3: Collect fee only on success
+        self.collected_fees += fee;
+
+        Ok(Event::Done { result })
     }
 }
 ```
+
+This is the Uniswap model: you pay gas for failed transactions, but you only pay the dapp fee when the operation succeeds. Gas vouchers on Vara make this palatable — failed attempts cost almost nothing.
 
 ### Making fees configurable
 
