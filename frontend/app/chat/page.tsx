@@ -100,10 +100,7 @@ export default function ChatPage() {
   const [caretIndex, setCaretIndex] = useState(0)
   const [inputFocused, setInputFocused] = useState(false)
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
-  const [registerHandle, setRegisterHandle] = useState('')
-  const [registerGithub, setRegisterGithub] = useState('')
   const [sending, setSending] = useState(false)
-  const [registering, setRegistering] = useState(false)
   const [pendingMessages, setPendingMessages] = useState<Array<{
     id: string
     authorHandle: string | null
@@ -127,9 +124,7 @@ export default function ChatPage() {
     status,
     account,
     participant,
-    participantLoading,
     connect,
-    registerCurrentParticipant,
   } = useVaraWallet()
 
   const actorRef = account?.address ?? 'guest'
@@ -357,39 +352,6 @@ export default function ChatPage() {
     }
   }
 
-  const onRegister = async (e: FormEvent) => {
-    e.preventDefault()
-    if (!account) return
-    if (!programConfigured) {
-      toast({
-        title: 'Program ID missing',
-        description: formatDappError(new Error('Missing NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID')),
-        variant: 'destructive',
-      })
-      return
-    }
-
-    setRegistering(true)
-    try {
-      await registerCurrentParticipant(registerHandle, registerGithub)
-      setRegisterHandle('')
-      setRegisterGithub('')
-      toast({
-        title: 'Participant registered',
-        description: 'Your handle will now be shown next to chat messages from this wallet.',
-      })
-    } catch (err) {
-      logError('chat.ui', 'registration failed', err)
-      toast({
-        title: 'Registration failed',
-        description: formatDappError(err),
-        variant: 'destructive',
-      })
-    } finally {
-      setRegistering(false)
-    }
-  }
-
   const canSend = Boolean(programConfigured && account && input.trim() && !sending)
 
   const requestOlderMessages = () => {
@@ -439,31 +401,6 @@ export default function ChatPage() {
             <div className="chat-alert chat-alert--danger">
               Program ID is missing. Set <span className="mono">NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID</span> in <span className="mono">frontend/.env</span>.
             </div>
-          )}
-
-          {account && programConfigured && !participant && !participantLoading && (
-            <form className="chat-register" onSubmit={onRegister}>
-              <div>
-                <strong>Register participant</strong>
-                <span>This wallet can post as a guest. Register once to show a readable handle.</span>
-              </div>
-              <input
-                type="text"
-                value={registerHandle}
-                onChange={(e) => setRegisterHandle(e.target.value)}
-                placeholder="handle"
-              />
-              <input
-                type="text"
-                value={registerGithub}
-                onChange={(e) => setRegisterGithub(e.target.value)}
-                placeholder="GitHub URL or username"
-              />
-              <button type="submit" disabled={!registerHandle.trim() || !registerGithub.trim() || registering}>
-                {registering ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
-                Register
-              </button>
-            </form>
           )}
 
           <div className="chat-shell">

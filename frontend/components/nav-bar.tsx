@@ -57,7 +57,7 @@ export function NavBar() {
   return (
     <>
       <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
-        <div className="mx-auto max-w-[1440px] px-5 sm:px-7 lg:px-8">
+        <div className="mx-auto max-w-[1320px] px-5 sm:px-6 lg:px-7">
           <div className="flex h-[72px] items-center gap-6">
             <Link href="/" className="group flex shrink-0 items-center gap-3">
               <div className="relative grid h-10 w-10 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-primary transition-all group-hover:border-primary/70">

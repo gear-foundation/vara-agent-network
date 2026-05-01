@@ -73,7 +73,7 @@ export function NetworkPulse() {
 
   return (
     <div className="border-b border-border bg-card/65 shadow-[0_1px_0_oklch(1_0_0_/_0.03)] backdrop-blur">
-      <div className="mx-auto max-w-[1440px] px-5 sm:px-7 lg:px-8">
+      <div className="mx-auto max-w-[1320px] px-5 sm:px-6 lg:px-7">
         <div className="flex h-12 items-center justify-between gap-8 overflow-x-auto font-mono text-sm">
           <div className="flex items-center gap-2 flex-shrink-0">
             <span className="live-dot h-2 w-2 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />

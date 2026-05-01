@@ -105,6 +105,7 @@
     @apply bg-background text-foreground;
   }
   html {
+    font-size: 15px;
     scroll-behavior: smooth;
   }
 }
@@ -342,9 +343,9 @@
 .home-page {
   position: relative;
   z-index: 1;
-  max-width: 1440px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 42px 34px 104px;
+  padding: 38px 28px 96px;
   animation: route-content-in 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -1100,9 +1101,9 @@
 .page {
   position: relative;
   z-index: 1;
-  max-width: 1440px;
+  max-width: 1320px;
   margin: 0 auto;
-  padding: 104px 34px 104px;
+  padding: 96px 28px 96px;
   animation: route-content-in 0.52s cubic-bezier(0.16, 1, 0.3, 1) both;
 }
 
@@ -2325,12 +2326,11 @@
 }
 
 .chat-page {
-  max-width: 1440px;
+  max-width: 1320px;
   padding-top: 56px;
 }
 
-.chat-alert,
-.chat-register {
+.chat-alert {
   margin-bottom: 16px;
   border: 1px solid color-mix(in oklch, var(--track-social) 34%, transparent);
   border-radius: var(--radius-xl);
@@ -2353,7 +2353,6 @@
 }
 
 .chat-alert button,
-.chat-register button,
 .chat-composer button {
   border: 0;
   border-radius: 14px;
@@ -2371,64 +2370,17 @@
 }
 
 .chat-alert button:hover,
-.chat-register button:hover,
 .chat-composer button:hover {
   transform: translateY(-1px);
   box-shadow: 0 0 26px oklch(0.82 0.21 145 / 0.18);
 }
 
 .chat-alert button:disabled,
-.chat-register button:disabled,
 .chat-composer button:disabled {
   cursor: not-allowed;
   opacity: 0.42;
   transform: none;
   box-shadow: none;
-}
-
-.chat-register {
-  display: grid;
-  grid-template-columns: minmax(220px, 1.2fr) minmax(160px, 1fr) minmax(180px, 1fr) auto;
-  align-items: center;
-  gap: 12px;
-}
-
-.chat-register strong,
-.chat-register span {
-  display: block;
-}
-
-.chat-register strong {
-  color: var(--foreground);
-  font-size: 14px;
-}
-
-.chat-register span {
-  margin-top: 4px;
-  color: var(--muted-foreground);
-  font-size: 12px;
-}
-
-.chat-register input {
-  outline: none;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  background: var(--background);
-  padding: 11px 13px;
-  color: var(--foreground);
-  font: inherit;
-  font-size: 13px;
-}
-
-.chat-register input:focus {
-  border-color: color-mix(in oklch, var(--primary) 42%, transparent);
-}
-
-.chat-register button {
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 11px 16px;
 }
 
 .chat-shell {
@@ -4067,7 +4019,7 @@
   gap: 18px;
   margin-top: 118px;
   border-top: 1px solid var(--border);
-  padding: 28px max(34px, calc((100vw - 1440px) / 2 + 34px));
+  padding: 28px max(28px, calc((100vw - 1320px) / 2 + 28px));
   color: var(--muted-foreground);
   font-family: var(--font-mono);
   font-size: 13px;
