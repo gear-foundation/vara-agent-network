@@ -7,14 +7,14 @@ import { getLatestBlockNumber } from '@/lib/vara-program'
 
 type PulseStats = {
   extr: number
-  wallets: number
+  agents: number
   apps: number
   block: number | null
 }
 
 const EMPTY_STATS: PulseStats = {
   extr: 0,
-  wallets: 0,
+  agents: 0,
   apps: 0,
   block: null,
 }
@@ -58,9 +58,7 @@ export function NetworkPulse() {
     const extrinsics =
       snapshot.latestNetworkMetric?.extrinsicsOnHackathonPrograms
       ?? snapshot.chatMessageCount + snapshot.interactionCount + snapshot.announcementCount
-    const wallets =
-      snapshot.latestNetworkMetric?.uniqueWalletsCalling
-      ?? 0
+    const agents = snapshot.participantCount
     const apps =
       snapshot.latestNetworkMetric?.deployedProgramCount
       ?? snapshot.applicationCount
@@ -68,37 +66,37 @@ export function NetworkPulse() {
     setStats((current) => ({
       ...current,
       extr: extrinsics,
-      wallets,
+      agents,
       apps,
     }))
   }, [snapshot])
 
   return (
-    <div className="border-b border-border/40 bg-background/90 backdrop-blur-sm">
-      <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-9 overflow-x-auto gap-6 text-xs font-mono">
-          <div className="flex items-center gap-1.5 flex-shrink-0">
-            <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
-            <span className="text-primary font-semibold">{env.networkLabel}</span>
+    <div className="border-b border-border bg-card/65 shadow-[0_1px_0_oklch(1_0_0_/_0.03)] backdrop-blur">
+      <div className="mx-auto max-w-[1440px] px-5 sm:px-7 lg:px-8">
+        <div className="flex h-12 items-center justify-between gap-8 overflow-x-auto font-mono text-sm">
+          <div className="flex items-center gap-2 flex-shrink-0">
+            <span className="live-dot h-2 w-2 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />
+            <span className="text-primary font-bold tracking-[0.02em]">{env.networkLabel}</span>
           </div>
-          <div className="flex items-center gap-6 text-muted-foreground flex-shrink-0">
+          <div className="flex items-center gap-5 text-muted-foreground flex-shrink-0">
             <span>
-              Block <span className="text-foreground">#{formatNumber(stats.block)}</span>
+              Block <span className="font-extrabold text-foreground">#{formatNumber(stats.block)}</span>
             </span>
-            <span className="text-border/60">·</span>
+            <span className="text-border">·</span>
             <span>
-              Extrinsics <span className="text-primary">{formatNumber(stats.extr)}</span>/day
+              Extrinsics <span className="font-extrabold text-primary">{formatNumber(stats.extr)}</span>/day
             </span>
-            <span className="text-border/60">·</span>
+            <span className="text-border">·</span>
             <span>
-              Wallets <span className="text-foreground">{stats.wallets}</span>
+              Agents <span className="font-extrabold text-foreground">{stats.agents}</span>
             </span>
-            <span className="text-border/60">·</span>
+            <span className="text-border">·</span>
             <span>
-              Apps <span className="text-foreground">{stats.apps}</span>
+              Apps <span className="font-extrabold text-foreground">{stats.apps}</span>
             </span>
-            <span className="text-border/60">·</span>
-            <span className="text-muted-foreground/50">Season 1 active</span>
+            <span className="text-border">·</span>
+            <span className="font-semibold text-muted-foreground">Season 1 active</span>
           </div>
         </div>
       </div>

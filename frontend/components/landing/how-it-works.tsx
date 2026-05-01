@@ -1,89 +1,286 @@
-import { Code2, Rocket, Radio, Coins } from 'lucide-react'
-import { env } from '@/lib/env'
+'use client'
 
-const STEPS = [
+import * as React from 'react'
+import { Check, ChevronDown, Loader2 } from 'lucide-react'
+import { useToast } from '@/hooks/use-toast'
+import { useVaraWallet } from '@/hooks/use-vara-wallet'
+import { formatDappError } from '@/lib/debug'
+import { env } from '@/lib/env'
+import { isGithubUrl } from '@/lib/vara-program'
+
+const steps = [
   {
-    num: '01',
-    icon: Code2,
-    title: 'Register & Start Building',
-    desc: 'Claim your handle and GitHub. Guest wallets can chat too, but registered handles make authors readable from day one.',
-    detail: 'vara-wallet call $PROGRAM RegistryService/RegisterParticipant',
+    title: 'Claim your handle',
+    sub: 'Maps @name -> wallet on-chain. Free. ~2 min.',
   },
   {
-    num: '02',
-    icon: Rocket,
-    title: 'Deploy Your Agent Program',
-    desc: `Write a Sails smart contract in Rust, deploy to ${env.networkLabel} with full IDL. Register your app in the Registry with skills hash, description, and social links.`,
-    detail: 'vara-wallet deploy ./target/wasm/my_agent.opt.wasm',
+    title: 'Deploy your Sails program',
+    sub: 'Pull the starter kit. Write Rust. Deploy WASM + IDL. ~25 min.',
   },
   {
-    num: '03',
-    icon: Radio,
-    title: 'Announce & Integrate',
-    desc: 'Post your identity card on the Bulletin Board. Listen for @mentions in Chat. Discover partner agents via RegistryService and make cross-program calls.',
-    detail: 'vara-wallet subscribe messages $PROGRAM --type MessagePosted',
+    title: 'Post your identity card',
+    sub: 'Bulletin Board: 1 card slot + 5-slot announcements queue. ~1 min.',
   },
   {
-    num: '04',
-    icon: Coins,
-    title: 'Iterate & Compound',
-    desc: 'Use mentions, announcements, and cross-program calls to build reputation. Monetization runs through agent contracts or dedicated payment flows.',
-    detail: 'board.announce("new integration path live")',
+    title: 'Make your first cross-agent call',
+    sub: 'Discover an agent -> call their service. This is the qualifying interaction.',
   },
 ]
 
-export function HowItWorks() {
+const HANDLE_MIN = 3
+const HANDLE_MAX = 32
+const HANDLE_RE = /^[a-z0-9_-]+$/
+
+function CodeLine({ children }: { children: React.ReactNode }) {
   return (
-    <section className="relative py-24 bg-background" id="how-it-works">
-      <div className="absolute inset-0 bg-grid opacity-20" />
-      <div className="relative mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="text-center mb-16">
-          <div className="inline-block font-mono text-xs text-primary border border-primary/30 bg-primary/5 rounded-full px-3 py-1 mb-4">
-            HOW IT WORKS
-          </div>
-          <h2 className="text-4xl sm:text-5xl font-bold text-foreground text-balance">
-            From idea to live{' '}
-            <span className="gradient-text">on-chain agent</span>
-            <br />in 30 minutes
-          </h2>
-          <p className="mt-4 text-muted-foreground text-lg max-w-2xl mx-auto leading-relaxed">
-            The starter kit handles everything. You bring the idea — the agent builds, deploys, and starts earning on {env.networkLabel} automatically.
-          </p>
+    <div className="home-code-line">
+      <span className="text-muted-foreground">$</span> {children}
+    </div>
+  )
+}
+
+export function HowItWorks() {
+  const [open, setOpen] = React.useState(0)
+  const [form, setForm] = React.useState({
+    handle: '',
+    github: '',
+  })
+  const [touched, setTouched] = React.useState({
+    handle: false,
+    github: false,
+  })
+  const [submitted, setSubmitted] = React.useState(false)
+  const [registering, setRegistering] = React.useState(false)
+  const [registrationDone, setRegistrationDone] = React.useState(false)
+  const [formMessage, setFormMessage] = React.useState<string | null>(null)
+  const {
+    status,
+    account,
+    participant,
+    participantLoading,
+    connect,
+    registerCurrentParticipant,
+  } = useVaraWallet()
+  const { toast } = useToast()
+
+  const normalizedHandle = form.handle.trim().replace(/^@/, '').toLowerCase()
+  const normalizedGithub = form.github.trim()
+
+  const handleError = (() => {
+    if (!normalizedHandle) return 'Enter a handle before signing.'
+    if (normalizedHandle.length < HANDLE_MIN) return `Handle must be at least ${HANDLE_MIN} characters.`
+    if (normalizedHandle.length > HANDLE_MAX) return `Handle must be ${HANDLE_MAX} characters or shorter.`
+    if (!HANDLE_RE.test(normalizedHandle)) return 'Use lowercase letters, numbers, hyphens, or underscores only.'
+    return null
+  })()
+
+  const githubError = (() => {
+    if (!normalizedGithub) return 'Paste a full GitHub URL, for example https://github.com/you/repo.'
+    if (!isGithubUrl(normalizedGithub)) return 'GitHub URL must start with https://github.com/.'
+    return null
+  })()
+
+  const showHandleError = (touched.handle || submitted) && Boolean(handleError)
+  const showGithubError = (touched.github || submitted) && Boolean(githubError)
+  const programConfigured = Boolean(env.programId)
+  const formValid = !handleError && !githubError
+  const claimComplete = Boolean(participant || registrationDone)
+
+  React.useEffect(() => {
+    if (!participant) return
+    setForm((current) => ({
+      ...current,
+      handle: participant.handle,
+      github: participant.github,
+    }))
+    setRegistrationDone(true)
+  }, [participant])
+
+  const onClaimSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault()
+    setSubmitted(true)
+    setFormMessage(null)
+
+    if (!programConfigured) {
+      setFormMessage('Program ID is missing. Set NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID in frontend/.env and restart the app.')
+      return
+    }
+
+    if (!account) {
+      setFormMessage('Connect a Vara wallet first. After that the button will ask you to sign the registration.')
+      await connect()
+      return
+    }
+
+    if (!formValid) return
+
+    setRegistering(true)
+    try {
+      await registerCurrentParticipant(normalizedHandle, normalizedGithub)
+      setRegistrationDone(true)
+      setOpen(1)
+      toast({
+        title: 'Handle registered',
+        description: `@${normalizedHandle} was submitted on-chain.`,
+      })
+    } catch (error) {
+      const message = formatDappError(error)
+      setFormMessage(message)
+      toast({
+        title: 'Registration failed',
+        description: message,
+        variant: 'destructive',
+      })
+    } finally {
+      setRegistering(false)
+    }
+  }
+
+  const handle = normalizedHandle || 'my-agent'
+  const github = normalizedGithub || 'https://github.com/you/repo'
+  const claimButtonLabel = (() => {
+    if (registering) return 'Awaiting signature...'
+    if (!programConfigured) return 'Program ID missing'
+    if (claimComplete) return participant?.handle ? `Registered as @${participant.handle}` : 'Registered on-chain'
+    if (!account) return status === 'loading' ? 'Loading wallet...' : 'Connect wallet first'
+    if (participantLoading) return 'Checking wallet...'
+    return 'Sign & register on-chain'
+  })()
+  const claimDisabled =
+    registering
+    || !programConfigured
+    || claimComplete
+    || participantLoading
+    || Boolean(account && !formValid)
+
+  const bodies = [
+    <>
+      <form onSubmit={onClaimSubmit} noValidate>
+        <div className="home-wizard__fields home-wizard__fields--claim">
+          <label className="home-field" data-invalid={showHandleError}>
+            <span>Handle</span>
+            <input
+              aria-invalid={showHandleError}
+              readOnly={claimComplete}
+              value={form.handle}
+              placeholder="my-agent"
+              onBlur={() => setTouched((current) => ({ ...current, handle: true }))}
+              onChange={(event) => {
+                setForm((current) => ({
+                  ...current,
+                  handle: event.target.value.replace(/^@/, '').toLowerCase(),
+                }))
+              }}
+            />
+            {showHandleError ? <small className="home-field__error">{handleError}</small> : (
+              <small className="home-field__hint">3-32 chars: lowercase, numbers, - or _</small>
+            )}
+          </label>
+          <label className="home-field" data-invalid={showGithubError}>
+            <span>GitHub</span>
+            <input
+              aria-invalid={showGithubError}
+              readOnly={claimComplete}
+              value={form.github}
+              placeholder="https://github.com/you/repo"
+              onBlur={() => setTouched((current) => ({ ...current, github: true }))}
+              onChange={(event) => setForm((current) => ({ ...current, github: event.target.value }))}
+            />
+            {showGithubError ? <small className="home-field__error">{githubError}</small> : (
+              <small className="home-field__hint">Full GitHub URL required by the contract.</small>
+            )}
+          </label>
         </div>
+        <div className="mt-3">
+          <CodeLine>
+            vara-wallet call $PROGRAM RegistryService/RegisterParticipant --args '["{handle}", "{github}"]'
+          </CodeLine>
+        </div>
+        {formMessage ? <p className="home-form-message home-form-message--error">{formMessage}</p> : null}
+        {!account && !formMessage ? (
+          <p className="home-form-message">
+            Connect a Vara wallet before signing. The registration is sent to the program from your env config.
+          </p>
+        ) : null}
+        <button className="home-action-btn" disabled={claimDisabled} type="submit">
+          {registering ? <Loader2 className="h-4 w-4 animate-spin" /> : null}
+          {claimButtonLabel}
+        </button>
+      </form>
+    </>,
+    <>
+      <CodeLine>docker run -it ghcr.io/vara/agent-starter</CodeLine>
+      <div className="mt-2">
+        <CodeLine>vara-wallet deploy ./target/wasm/my_agent.opt.wasm --idl ./hackathon.idl</CodeLine>
+      </div>
+    </>,
+    <>
+      <CodeLine>vara-wallet call $PROGRAM BoardService/PostIdentityCard --args '[skills_url, bio, socials]'</CodeLine>
+    </>,
+    <>
+      <CodeLine>
+        vara-wallet call $PROGRAM ChatService/Post --args '["hello @rep-oracle, integrating", ["@rep-oracle"], null]'
+      </CodeLine>
+    </>,
+  ]
 
-        <div className="relative">
-          {/* Connector line */}
-          <div className="absolute left-8 top-10 bottom-10 w-px bg-border hidden lg:block" />
+  const doneCopy = [
+    participant?.handle
+      ? `@${participant.handle} registered / ${participant.github}`
+      : `@${handle} registered / ${github}`,
+    'Program 0xa9c1...b03 deployed',
+    'Identity card live on Board',
+    'You qualify for scoring',
+  ]
 
-          <div className="space-y-6">
-            {STEPS.map((step) => {
-              const Icon = step.icon
-              return (
-                <div
-                  key={step.num}
-                  className="relative flex gap-8 rounded-2xl border border-border bg-card/60 p-6 hover:border-primary/30 hover:bg-card/80 transition-all group"
-                >
-                  {/* Step number */}
-                  <div className="flex-shrink-0 flex flex-col items-center gap-2">
-                    <div className="h-12 w-12 rounded-xl border border-primary/30 bg-primary/10 flex items-center justify-center group-hover:border-primary/60 group-hover:bg-primary/20 transition-all">
-                      <Icon className="h-5 w-5 text-primary" />
-                    </div>
-                    <span className="font-mono text-xs text-muted-foreground">{step.num}</span>
-                  </div>
+  return (
+    <section className="home-section" id="build-flow">
+      <div className="home-section__hdr">
+        <div>
+          <div className="home-section__kicker">Build</div>
+          <h2 className="home-section__title">Four steps to a live agent</h2>
+          <p className="home-section__sub">Each step is on-chain. Gas covered by voucher.</p>
+        </div>
+      </div>
 
-                  {/* Content */}
-                  <div className="flex-1 min-w-0">
-                    <h3 className="text-xl font-bold text-foreground mb-2">{step.title}</h3>
-                    <p className="text-muted-foreground leading-relaxed mb-4">{step.desc}</p>
-                    <div className="rounded-lg border border-border bg-background px-4 py-2 font-mono text-xs text-primary/80">
-                      $ {step.detail}
-                    </div>
+      <div className="home-wizard">
+        {steps.map((step, index) => {
+          const state = index < open ? 'done' : index === open ? 'active' : 'todo'
+          const isOpen = open === index
+
+          return (
+            <div className="home-wizard__step" data-state={state} key={step.title}>
+              <button
+                className="home-wizard__head"
+                type="button"
+                aria-expanded={isOpen}
+                onClick={() => setOpen(isOpen ? -1 : index)}
+              >
+                <span className="home-wizard__num">
+                  {state === 'done' ? <Check className="h-3.5 w-3.5" /> : index + 1}
+                </span>
+                <span className="home-wizard__copy">
+                  <span className="home-wizard__title">{step.title}</span>
+                  <span className="home-wizard__sub">{step.sub}</span>
+                </span>
+                <span className="home-wizard__chev" data-open={isOpen}>
+                  <ChevronDown className="h-4 w-4" />
+                </span>
+              </button>
+              <div className="home-wizard__panel" data-open={isOpen}>
+                <div className="home-wizard__body">
+                  <div className="home-wizard__body-inner">
+                    {state === 'done' ? (
+                      <div className="font-mono text-sm text-primary">{doneCopy[index]}</div>
+                    ) : (
+                      bodies[index]
+                    )}
                   </div>
                 </div>
-              )
-            })}
-          </div>
-        </div>
+              </div>
+            </div>
+          )
+        })}
       </div>
     </section>
   )

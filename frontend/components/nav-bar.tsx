@@ -3,10 +3,12 @@
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
 import { useEffect, useState } from 'react'
-import { Check, Loader2, LogOut, Menu, PlugZap, UserRound, X, Zap } from 'lucide-react'
+import { Check, Loader2, LogOut, Menu, UserRound, X, Zap } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { NAV_LINKS } from '@/lib/site-data'
+
+const BUILD_START_URL = '/#build-flow'
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`
@@ -54,139 +56,133 @@ export function NavBar() {
 
   return (
     <>
-      <header className="fixed top-0 left-0 right-0 z-50 border-b border-border/40 bg-background/80 backdrop-blur-xl">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        <div className="flex h-16 items-center justify-between">
-
-          {/* Logo */}
-          <Link href="/" className="flex items-center gap-2.5 group flex-shrink-0">
-            <div className="relative flex h-8 w-8 items-center justify-center rounded-lg border border-primary/40 bg-primary/10 group-hover:border-primary/70 transition-all">
-              <Zap className="h-4 w-4 text-primary" />
-              <span className="absolute inset-0 rounded-lg bg-primary/10 blur-sm group-hover:bg-primary/20 transition-all" />
-            </div>
-            <div className="flex flex-col leading-none">
-              <span className="font-mono text-sm font-bold tracking-tight text-foreground">
-                <span className="text-primary">Vara</span>
-                <span className="text-muted-foreground/60">::</span>
-                A2A
-              </span>
-              <span className="font-mono text-xs text-muted-foreground/50 tracking-widest">NETWORK</span>
-            </div>
-          </Link>
-
-          {/* Desktop nav */}
-          <nav className="hidden md:flex items-center gap-0.5">
-            {NAV_LINKS.map((link) => {
-              const isActive = pathname === link.href
-              const Icon = link.icon
-              return (
-                <Link
-                  key={link.href}
-                  href={link.href}
-                  className={cn(
-                    'relative flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-medium transition-all',
-                    isActive
-                      ? 'text-primary bg-primary/10 border border-primary/20'
-                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
-                  )}
-                >
-                  {Icon && <Icon className="h-3.5 w-3.5 flex-shrink-0" />}
-                  {link.label}
-                  {link.hot && (
-                    <span className="absolute -top-1 -right-1 flex h-3.5 w-3.5 items-center justify-center">
-                      <span className="absolute inline-flex h-full w-full rounded-full bg-primary opacity-75 pulse-ring" />
-                      <span className="relative h-2 w-2 rounded-full bg-primary" />
-                    </span>
-                  )}
-                </Link>
-              )
-            })}
-          </nav>
-
-          {/* Right: live status + CTA */}
-          <div className="hidden md:flex items-center gap-3 flex-shrink-0">
-            <button
-              type="button"
-              onClick={() => void openWalletModal()}
-              className="flex items-center gap-2 rounded-full border border-accent/20 bg-accent/5 px-3 py-1.5 text-xs font-mono text-accent transition-all hover:border-accent/40"
-            >
-              {status === 'loading' ? (
-                <Loader2 className="h-3.5 w-3.5 animate-spin" />
-              ) : (
-                <PlugZap className="h-3.5 w-3.5" />
-              )}
-              <span>{walletLabel}</span>
-            </button>
-            <div className="flex items-center gap-1.5 rounded-full border border-primary/20 bg-primary/5 px-3 py-1.5">
-              <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
-              <span className="font-mono text-xs text-primary font-medium">LIVE</span>
-            </div>
-            <Link
-              href="/hackathon#register"
-              className="neon-btn rounded-lg px-4 py-1.5 text-sm font-semibold whitespace-nowrap"
-            >
-              Register Now
+      <header className="fixed left-0 right-0 top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl">
+        <div className="mx-auto max-w-[1440px] px-5 sm:px-7 lg:px-8">
+          <div className="flex h-[72px] items-center gap-6">
+            <Link href="/" className="group flex shrink-0 items-center gap-3">
+              <div className="relative grid h-10 w-10 place-items-center rounded-xl border border-primary/35 bg-primary/10 text-primary transition-all group-hover:border-primary/70">
+                <Zap className="h-5 w-5" />
+                <span className="absolute inset-0 rounded-lg bg-primary/10 blur-md transition-all group-hover:bg-primary/20" />
+              </div>
+              <div className="leading-none">
+                <div className="font-mono text-base font-semibold tracking-tight text-foreground">
+                  <span>Vara</span>
+                  <span className="text-muted-foreground">::A2A</span>
+                </div>
+                <div className="mt-1 font-mono text-[11px] font-medium uppercase tracking-[0.22em] text-muted-foreground/70">
+                  Network
+                </div>
+              </div>
             </Link>
-          </div>
 
-          {/* Mobile toggle */}
-          <button
-            className="md:hidden flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground hover:text-foreground hover:border-primary/30 transition-all"
-            onClick={() => setOpen(!open)}
-            aria-label="Toggle menu"
-          >
-            {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
-          </button>
-        </div>
-
-        {/* Mobile menu */}
-        {open && (
-          <div className="md:hidden border-t border-border/40 py-3 pb-4">
-            <button
-              type="button"
-              onClick={() => void openWalletModal()}
-              className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-accent/20 bg-accent/5 px-3 py-3 text-sm font-medium text-accent"
-            >
-              {status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <PlugZap className="h-4 w-4" />}
-              {walletLabel}
-            </button>
-            <nav className="flex flex-col gap-0.5 mb-3">
+            <nav className="hidden items-center gap-1.5 lg:flex">
               {NAV_LINKS.map((link) => {
+                const isActive = pathname === link.href
                 const Icon = link.icon
                 return (
                   <Link
                     key={link.href}
                     href={link.href}
-                    onClick={() => setOpen(false)}
                     className={cn(
-                      'relative flex items-center gap-2 px-3 py-2.5 rounded-lg text-sm font-medium transition-all',
-                      pathname === link.href
-                        ? 'text-primary bg-primary/10 border border-primary/20'
-                        : 'text-muted-foreground hover:text-foreground hover:bg-secondary/60'
+                      'relative inline-flex items-center gap-2 rounded-full px-4 py-2.5 text-base font-medium transition-all',
+                      isActive
+                        ? 'border border-primary/30 bg-primary/10 text-primary'
+                        : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
                     )}
                   >
                     {Icon && <Icon className="h-4 w-4" />}
-                    {link.label}
-                    {link.hot && (
-                      <span className="ml-auto flex items-center gap-1 rounded-full bg-primary/10 border border-primary/30 px-2 py-0.5">
-                        <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
-                        <span className="font-mono text-xs text-primary font-medium">LIVE</span>
-                      </span>
+                    <span>{link.label}</span>
+                    {isActive && <span className="h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />}
+                    {link.hot && !isActive && (
+                      <span className="absolute right-1 top-1 h-1.5 w-1.5 rounded-full bg-primary shadow-[0_0_10px_var(--primary)]" />
                     )}
                   </Link>
                 )
               })}
             </nav>
-            <Link
-              href="/hackathon#register"
-              onClick={() => setOpen(false)}
-              className="neon-btn flex items-center justify-center gap-2 rounded-xl py-3 text-sm font-bold"
+
+            <div className="ml-auto hidden shrink-0 items-center gap-3 md:flex">
+              <button
+                type="button"
+                onClick={() => void openWalletModal()}
+                className="inline-flex items-center gap-2 rounded-full border border-border bg-card px-4 py-2 font-mono text-sm text-foreground transition-all hover:border-primary/35 hover:bg-primary/5"
+              >
+                {status === 'loading' ? (
+                  <Loader2 className="h-4 w-4 animate-spin text-primary" />
+                ) : (
+                  <UserRound className="h-4 w-4 text-primary" />
+                )}
+                <span className="text-muted-foreground">Vara Account</span>
+                <span>{walletLabel}</span>
+              </button>
+              <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-4 py-2 font-mono text-xs font-semibold uppercase tracking-[0.08em] text-primary">
+                <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />
+                LIVE
+              </div>
+              <Link
+                href={BUILD_START_URL}
+                className="neon-btn inline-flex items-center rounded-full px-6 py-3 text-base font-semibold"
+              >
+                Register Now
+              </Link>
+            </div>
+
+            <button
+              className="ml-auto flex h-9 w-9 items-center justify-center rounded-lg border border-border text-muted-foreground transition-all hover:border-primary/30 hover:text-foreground md:ml-0 lg:hidden"
+              onClick={() => setOpen(!open)}
+              aria-label="Toggle menu"
             >
-              Register Now — $40K Prize Pool
-            </Link>
+              {open ? <X className="h-4 w-4" /> : <Menu className="h-4 w-4" />}
+            </button>
           </div>
-        )}
-      </div>
+
+          {open && (
+            <div className="border-t border-border/60 py-3 pb-4 lg:hidden">
+              <button
+                type="button"
+                onClick={() => void openWalletModal()}
+                className="mb-3 flex w-full items-center justify-center gap-2 rounded-xl border border-border bg-card px-3 py-3 text-sm font-medium text-foreground"
+              >
+                {status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin text-primary" /> : <UserRound className="h-4 w-4 text-primary" />}
+                {walletLabel}
+              </button>
+              <nav className="mb-3 flex flex-col gap-1">
+                {NAV_LINKS.map((link) => {
+                  const Icon = link.icon
+                  const isActive = pathname === link.href
+                  return (
+                    <Link
+                      key={link.href}
+                      href={link.href}
+                      onClick={() => setOpen(false)}
+                      className={cn(
+                        'relative flex items-center gap-2 rounded-lg px-3 py-2.5 text-sm font-medium transition-all',
+                        isActive
+                          ? 'border border-primary/25 bg-primary/10 text-primary'
+                          : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground',
+                      )}
+                    >
+                      {Icon && <Icon className="h-4 w-4" />}
+                      {link.label}
+                      {link.hot && (
+                        <span className="ml-auto rounded-full border border-primary/30 bg-primary/10 px-2 py-0.5 font-mono text-[10px] uppercase tracking-[0.08em] text-primary">
+                          live
+                        </span>
+                      )}
+                    </Link>
+                  )
+                })}
+              </nav>
+              <Link
+                href={BUILD_START_URL}
+                onClick={() => setOpen(false)}
+                className="neon-btn flex items-center justify-center rounded-xl py-3 text-sm font-bold"
+              >
+                Register Now
+              </Link>
+            </div>
+          )}
+        </div>
       </header>
 
       {walletModalOpen && account && (

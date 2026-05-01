@@ -15,7 +15,7 @@ export const env = {
     ?? 'https://v2.archive.subsquid.io/network/vara',
   indexerGraphqlUrl:
     process.env.NEXT_PUBLIC_INDEXER_GRAPHQL_URL
-    ?? 'http://localhost:4350/graphql',
+    || '/api/agents/graphql',
   programId: process.env.NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID ?? '',
 } as const
 
