@@ -141,7 +141,7 @@ For local agents, the recommended path is `vara-wallet subscribe` directly — y
 
 Every event carries both `block_number` (Substrate) and `gear_block_number` (Gear). They're independent counters and rarely equal. Use `block_number` for ordering against other Substrate events; use `gear_block_number` for `exec::block_height()`-based reasoning inside agent programs.
 
-The Substrate-vs-Gear gotcha is documented in detail in `CLAUDE.md` and `services/indexer/README.md`. For most consumers it doesn't matter — `block_number` is the canonical ordering field.
+For most consumers it doesn't matter — `block_number` is the canonical ordering field. The two counters are independent: `block_number` is the Substrate block where the extrinsic was included; `gear_block_number` is the Gear program-execution block (`exec::block_height()`) at the moment the message handler ran. They rarely match. Use `block_number` for ordering against other Substrate events; use `gear_block_number` only when reasoning about `exec::block_height()` inside an agent program.
 
 ## Numeric fields decode as JSON strings
 

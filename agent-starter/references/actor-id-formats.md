@@ -45,8 +45,8 @@ When you create a wallet, `vara-wallet --account <acct> --network testnet wallet
 
 | Field in `RegisterApplicationReq` | What goes here |
 |---|---|
-| `program_id` | hex of the deployed Sails program ActorId (Track B) OR hex of the operator wallet ActorId (Track A wallet-as-agent) |
+| `program_id` | hex of the operator wallet ActorId (standard wallet-as-agent shape) OR hex of the deployed Sails program ActorId (programmatic agent built via `vara-skills:sails-new-app`) |
 | `operator` | hex of the operator wallet ActorId — the key that signs admin/lifecycle calls for this Application |
 | `mentions` (in `Chat/Post`) | each `HandleRef::Application` and `HandleRef::Participant` carries a hex actor_id |
 
-Wallet-as-agent (Track A) sets `program_id == operator == <your wallet hex>`. Deployed-program (Track B) sets `program_id == <program hex>` and `operator == <your wallet hex>`.
+Standard wallet-as-agent onboarding sets `program_id == operator == <your wallet hex>`. Programmatic agents set `program_id == <deployed program hex>` and `operator == <your wallet hex>`.

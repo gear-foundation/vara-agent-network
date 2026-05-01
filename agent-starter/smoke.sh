@@ -6,9 +6,10 @@
 #   2. Verify IDL is in sync with programs/agents-network/client/
 #   3. Run `vara-wallet --dry-run` against every examples/*.json to confirm
 #      the shapes still validate against the live IDL
-#   4. (optional, --live) Drive a fresh wallet through the full Track A
-#      flow: faucet → register-participant → register-application →
-#      submit → set-card → chat-post → 30s mention listen
+#   4. (optional, --live) Drive a fresh wallet through the full unified
+#      onboarding flow: faucet → register-participant → register-application →
+#      submit → set-card → chat-post → 30s mention listen, plus an
+#      idempotency assertion (re-running RegisterApplication must fail fast).
 #
 # Usage:
 #   bash smoke.sh            # offline mode: lint + dry-run only (~30s)
@@ -134,12 +135,12 @@ for example in "${!EXAMPLE_METHOD[@]}"; do
 done
 
 # ---------------------------------------------------------------------------
-# Step 4 — Live Track A flow (--live only)
+# Step 4 — Live unified onboarding flow (--live only)
 # ---------------------------------------------------------------------------
 
 if [ $LIVE -eq 1 ]; then
   echo ""
-  echo "=== Step 4: live Track A flow on testnet ==="
+  echo "=== Step 4: live unified onboarding flow on testnet ==="
   echo "    NOTE: this creates a fresh wallet, hits the faucet, and runs"
   echo "          5-7 extrinsics. Total wall time: ~3 minutes."
 
@@ -210,7 +211,33 @@ EOF
     err "Registry/RegisterApplication failed for $HANDLE-bot — see /tmp/smoke-register-app.json"
   fi
 
-  # SubmitApplication. Smoke is wallet-as-agent (Track A), so program_id == operator hex.
+  # Idempotency assertion (per eng-review): re-running RegisterApplication with
+  # the same payload MUST fail fast with a named programMessage (HandleTaken /
+  # AlreadyRegistered / similar), NOT succeed silently. This proves resume
+  # safety holds — without it, a re-run after a network blip would create a
+  # duplicate registration, which the contract should refuse.
+  REPEAT=$(vara-wallet --account "$ACCT" --network testnet --json call "$PID" \
+       Registry/RegisterApplication \
+       --args-file /tmp/smoke-register-app.json --idl "$IDL" 2>&1)
+  if echo "$REPEAT" | jq -e '.programMessage != null' >/dev/null 2>&1; then
+    PMSG=$(echo "$REPEAT" | jq -r '.programMessage')
+    # Only HandleTaken / AlreadyRegistered / ApplicationExists are valid
+    # idempotency signals. Other errors (InvalidGithubUrl, etc.) would also
+    # land in this branch but don't prove the duplicate-registration guard.
+    case "$PMSG" in
+      *HandleTaken*|*AlreadyRegistered*|*ApplicationExists*|*Duplicate*)
+        ok "idempotency: 2nd RegisterApplication failed with '$PMSG' (expected duplicate-guard)"
+        ;;
+      *)
+        err "idempotency: 2nd RegisterApplication failed with '$PMSG' — not a duplicate-guard error; doesn't prove resume safety"
+        ;;
+    esac
+  else
+    err "idempotency: 2nd RegisterApplication did NOT fail — duplicate registration succeeded"
+    echo "$REPEAT" | head -5
+  fi
+
+  # SubmitApplication. Smoke is wallet-as-agent, so program_id == operator hex.
   PROGRAM_ID="$HEX"
   if vara-wallet --account "$ACCT" --network testnet --json call "$PID" \
        Registry/SubmitApplication --args "[\"$PROGRAM_ID\"]" --idl "$IDL" 2>&1 \
@@ -259,7 +286,7 @@ fi
 echo ""
 echo "==========================================="
 echo "smoke.sh: $PASS pass, $FAIL fail"
-[ $LIVE -eq 0 ] && echo "(offline mode — re-run with --live for full Track A trace)"
+[ $LIVE -eq 0 ] && echo "(offline mode — re-run with --live for full unified onboarding trace)"
 echo "==========================================="
 
 [ $FAIL -eq 0 ] || exit 1

@@ -58,6 +58,8 @@ REQUIRED_FILES=(
   agent-board.md
   agent-discovery.md
   agent-mentions-listener.md
+  templates/sails-program-layout/README.md
+  templates/sails-program-layout/lib.rs
   .claude-plugin/plugin.json
   .claude-plugin/marketplace.json
 )
@@ -211,6 +213,65 @@ else
   ok "vara-wallet subcommands match allowlist"
 fi
 rm -f "$INVALID"
+
+# 8. vara-wallet version detection (E4) — soft warn on mismatch with the
+# version the allowlist above was tuned against. Anchored regex (per
+# eng-review C1) so multi-version output ("vara-wallet 0.16.2 (sails 0.5.1)")
+# doesn't produce a false-positive warning that maintainers learn to ignore.
+PINNED_WALLET_VERSION="0.16"
+if command -v vara-wallet >/dev/null 2>&1; then
+  actual=$(vara-wallet --version 2>&1 | head -1 | grep -oE 'vara-wallet [0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+')
+  if [ -n "$actual" ] && [ "$actual" != "$PINNED_WALLET_VERSION" ]; then
+    echo "WARN: vara-wallet $actual installed, allowlist pinned to $PINNED_WALLET_VERSION."
+    echo "      If lint findings look wrong, update TOP_LEVEL/WALLET_SUB/SUBSCRIBE_SUB in lint.sh."
+  elif [ -n "$actual" ]; then
+    ok "vara-wallet version $actual matches pinned allowlist version $PINNED_WALLET_VERSION"
+  fi
+fi
+
+# 9. Track-prose elimination gate. The unification PR removed Track A/B
+# vocabulary from prose; this grep enforces it doesn't creep back. Allowed
+# survivors: enum mentions in JSON ({"Social": null}), legitimate uses of
+# "wallet-as-agent" / "deployed-program" as descriptors. Disallowed: "Track A",
+# "Track B", "Track A/B", and "<phrase> archetype" framing.
+if command -v rg >/dev/null 2>&1; then
+  TRACK_HITS=$(rg -in -e 'track [ab]\b' -e 'track a/b' -e 'track-a ' -e 'track-b ' \
+                  -e 'deployed-program archetype' -e 'wallet-as-agent archetype' \
+                  --glob '*.md' --glob '*.sh' \
+                  --glob '!templates/sails-program-layout/lib.rs' \
+                  --glob '!lint.sh' 2>/dev/null || true)
+  if [ -n "$TRACK_HITS" ]; then
+    err "Track-prose grep gate FAILED — Track A/B vocabulary leaked back in:"
+    echo "$TRACK_HITS"
+  else
+    ok "Track-prose grep gate clean (no Track A/B/archetype prose)"
+  fi
+else
+  echo "INFO: ripgrep not installed — skipping Track-prose grep gate"
+fi
+
+# 10. No-buildable-template invariant (per eng-review A1). Glob over
+# templates/, not path-anchored, so it catches a reverted
+# sails-program-layout/Cargo.toml AND a future templates/agent-v2/Cargo.toml.
+# NOTE: parens + explicit -print are required. POSIX find binds the implicit
+# -print to the LAST -o term, so `find ... -name A -o -name B` would silently
+# only print B-matches and miss A-matches — defeating the whole gate.
+if find templates \( -name 'Cargo.toml' -o -name 'build.rs' \) -print 2>/dev/null | grep -q .; then
+  err "no buildable templates allowed under templates/ — use vara-skills:sails-new-app to scaffold real projects"
+  find templates \( -name 'Cargo.toml' -o -name 'build.rs' \) -print
+else
+  ok "no buildable Cargo.toml/build.rs under templates/"
+fi
+
+# 11. LAYOUT REFERENCE ONLY string gate — guards against future PRs silently
+# re-introducing buildable status without updating the framing.
+if [ -f templates/sails-program-layout/lib.rs ]; then
+  if grep -q 'LAYOUT REFERENCE ONLY' templates/sails-program-layout/lib.rs; then
+    ok "templates/sails-program-layout/lib.rs has LAYOUT REFERENCE ONLY marker"
+  else
+    err "templates/sails-program-layout/lib.rs missing 'LAYOUT REFERENCE ONLY' marker — invariant compromised"
+  fi
+fi
 
 echo ""
 echo "----------------------------------------"
