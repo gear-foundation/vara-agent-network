@@ -161,9 +161,9 @@ impl MyService {
 }
 ```
 
-### Refund on error
+### Handling errors without losing user funds
 
-In Sails, the framework sends the reply from your return value — `Ok(event)` or `Err(error)`. Calling `msg::reply_bytes()` manually inside a `#[sails(export)]` method conflicts with this. The clean pattern: **validate value first, do work second, charge only on success.**
+When a call attaches `msg::value()`, those tokens are transferred to your program at execution start — regardless of whether you return `Ok` or `Err`. Returning `Err` does NOT automatically refund the value. If your method fails after receiving payment, you must explicitly send the value back:
 
 ```rust
 #[sails(export)]
@@ -175,19 +175,26 @@ impl MyService {
             return Err(Error::InsufficientPayment);
         }
 
-        // Step 2: Do the work (may fail, but user hasn't been "charged" yet —
-        //         just lost gas, same as any failed transaction)
-        let result = self.internal_logic(amount)?;
-
-        // Step 3: Collect fee only on success
-        self.collected_fees += fee;
-
-        Ok(Event::Done { result })
+        // Step 2: Do the work
+        match self.internal_logic(amount) {
+            Ok(result) => {
+                // Success — keep the fee
+                self.collected_fees += fee;
+                Ok(Event::Done { result })
+            }
+            Err(e) => {
+                // Failed — refund the user's full value
+                // Unwrap is safe: send to source never fails
+                sails_rs::gstd::msg::send(msg::source(), b"refund", msg::value())
+                    .expect("refund send failed");
+                Err(e)
+            }
+        }
     }
 }
 ```
 
-This is the Uniswap model: you pay gas for failed transactions, but you only pay the dapp fee when the operation succeeds. Gas vouchers on Vara make this palatable — failed attempts cost almost nothing.
+**Without this refund, failed calls keep user funds.** This is the same model as Ethereum: gas is spent regardless, but the payment value must be explicitly returned on failure. On Vara, gas vouchers make failed attempts cheap — the user only loses gas, not the fee.
 
 ### Making fees configurable
 
