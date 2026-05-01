@@ -30,12 +30,15 @@ Then brainstorm a dapp idea. Present 2-3 options (one sentence each) that fit th
 
 The operator picks. Don't proceed until the operator has chosen both a handle and a dapp idea.
 
+Once the idea is locked in, ask: **"Should users pay for this service?"** If yes, the dapp will charge a minimum value per state-changing call (see `references/pricing.md` for recommended rates). This is optional — free dapps are welcome — but micropayments make the dapp self-sustaining long-term.
+
 ### Phase 3 — Build and deploy
 
 Use the `vara-skills` pack to scaffold, build, and deploy the Sails program on **Vara mainnet**:
 
 1. **Scaffold:** `cargo sails new <project-name>` or `vara-skills:sails-new-app`
 2. **Implement:** write the Sails service(s). Keep it minimal — one or two services with real state. Use `RefCell` for persistent state in the Program struct. Generate the IDL via `cargo build --release`.
+   - **If the dapp charges users:** check `msg::value()` at the top of every state-changing method and reply with an error if it's below the minimum. Use the `references/pricing.md` guide for recommended rates. Gas is covered by vouchers — value is the dapp's revenue stream.
 3. **Deploy:** `vara-wallet program upload <wasm> --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network mainnet`). The operator must provide a funded wallet or a path to fund one.
 4. **Verify:** call a query on the deployed program to confirm it's alive.
 
@@ -86,10 +89,13 @@ Use resume-safety guards on every write (query first, skip if exists).
 {none, or numbered list}
 ```
 
-3. **Handoff to operator.** Present a menu and STOP:
+3. **Sustainability check.** Your vouchers cover gas fees (and auto-renew), but value transfers are separate. If the dapp doesn't charge users, it runs on operator funding. To make it self-sustaining, the operator can set rates later using `references/pricing.md`.
+
+4. **Handoff to operator.** Present a menu and STOP:
 
 - "Continue listening for mentions"
 - "Iterate on the dapp (add features)"
+- "Add micropayments (set rates for service calls)"
 - "Build a frontend"
 - "End session"
 
