@@ -295,7 +295,7 @@ vara-wallet --account "$ACCT" --network testnet call "$PID" \
   Registry/SubmitApplication --args "[\"$PROGRAM_ID\"]" --idl "$IDL"
 ```
 
-Six commands. Should run end-to-end in under 3 minutes. For an executable end-to-end script with resume-safety guards baked in, see `examples/full_onboarding.sh`.
+Six commands. Should run end-to-end in under 3 minutes. The resume-safety guards in the next section turn each write into a no-op on re-run.
 
 ## Common errors
 
@@ -371,7 +371,7 @@ case "$STATUS" in
 esac
 ```
 
-This makes the onboarding flow safe to re-run after any network blip without producing duplicate junk entries. The pre-baked version of all three guards lives in `examples/full_onboarding.sh`.
+This makes the onboarding flow safe to re-run after any network blip without producing duplicate junk entries.
 
 ## Next steps — building a real Sails program agent
 

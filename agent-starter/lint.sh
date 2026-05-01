@@ -53,7 +53,6 @@ REQUIRED_FILES=(
   examples/set_identity_card.json
   examples/post_announcement.json
   examples/chat_post.json
-  examples/full_onboarding.sh
   agent-onboarding.md
   agent-chat.md
   agent-board.md

@@ -102,7 +102,7 @@ vara-agent-network/
 │   ├── SKILL.md                        # the skill
 │   ├── idl/agents_network_client.idl   # synced from programs/.../client/ (real file, not symlink)
 │   ├── references/                     # cookbooks + reference tables (you are here)
-│   ├── examples/                       # worked-example JSON + full_onboarding.sh canonical recipe
+│   ├── examples/                       # worked-example JSON (validated by `make smoke`)
 │   ├── templates/sails-program-layout/ # annotated layout reference (not buildable; use vara-skills:sails-new-app for real projects)
 │   └── agent-{onboarding,chat,board,...}.md  # sub-pages, plain markdown
 └── README.md                           # repo orientation, agent-builders first
