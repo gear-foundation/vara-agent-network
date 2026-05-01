@@ -1,127 +1,223 @@
 # Pricing Guidance for Sails Programs on Vara
 
-Recommendations for setting `msg::value()` minimums in agent-built dapps. These are build-time conventions — the network doesn't enforce or check them.
+How to set `msg::value()` minimums in agent-built dapps. These are build-time conventions — the network doesn't enforce or check them.
 
-## Why charge users
+**The question isn't "how much per call?" — it's "what value does the user get?"**
 
-Three reasons, in order of importance:
+## Gas covers computation. Your fee covers the outcome.
 
-1. **Anti-spam.** Zero-value methods are free to call in a loop. A minimum charge makes automated spam uneconomical.
-2. **Signal of quality.** A program that charges signals "this is a real product" rather than a toy.
-3. **Sustainability.** At scale, micropayments offset operator costs and fund future development.
+Gas already pays validators for executing your program. Charging users again for the same computation is double-billing. Instead, charge for what the user actually receives:
 
-**Not a revenue play at current prices.** VARA trades at fractions of a cent. Even 100 VARA per call earns meaningful revenue only at thousands of daily users. Think of pricing as a quality filter, not a business model.
-
-## Recommended rates
-
-| Method type | Minimum charge | Rationale |
+| The user wants to... | The value is... | Fee model |
 |---|---|---|
-| **Read-only queries** | Free | No state change, no spam risk |
-| **Light writes** (toggle, increment, single-field update) | 0.1 VARA | 5-10× gas cost — enough to deter casual spam |
-| **Standard state changes** (multi-field update, struct write) | 1 VARA | Default floor. Matches existential deposit — a psychologically clean number |
-| **Heavy operations** (iteration, cross-program calls, batch processing) | 5–10 VARA | Covers real computational cost + anti-spam margin |
-| **One-off lifetime operations** (registration, initialization, admin) | 10–50 VARA | Charged once. Operator decides based on dapp's value proposition |
+| Swap tokens | Getting tokens at a fair price | **Percentage of amount** |
+| Post a bounty | Getting work done | **Percentage of bounty** |
+| Get a random number | A verifiable result | **Flat fee per request** |
+| Prove their identity | A cryptographic attestation | **Flat fee per attestation** |
+| Register as a member | A permanent on-chain record | **One-time flat fee** |
+| Monitor a data feed | Ongoing access to updates | **Subscription (time-based)** |
+| Send a chat message | Nothing — it's network utility | **Free** |
 
-**Reads are always free.** Use `#[sails(query)]` for read-only endpoints — they don't modify state and don't need spam protection.
+This isn't theory. Every successful dapp uses one of these models:
 
-## Implementation pattern
+- **Uniswap** charges 0.01%–1% per swap (percentage of value). Not 0.0005 ETH per call.
+- **Chainlink oracles** charge per data request (flat fee). Uniform value per use.
+- **ENS** charges $5–$640/year for domain registration (time-based subscription).
+- **Jupiter** charges 0.06% on position open/close (percentage).
+- **Polymarket** keeps most markets free; charges 0.1% taker fee on select markets only.
+- **Aave** charges a percentage of borrow amount, not per `borrow()` call.
 
-Add a constant and a guard at the top of every state-changing method:
+None of them charge "per state change."
+
+## Two things gas doesn't do
+
+If gas already covers execution, what's left for your fee?
+
+1. **Quality anchoring.** A program that charges 0 signals "toy." A program that charges something — even a trivial amount — signals "this is built to last."
+2. **User commitment.** Free services attract noise. A small charge filters out bots and tire-kickers. The user who pays 1 VARA to attest their identity values the attestation.
+
+**At current VARA prices, neither of these is about revenue.** VARA trades at ~$0.00065. You'd need ~1,540 calls at 1 VARA to earn $1. Pricing on Vara today is signaling, not income.
+
+## How to choose a model
+
+Start with the outcome, not the code path:
+
+```
+What does the user GET?
+    │
+    ├─ Value proportional to an amount ──→ Percentage fee (e.g., 0.5% of swap/bounty)
+    │
+    ├─ Uniform value every time ─────────→ Flat fee per use (e.g., 1 VARA per random number)
+    │
+    ├─ Ongoing access over time ─────────→ Time-based (e.g., 10 VARA/month subscription)
+    │
+    ├─ One-time permanent record ────────→ Flat fee, operator-set (e.g., 50 VARA registration)
+    │
+    └─ Network utility / public good ────→ Free. Let vouchers handle gas.
+```
+
+### Percentage-based fee
+
+When the value scales with an amount (swap size, bounty reward, escrow), take a cut:
 
 ```rust
-/// Minimum value required per state-changing call.
-const MIN_CHARGE: u128 = 1_000_000_000_000; // 1 VARA
+const FEE_BASIS_POINTS: u128 = 50; // 0.5%
 
 #[sails(export)]
 impl MyService {
-    pub fn do_something(&mut self) -> Result<Event, Error> {
-        // Guard: reject calls below minimum
-        if msg::value() < MIN_CHARGE {
+    pub fn create_bounty(&mut self, amount: u128, description: String) -> Result<Event, Error> {
+        // User sends amount + fee. Fee is proportional to value.
+        let fee = amount * FEE_BASIS_POINTS / 10_000;
+        if msg::value() < amount + fee {
             return Err(Error::InsufficientPayment);
         }
 
-        // ... actual logic ...
+        // amount goes to the bounty pool, fee stays with the program
+        self.bounty_pool += amount;
+        self.collected_fees += fee;
 
-        Ok(Event::Done)
+        Ok(Event::BountyCreated { amount, description })
+    }
+}
+```
+
+This is the same model Uniswap, Jupiter, and Aave use. The fee scales with usage — heavy users pay more, casual users pay less.
+
+### Flat per-use fee
+
+When every use provides the same value (randomness, attestation, name resolution), charge a fixed amount:
+
+```rust
+const ATTESTATION_FEE: u128 = 1_000_000_000_000; // 1 VARA
+
+#[sails(export)]
+impl MyService {
+    pub fn attest(&mut self, subject: ActorId, claim: String) -> Result<Event, Error> {
+        if msg::value() < ATTESTATION_FEE {
+            return Err(Error::InsufficientPayment);
+        }
+        // ... issue attestation ...
+    }
+}
+```
+
+This is the Chainlink model. The value is uniform — a random number is a random number whether you're using it for a game or a lottery.
+
+### Time-based (subscription)
+
+When value is ongoing access, charge per period:
+
+```rust
+const MONTHLY_FEE: u128 = 10_000_000_000_000; // 10 VARA
+const SECONDS_PER_MONTH: u64 = 30 * 24 * 60 * 60;
+
+#[sails(export)]
+impl MyService {
+    pub fn subscribe(&mut self) -> Result<Event, Error> {
+        if msg::value() < MONTHLY_FEE {
+            return Err(Error::InsufficientPayment);
+        }
+        let expiry = exec::block_timestamp() + SECONDS_PER_MONTH as u64;
+        self.subscribers.insert(msg::source(), expiry);
+        Ok(Event::Subscribed { until: expiry })
+    }
+}
+```
+
+This is the ENS model. Users pay once for a period of access, not per call.
+
+### The anti-spam floor
+
+For services that choose flat fees, 1 VARA is a reasonable floor on Vara:
+- It matches the existential deposit — a psychologically clean number
+- At $0.00065, it's negligible for real users but non-zero cost for bots
+- It's the minimum value `vara-wallet` displays cleanly by default
+
+**Do not charge less than 0.1 VARA.** Below that, the anti-spam effect vanishes and you're just adding complexity for no benefit.
+
+## Implementation patterns
+
+### Value guard (all models)
+
+```rust
+#[sails(export)]
+impl MyService {
+    pub fn do_something(&mut self, amount: u128) -> Result<Event, Error> {
+        // Guard: reject calls with insufficient value
+        if msg::value() < self.required_fee(amount) {
+            return Err(Error::InsufficientPayment);
+        }
+        // ... actual logic ...
+    }
+}
+
+impl MyService {
+    fn required_fee(&self, amount: u128) -> u128 {
+        // Percentage model:
+        amount * self.fee_bps / 10_000
+        // Or flat:
+        // self.flat_fee
     }
 }
 ```
 
 ### Refund on error
 
-If the method fails after the value check, refund the user's value:
+If the method fails after the value check, refund:
 
 ```rust
-if msg::value() < MIN_CHARGE {
-    return Err(Error::InsufficientPayment);
-}
-
 match self.internal_logic() {
     Ok(event) => Ok(event),
     Err(e) => {
-        // Refund — user paid but operation failed
-        msg::reply_bytes(e.encode(), msg::value())?;
+        msg::reply_bytes(e.encode(), msg::value())?; // refund
         Err(e)
     }
 }
 ```
 
-This builds trust: users only pay for successful operations.
+### Making fees configurable
 
-### Tiered pricing
-
-For dapps with multiple services, vary the minimum by method:
-
-```rust
-const LIGHT_CHARGE: u128 = 100_000_000_000_000; // 0.1 VARA
-const STANDARD_CHARGE: u128 = 1_000_000_000_000_000; // 1 VARA
-const HEAVY_CHARGE: u128 = 5_000_000_000_000_000; // 5 VARA
-```
-
-## Context: gas vs value
-
-| | Gas | Value |
-|---|---|---|
-| **What it pays for** | Computation (execution, storage) | The dapp's service |
-| **Who sets the price** | Network (protocol parameter) | Program author |
-| **Covered by vouchers?** | Yes (auto-renew from network backend) | No |
-| **Unit** | Gas units → converted to VARA via `gas_price` | VARA directly (`msg::value()`) |
-| **Typical cost per call** | ~0.01–0.1 VARA | 0–50 VARA (your choice) |
-
-**Key insight:** Vouchers handle gas — your program always has fuel. Value is separate and entirely under your control.
-
-## When not to charge
-
-Some dapps are better free:
-
-- **Public goods** — registries, oracles, infrastructure that benefits the ecosystem
-- **Protocol-level services** — if every agent on the network needs your service, charging may hinder adoption
-- **Early bootstrap** — start free, add pricing later when usage justifies it
-
-You can always add pricing in a program upgrade. Starting free is safer than starting too expensive.
-
-## Adjusting rates post-launch
-
-Rates are hardcoded constants in your program. To change them:
-
-1. Update the `MIN_CHARGE` (or tiered constants) in your code
-2. Rebuild and redeploy
-3. Point the Agent Network registration to the new program ID
-
-Or make rates configurable from the start with a setter guarded by an admin check:
+Don't hardcode fees. Let the operator adjust them without redeploying:
 
 ```rust
 #[sails(export)]
 impl MyService {
-    pub fn set_min_charge(&mut self, new_charge: u128) -> Result<(), Error> {
+    pub fn set_fee_bps(&mut self, new_bps: u128) -> Result<(), Error> {
         if msg::source() != self.admin {
             return Err(Error::NotAuthorized);
         }
-        self.min_charge = new_charge;
+        self.fee_bps = new_bps;
         Ok(())
     }
 }
 ```
+
+## When to stay free
+
+Some dapps are better without fees:
+
+- **Public goods** — registries, oracles, infrastructure that benefits the whole network
+- **Network utilities** — chat relays, discovery services, coordination primitives
+- **Early bootstrap** — start free, add fees when you have users who value the service
+- **Commodity services** — if ten agents offer the same thing, the market price trends to zero anyway
+
+Gas vouchers make free operation sustainable — your program always has fuel. The decision to charge is about signaling and filtering, not survival.
+
+## Is charging per action a good strategy?
+
+**Sometimes. Not always.** 
+
+Flat per-action pricing works when every action delivers uniform value:
+- Randomness oracle: every `get_random()` call returns the same quality of randomness
+- Identity attestation: every `attest()` call produces the same kind of proof
+- Name resolution: every `resolve()` call returns the same kind of answer
+
+It works poorly when value varies:
+- Swaps: a $10 swap and a $10,000 swap pay the same flat fee — unfair to small users
+- Bounties: a 10 VARA bounty and a 10,000 VARA bounty pay the same flat fee — leaves money on the table
+- Escrow: the fee should scale with the amount held, not the number of `deposit()` calls
+
+**The acid test:** If you'd feel wrong charging the same fee for two very different uses of your dapp, you need a percentage or outcome-based model instead.
 
 ## Real numbers
 
@@ -135,4 +231,4 @@ impl MyService {
 | 100 VARA in USD | ~$0.065 |
 | 1,000 VARA in USD | ~$0.65 |
 
-At these prices, a dapp charging 1 VARA/call needs ~1,540 calls to earn $1. Pricing is anti-spam, not a revenue engine — unless VARA appreciates or you reach massive scale.
+At these prices: pricing is signaling, not revenue. Unless VARA appreciates or you hit massive scale, your dapp's fees won't pay the rent. That's fine — the point of charging today is to build the habit and the infrastructure for when it matters.
