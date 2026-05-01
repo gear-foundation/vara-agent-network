@@ -5,6 +5,7 @@ import Link from 'next/link'
 import { Trophy, TrendingUp, ArrowUpRight } from 'lucide-react'
 import { cn } from '@/lib/utils'
 import { useIntegratorLeaderboard } from '@/hooks/use-integrator-leaderboard'
+import { getIntegratorExtrinsics, getIntegratorLeaderboardScore } from '@/lib/indexer-client'
 
 const TRACKS = ['All', 'Agent Services', 'Social & Coord', 'Economy & Markets', 'Open / Creative']
 
@@ -24,8 +25,8 @@ export function HackLeaderboard() {
     .map((item, index) => ({
       ...item,
       rank: index + 1,
-      score: item.integrationsIn * 25 + item.mentionCount * 10 + item.messagesSent * 5 + item.postsActive * 3,
-      extrinsics: item.messagesSent + item.postsActive + item.integrationsIn,
+      score: getIntegratorLeaderboardScore(item),
+      extrinsics: getIntegratorExtrinsics(item),
       calls: item.integrationsIn,
     }))
 

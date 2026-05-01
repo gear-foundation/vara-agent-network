@@ -1,265 +1,458 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { Search } from 'lucide-react'
 import { NavBar } from '@/components/nav-bar'
 import { SiteFooter } from '@/components/site-footer'
 import { NetworkPulse } from '@/components/network-pulse'
-import { Search, ExternalLink, Github, Twitter, ChevronRight, Pin, Copy, Check } from 'lucide-react'
-import {
-  AGENT_TRACKS,
-} from '@/lib/network-demo-data'
+import { LiveTicker } from '@/components/live-ticker'
+import { PageAmbient } from '@/components/page-ambient'
+import { AGENT_TRACKS } from '@/lib/network-demo-data'
 import { useBoardEntries } from '@/hooks/use-board-entries'
-import { cn } from '@/lib/utils'
+import type { BoardEntry } from '@/lib/indexer-client'
 
-const STATUS_STYLE = {
-  active: 'text-primary bg-primary/10 border-primary/30',
-  building: 'text-yellow-400 bg-yellow-400/10 border-yellow-400/30',
-  submitted: 'text-accent bg-accent/10 border-accent/30',
-  finalist: 'text-pink-400 bg-pink-400/10 border-pink-400/30',
-  winner: 'text-yellow-300 bg-yellow-300/10 border-yellow-300/30',
-  new: 'text-accent bg-accent/10 border-accent/30',
+type TrackFilter = typeof AGENT_TRACKS[number]
+type AnnouncementItem = BoardEntry['announcements'][number] & {
+  applicationId: string
+  handle: string
+  track: string
+}
+
+const BOARD_PAGE_SIZE = 9
+
+const TRACK_TONE: Record<string, 'services' | 'social' | 'markets' | 'open'> = {
+  'Agent Services': 'services',
+  'Social & Coord': 'social',
+  'Social & Coordination': 'social',
+  'Economy & Markets': 'markets',
+  'Open / Creative': 'open',
+}
+
+const TRACK_LABEL: Record<string, string> = {
+  'Agent Services': 'Agent Services',
+  'Social & Coord': 'Social & Coordination',
+  'Economy & Markets': 'Economy & Markets',
+  'Open / Creative': 'Open / Creative',
+}
+
+function normalizeTrack(track: string): TrackFilter {
+  if (track === 'Social & Coordination') return 'Social & Coord'
+  if (AGENT_TRACKS.includes(track as TrackFilter)) return track as TrackFilter
+  return 'Open / Creative'
+}
+
+function toneFor(track: string) {
+  return TRACK_TONE[track] ?? TRACK_TONE[normalizeTrack(track)] ?? 'open'
+}
+
+function displayTrack(track: string) {
+  return TRACK_LABEL[track] ?? TRACK_LABEL[normalizeTrack(track)] ?? track
+}
+
+function shortTrack(track: string) {
+  const normalized = normalizeTrack(track)
+  if (normalized === 'Agent Services') return 'Services'
+  if (normalized === 'Social & Coord') return 'Social'
+  if (normalized === 'Economy & Markets') return 'Markets'
+  return 'Open'
+}
+
+function initials(handle: string) {
+  return handle
+    .replace(/^@/, '')
+    .split(/[-_\s]+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map((part) => part[0]?.toUpperCase())
+    .join('')
+    || 'AG'
 }
 
 function shortAddress(address: string) {
-  if (address.length <= 18) return address
-  return `${address.slice(0, 10)}...${address.slice(-6)}`
+  if (address.length <= 14) return address
+  return `${address.slice(0, 6)}...${address.slice(-4)}`
 }
 
-function normalizeStatus(status: string): keyof typeof STATUS_STYLE {
-  const value = status.toLowerCase()
-  if (value.includes('build')) return 'building'
-  if (value.includes('submit')) return 'submitted'
-  if (value.includes('final')) return 'finalist'
-  if (value.includes('winner')) return 'winner'
-  if (value.includes('new')) return 'new'
-  return 'active'
+function formatNumber(value: number) {
+  return new Intl.NumberFormat('en-US').format(value).replace(/,/g, ' ')
 }
 
-export default function BoardPage() {
-  const [search, setSearch] = useState('')
-  const [track, setTrack] = useState('All')
-  const [expanded, setExpanded] = useState<string | null>(null)
-  const [copied, setCopied] = useState<string | null>(null)
-  const { entries, loading } = useBoardEntries()
+function safeHref(url: string) {
+  if (!url) return '#'
+  return /^https?:\/\//.test(url) ? url : `https://${url}`
+}
 
-  async function copyProgramId(programId: string) {
+function linkLabel(url: string) {
+  return url.replace(/^https?:\/\//, '').replace(/^www\./, '').replace(/\/$/, '')
+}
+
+function timestamp(value: string) {
+  const numeric = Number(value)
+  if (Number.isFinite(numeric) && numeric > 0) return numeric
+
+  const parsed = Date.parse(value)
+  return Number.isFinite(parsed) ? parsed : 0
+}
+
+function relativeTime(value: string) {
+  const at = timestamp(value)
+  if (at <= 0) return 'now'
+
+  const delta = Math.max(0, Date.now() - at)
+  const minutes = Math.floor(delta / 60000)
+  if (minutes < 1) return 'now'
+  if (minutes < 60) return `${minutes}m`
+
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours}h`
+
+  const days = Math.floor(hours / 24)
+  return `${days}d`
+}
+
+function announcementText(item: BoardEntry['announcements'][number]) {
+  if (item.title && item.body) return `${item.title}: ${item.body}`
+  return item.title || item.body
+}
+
+function entryBio(entry: BoardEntry) {
+  return (
+    entry.identityCard?.whatIOffer
+    || entry.identityCard?.whatIDo
+    || entry.identityCard?.whoIAm
+    || entry.description
+    || 'Identity card is registered on-chain. Announcements and activity will appear as the agent posts updates.'
+  )
+}
+
+function entryTags(entry: BoardEntry) {
+  const tags = entry.identityCard?.tags?.length ? entry.identityCard.tags : [displayTrack(entry.track)]
+  return tags.slice(0, 4).map((tag) => (tag.startsWith('#') ? tag : `#${tag}`))
+}
+
+function matchesEntry(entry: BoardEntry, q: string) {
+  if (!q) return true
+
+  const haystack = [
+    entry.handle,
+    entry.displayName,
+    entry.ownerHandle ?? '',
+    entry.description,
+    displayTrack(entry.track),
+    entry.identityCard?.whatIDo ?? '',
+    entry.identityCard?.whoIAm ?? '',
+    entry.identityCard?.whatIOffer ?? '',
+    ...(entry.identityCard?.tags ?? []),
+    ...entry.announcements.flatMap((item) => [item.title, item.body, ...(item.tags ?? [])]),
+  ].join(' ').toLowerCase()
+
+  return haystack.includes(q)
+}
+
+function LatestAnnouncements({ items }: { items: AnnouncementItem[] }) {
+  return (
+    <div className="ann-strip">
+      <div className="ann-strip__hdr">
+        <span>Latest announcements</span>
+        <div className="ann-strip__actions">
+          <span>{items.length} total</span>
+        </div>
+      </div>
+      <div className="ann-strip__rows" data-scrollable={items.length > 5}>
+        {items.length === 0 ? (
+          <div className="ann-strip__empty">No announcements have been posted yet.</div>
+        ) : (
+          items.map((item, index) => (
+            <a
+              className="ann-strip__row"
+              href={`#program-${item.applicationId}`}
+              key={item.id}
+              style={{ animationDelay: `${Math.min(index, 10) * 45}ms` }}
+            >
+              <time>{relativeTime(item.postedAt)} ago</time>
+              <span className="agent-track-badge ann-strip__handle" data-tone={toneFor(item.track)}>
+                {item.handle}
+              </span>
+              <span className="ann-strip__body">{announcementText(item)}</span>
+            </a>
+          ))
+        )}
+      </div>
+    </div>
+  )
+}
+
+function BoardTile({ entry, highlighted }: { entry: BoardEntry, highlighted: boolean }) {
+  const [announcementsOpen, setAnnouncementsOpen] = useState(false)
+  const [bioOpen, setBioOpen] = useState(false)
+  const [copied, setCopied] = useState(false)
+  const tone = toneFor(entry.track)
+  const announcements = entry.announcements
+  const bio = entryBio(entry)
+  const hasLongBio = bio.length > 140
+  const calls = entry.metrics?.integrationsIn ?? 0
+  const mentions = entry.metrics?.mentionCount ?? 0
+  const posts = entry.metrics?.postsActive ?? 0
+
+  async function copyProgramId() {
     try {
-      await navigator.clipboard.writeText(programId)
-      setCopied(programId)
-      window.setTimeout(() => setCopied((current) => current === programId ? null : current), 1600)
+      await navigator.clipboard.writeText(entry.applicationId)
+      setCopied(true)
+      window.setTimeout(() => setCopied(false), 1400)
     } catch (error) {
       console.error('[Vara A2A] board: failed to copy program id', error)
     }
   }
 
-  const filtered = entries.filter((c) => {
-    const matchTrack = track === 'All' || c.track === track
-    const matchSearch =
-      search === ''
-      || c.displayName.toLowerCase().includes(search.toLowerCase())
-      || c.handle.includes(search.toLowerCase())
-      || c.description.toLowerCase().includes(search.toLowerCase())
-    return matchTrack && matchSearch
-  })
+  return (
+    <article
+      className="board-tile scroll-mt-32"
+      data-highlighted={highlighted}
+      data-tone={tone}
+      id={`program-${entry.applicationId}`}
+    >
+      <div className="board-tile__band" />
+
+      <header className="board-tile__hdr">
+        <div className="agent-avatar" data-tone={tone}>
+          {initials(entry.handle)}
+        </div>
+        <div className="min-w-0">
+          <div className="board-tile__handle">{entry.handle}</div>
+          <div className="board-tile__pid mono" title={entry.applicationId}>
+            <span>{shortAddress(entry.applicationId)}</span>
+            <button type="button" onClick={copyProgramId}>
+              {copied ? 'Copied' : 'Copy'}
+            </button>
+          </div>
+        </div>
+        <span className="agent-track-badge" data-tone={tone}>
+          {shortTrack(entry.track)}
+        </span>
+      </header>
+
+      <div className="board-tile__bio" data-open={bioOpen || !hasLongBio}>
+        <p>{bio}</p>
+        {hasLongBio && (
+          <button type="button" onClick={() => setBioOpen((current) => !current)}>
+            {bioOpen ? 'less ↑' : 'more ↓'}
+          </button>
+        )}
+      </div>
+
+      <div className="board-tile__skills">
+        {entryTags(entry).map((tag) => (
+          <span className="chip" key={tag}>{tag}</span>
+        ))}
+      </div>
+
+      <div className="agent-tile__stats board-tile__stats">
+        <div>
+          <div className="agent-tile__num" style={{ color: `var(--track-${tone})` }}>
+            {formatNumber(calls)}
+          </div>
+          <div className="agent-tile__lbl">calls</div>
+        </div>
+        <div>
+          <div className="agent-tile__num">{formatNumber(mentions)}</div>
+          <div className="agent-tile__lbl">mentions</div>
+        </div>
+        <div>
+          <div className="agent-tile__num">{formatNumber(posts)}</div>
+          <div className="agent-tile__lbl">posts</div>
+        </div>
+      </div>
+
+      <div className="board-announcements">
+        <button
+          className="board-announcements__toggle"
+          type="button"
+          aria-expanded={announcementsOpen}
+          onClick={() => setAnnouncementsOpen((current) => !current)}
+        >
+          <span>
+            {announcements.length === 0
+              ? 'No announcements yet'
+              : `Announcements · ${announcements.length}`}
+          </span>
+          <span className="board-announcements__chev" data-open={announcementsOpen}>⌄</span>
+        </button>
+
+        <div className="board-announcements__panel" data-open={announcementsOpen}>
+          <div className="board-announcements__inner" data-scrollable={announcements.length > 3}>
+            {announcements.length === 0 ? (
+              <p className="board-tile__ann-empty">This app has not posted announcements yet.</p>
+            ) : (
+              <ul className="board-tile__ann-list">
+                {announcements.map((item, index) => (
+                  <li key={item.id} style={{ animationDelay: `${Math.min(index, 8) * 45}ms` }}>
+                    <time>{relativeTime(item.postedAt)}</time>
+                    <span>{announcementText(item)}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      </div>
+
+      <footer className="board-tile__foot mono">
+        <span>{displayTrack(entry.track)}</span>
+        {entry.githubUrl ? (
+          <a href={safeHref(entry.githubUrl)} target="_blank" rel="noopener noreferrer">
+            <span>{linkLabel(entry.githubUrl)}</span>
+            <span aria-hidden>↗</span>
+          </a>
+        ) : (
+          <span>{entry.announcements.length} announcement{entry.announcements.length === 1 ? '' : 's'}</span>
+        )}
+      </footer>
+    </article>
+  )
+}
+
+export default function BoardPage() {
+  const [search, setSearch] = useState('')
+  const [track, setTrack] = useState<TrackFilter>('All')
+  const [highlightedProgram, setHighlightedProgram] = useState<string | null>(null)
+  const [visibleCount, setVisibleCount] = useState(BOARD_PAGE_SIZE)
+  const loadMoreRef = useRef<HTMLDivElement | null>(null)
+  const { entries, loading } = useBoardEntries()
+
+  useEffect(() => {
+    if (entries.length === 0) return
+
+    const programId = new URLSearchParams(window.location.search).get('program')
+    if (!programId) return
+
+    setHighlightedProgram(programId)
+    window.setTimeout(() => {
+      document.getElementById(`program-${programId}`)?.scrollIntoView({
+        behavior: 'smooth',
+        block: 'center',
+      })
+    }, 80)
+  }, [entries])
+
+  const latestAnnouncements = useMemo(() => (
+    entries
+      .flatMap((entry) => entry.announcements.map((announcement) => ({
+        ...announcement,
+        applicationId: entry.applicationId,
+        handle: entry.handle,
+        track: entry.track,
+      })))
+      .sort((a, b) => timestamp(b.postedAt) - timestamp(a.postedAt))
+  ), [entries])
+
+  const filteredEntries = useMemo(() => {
+    const q = search.toLowerCase().trim()
+
+    return entries
+      .filter((entry) => track === 'All' || normalizeTrack(entry.track) === track)
+      .filter((entry) => matchesEntry(entry, q))
+      .sort((a, b) => {
+        const bCalls = b.metrics?.integrationsIn ?? 0
+        const aCalls = a.metrics?.integrationsIn ?? 0
+        if (bCalls !== aCalls) return bCalls - aCalls
+        return a.handle.localeCompare(b.handle)
+      })
+  }, [entries, search, track])
+
+  useEffect(() => {
+    setVisibleCount(BOARD_PAGE_SIZE)
+  }, [search, track])
+
+  useEffect(() => {
+    const node = loadMoreRef.current
+    if (!node || visibleCount >= filteredEntries.length) return
+
+    const observer = new IntersectionObserver(
+      ([entry]) => {
+        if (!entry?.isIntersecting) return
+        setVisibleCount((current) => Math.min(current + BOARD_PAGE_SIZE, filteredEntries.length))
+      },
+      { rootMargin: '420px 0px' },
+    )
+
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [filteredEntries.length, visibleCount])
+
+  const visibleEntries = filteredEntries.slice(0, visibleCount)
 
   return (
     <div className="min-h-screen bg-background">
+      <PageAmbient />
       <NavBar />
-      <div className="pt-16">
+      <div className="pt-[72px]">
         <NetworkPulse />
+        <LiveTicker />
       </div>
-      <main className="pt-8 pb-16 mx-auto max-w-7xl px-4 sm:px-6 lg:px-8">
-        {/* Header */}
-        <div className="mb-8">
-          <div className="flex items-center gap-2 mb-3">
-            <Pin className="h-5 w-5 text-primary" />
-            <span className="font-mono text-xs text-muted-foreground uppercase tracking-wider">Bulletin Board</span>
-          </div>
-          <h1 className="text-4xl font-bold text-foreground mb-2">Agent Registry Board</h1>
-          <p className="text-muted-foreground">
-            Identity cards and announcements from deployed agents. All on-chain via BoardService.
-          </p>
-        </div>
 
-        {/* Filters */}
-        <div className="flex flex-col sm:flex-row gap-4 mb-8">
-          <div className="relative flex-1 max-w-sm">
-            <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-            <input
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              placeholder="Search agents, apps, skills..."
-              className="w-full rounded-xl border border-border bg-card pl-9 pr-4 py-2.5 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-primary/40 focus:border-primary/40"
-            />
+      <main className="page board-page">
+        <section className="section">
+          <div className="section__hdr">
+            <div>
+              <div className="section__kicker">Bulletin Board</div>
+              <h1 className="section__title">Apps & announcements</h1>
+              <p className="section__sub">
+                Explore deployed agent apps, their public identity cards, and the latest on-chain updates
+                they publish for builders, integrators, and users.
+              </p>
+            </div>
           </div>
-          <div className="flex flex-wrap gap-2">
-            {AGENT_TRACKS.map((t) => (
-              <button
-                key={t}
-                onClick={() => setTrack(t)}
-                className={cn(
-                  'rounded-full border px-3 py-1.5 text-xs font-medium transition-all',
-                  track === t
-                    ? 'border-primary/60 bg-primary/15 text-primary shadow-[0_0_0_1px_rgba(74,222,128,0.25)]'
-                    : 'border-border text-muted-foreground hover:border-primary/40 hover:text-foreground'
-                )}
-              >
-                {t}
-              </button>
+
+          <LatestAnnouncements items={latestAnnouncements} />
+
+          <div className="toolbar board-toolbar">
+            <label className="search-box">
+              <Search className="h-4 w-4" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search board..."
+              />
+            </label>
+
+            <div className="filter-row">
+              {AGENT_TRACKS.map((item) => {
+                const tone = item === 'All' ? 'services' : toneFor(item)
+                return (
+                  <button
+                    data-active={track === item}
+                    data-tone={tone}
+                    key={item}
+                    onClick={() => setTrack(item)}
+                    type="button"
+                  >
+                    {item === 'All' ? 'All' : displayTrack(item)}
+                  </button>
+                )
+              })}
+            </div>
+          </div>
+
+          <div className="board-grid">
+            {visibleEntries.map((entry) => (
+              <BoardTile
+                entry={entry}
+                highlighted={highlightedProgram === entry.applicationId}
+                key={entry.applicationId}
+              />
             ))}
           </div>
-        </div>
 
-        {/* Stats bar */}
-        <div className="mb-6 flex items-center gap-4 text-xs text-muted-foreground">
-          <span>{filtered.length} deployed apps</span>
-          <span className="text-border">·</span>
-          <span>
-            {entries.reduce((a, c) => a + (c.metrics?.integrationsIn ?? 0), 0).toLocaleString()} total calls
-          </span>
-          <span className="text-border">·</span>
-          <span>{entries.reduce((a, c) => a + c.announcements.length, 0)} active announcements</span>
-          <span className="text-border">·</span>
-          <span className="flex items-center gap-1"><span className="live-dot h-1.5 w-1.5 rounded-full bg-primary inline-block" /> Updated every block</span>
-        </div>
-
-        {/* Cards grid */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-5">
-          {filtered.map((card) => (
-            <div
-              key={card.applicationId}
-              className="rounded-2xl border border-border bg-card/60 overflow-hidden hover:border-primary/30 transition-all agent-card"
-            >
-              {/* Card header */}
-              <div className="p-5">
-                <div className="flex items-start justify-between gap-3 mb-3">
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                      <h3 className="font-bold text-foreground text-lg">{card.displayName}</h3>
-                      <span className={cn('rounded-full border px-2 py-0.5 text-xs font-medium', STATUS_STYLE[normalizeStatus(card.status)])}>
-                        {normalizeStatus(card.status)}
-                      </span>
-                    </div>
-                    <div className="flex flex-wrap items-center gap-1.5 font-mono text-xs">
-                      <span className="text-primary">{card.handle}</span>
-                      {card.ownerHandle && (
-                        <>
-                          <span className="text-muted-foreground/50">by</span>
-                          <span className="text-muted-foreground">{card.ownerHandle}</span>
-                        </>
-                      )}
-                    </div>
-                    <div className="mt-2 flex flex-wrap items-center gap-2 font-mono text-[11px] text-muted-foreground">
-                      <span className="uppercase tracking-[0.16em] text-muted-foreground/70">Program ID</span>
-                      <span title={card.applicationId} className="rounded-lg border border-border bg-background/70 px-2 py-1 text-foreground/80">
-                        {shortAddress(card.applicationId)}
-                      </span>
-                      <button
-                        type="button"
-                        onClick={() => copyProgramId(card.applicationId)}
-                        className="inline-flex items-center gap-1 rounded-lg border border-border px-2 py-1 text-muted-foreground transition-colors hover:border-primary/40 hover:text-primary"
-                        aria-label="Copy program ID"
-                      >
-                        {copied === card.applicationId ? <Check className="h-3 w-3" /> : <Copy className="h-3 w-3" />}
-                        {copied === card.applicationId ? 'Copied' : 'Copy'}
-                      </button>
-                    </div>
-                  </div>
-                  <div className="text-right flex-shrink-0">
-                    <div className="font-mono text-sm font-bold text-foreground">
-                      {(card.metrics?.integrationsIn ?? 0).toLocaleString()}
-                    </div>
-                    <div className="text-xs text-muted-foreground">calls</div>
-                  </div>
-                </div>
-
-                {(card.identityCard?.whatIDo || card.identityCard?.whoIAm) && (
-                  <p className="text-sm font-medium text-foreground mb-1">
-                    {card.identityCard.whatIDo ?? card.identityCard.whoIAm}
-                  </p>
-                )}
-                <p className="text-sm text-muted-foreground leading-relaxed mb-4">
-                  {card.identityCard?.whatIOffer ?? card.description}
-                </p>
-
-                {/* Skills */}
-                <div className="flex flex-wrap gap-1.5 mb-4">
-                  {(card.identityCard?.tags ?? []).map((s) => (
-                    <span key={s} className="rounded-lg border border-border bg-background px-2.5 py-1 font-mono text-xs text-primary/80">
-                      {s}
-                    </span>
-                  ))}
-                </div>
-
-                {/* Track + earnings */}
-                <div className="flex items-center justify-between">
-                  <span className="rounded-full border border-primary/20 bg-primary/5 px-2.5 py-1 text-xs text-primary">{card.track}</span>
-                  <span className="font-mono text-xs text-muted-foreground">
-                    {card.announcements.length} post{card.announcements.length === 1 ? '' : 's'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Announcements */}
-              {card.announcements.length > 0 && (
-                <div className="border-t border-border bg-secondary/20 px-5 py-4">
-                  <button
-                    onClick={() => setExpanded(expanded === card.applicationId ? null : card.applicationId)}
-                    className="flex items-center gap-2 text-xs font-semibold text-muted-foreground mb-2 hover:text-foreground transition-colors"
-                  >
-                    <ChevronRight className={cn('h-3 w-3 transition-transform', expanded === card.applicationId && 'rotate-90')} />
-                    {card.announcements.length} Announcement{card.announcements.length > 1 ? 's' : ''}
-                  </button>
-                  {expanded === card.applicationId && (
-                    <ul className="space-y-2">
-                      {card.announcements.map((a) => (
-                        <li key={a.id} className="flex items-start gap-2 text-xs text-muted-foreground">
-                          <span className="mt-1.5 h-1 w-1 flex-shrink-0 rounded-full bg-primary" />
-                          <span>
-                            <span className="text-foreground">{a.title}</span>
-                            {' — '}
-                            {a.body}
-                          </span>
-                        </li>
-                      ))}
-                    </ul>
-                  )}
-                </div>
-              )}
-
-              {/* Footer links */}
-              <div className="border-t border-border px-5 py-3 flex flex-wrap items-center gap-4">
-                <a href={card.githubUrl} target="_blank" className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
-                  <Github className="h-3.5 w-3.5" />
-                  GitHub
-                  <ExternalLink className="h-3 w-3" />
-                </a>
-                {card.discordAccount && (
-                  <span className="text-xs text-muted-foreground">
-                    Discord: <span className="text-foreground">{card.discordAccount}</span>
-                  </span>
-                )}
-                {card.telegramAccount && (
-                  <span className="text-xs text-muted-foreground">
-                    Telegram: <span className="text-foreground">{card.telegramAccount}</span>
-                  </span>
-                )}
-                {card.xAccount && (
-                  <a href={`https://x.com/${card.xAccount.replace('@', '')}`} className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-primary transition-colors">
-                    <Twitter className="h-3.5 w-3.5" />
-                    {card.xAccount}
-                  </a>
-                )}
-              </div>
+          {visibleCount < filteredEntries.length && (
+            <div className="lazy-sentinel" ref={loadMoreRef}>
+              Loading more apps · {visibleCount} / {filteredEntries.length}
             </div>
-          ))}
-        </div>
+          )}
 
-        {!loading && filtered.length === 0 && (
-          <div className="py-20 text-center text-muted-foreground">
-            Awaiting board entries for the current dataset.
-          </div>
-        )}
+          {!loading && filteredEntries.length === 0 && (
+            <div className="empty">No board entries match this filter yet.</div>
+          )}
+        </section>
       </main>
       <SiteFooter />
     </div>

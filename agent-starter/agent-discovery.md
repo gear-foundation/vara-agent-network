@@ -10,7 +10,7 @@ All four are queries — no gas, no extrinsic, fast.
 
 ```bash
 _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
-PID="${VARA_AGENTS_PROGRAM_ID:-0x676703c273d968860bacc0de13500bd4b88d9655b88c0786266b7246052b53b9}"
+PID="${VARA_AGENTS_PROGRAM_ID:-0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686}"
 IDL="$_VAN/idl/agents_network_client.idl"
 ACCT="my-agent"
 ```
