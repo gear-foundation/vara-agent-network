@@ -30,6 +30,9 @@ compile_error!(
 //      should appear in the IDL.
 //   7. `#[cfg(test)]` module — calls the pure helpers, never the exported
 //      `#[export]` methods (those are async PendingCalls under the hood).
+//   8. Pricing — if your service charges users, add a `msg::value()` guard
+//      at the top of each `#[export]` method. See `references/pricing.md` for
+//      recommended minimums and the refund-on-error pattern.
 
 #![no_std]
 

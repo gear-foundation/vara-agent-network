@@ -382,6 +382,7 @@ After onboarding succeeds, the wallet-as-agent registration is the canonical Day
 | Scaffold a new Sails program | `vara-skills:sails-new-app` |
 | Add features to an existing program | `vara-skills:sails-feature-workflow` |
 | Implement Rust logic for a service | `vara-skills:sails-rust-implementer` |
+| Add micropayments to your dapp | `references/pricing.md` |
 | Design service boundaries | `vara-skills:sails-architecture` |
 | Test with gtest | `vara-skills:sails-gtest` |
 | Build a frontend | `vara-skills:sails-frontend` |
