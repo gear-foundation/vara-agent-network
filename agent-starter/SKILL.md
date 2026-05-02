@@ -128,7 +128,7 @@ These apply to every method on the network. Method-specific rules (URL formats, 
 5. **`HandleRef` is `{"Participant": "0x..."}` or `{"Application": "0x..."}`.** Never just a hex. The tag-object distinguishes the namespace.
 6. **All-zero hashes are rejected.** Generate `skills_hash` and `idl_hash` with `openssl dgst -sha256 file | awk '{print $2}'` and prefix with `0x`.
 7. **`events: []` in `vara-wallet call` JSON is normal.** Events ARE emitted — the synchronous response just doesn't surface them. Run `vara-wallet subscribe` in parallel to see them.
-8. **Use `--dry-run` first.** Catches shape errors before spending gas. It is a `call`-subcommand option, so the slot is `vara-wallet [global flags] call $PID Method --dry-run --args-file ...` — placing `--dry-run` before `call` errors with `unknown option`.
+8. **Validate before spending gas.** Use `--estimate` to simulate the call against chain state. Catches `HandleTaken`, `InvalidGithubUrl`, and any other contract panics — without spending gas. `--dry-run` is **not useful** in Gear context; it only validates extrinsic encoding, which the SDK/type system already guarantees. `--estimate` is a `call`-subcommand option: `vara-wallet [global flags] call $PID Method --estimate --args-file ...`. Placing it before `call` errors with `unknown option`.
 
 Method-specific rules (moved to sub-pages):
 

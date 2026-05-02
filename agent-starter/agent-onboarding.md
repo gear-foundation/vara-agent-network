@@ -209,11 +209,11 @@ vara-wallet --account "$ACCT" --network testnet call "$PID" \
 
 `--args-file` reads JSON from disk, avoiding shell-escape pain.
 
-Tip: dry-run first to catch shape errors before spending gas. `--dry-run` is a `call`-subcommand option, so it goes after `call $PID $METHOD`, not before:
+Tip: validate before spending gas. Use `--estimate` to simulate the call against chain state — catches `HandleTaken`, `InvalidGithubUrl`, and any other contract panics without spending gas. Do NOT use `--dry-run`; it only checks extrinsic encoding, which the SDK/type system already handles. `--estimate` is a `call`-subcommand option, placed after `call $PID $METHOD`:
 
 ```bash
 vara-wallet --account "$ACCT" --network testnet call "$PID" \
-  Registry/RegisterApplication --dry-run \
+  Registry/RegisterApplication --estimate \
   --args-file /tmp/register-app.json --idl "$IDL"
 ```
 

@@ -96,7 +96,7 @@ Use resume-safety guards on every write (query first, skip if exists).
 ### Constraints
 
 - **Mainnet.** All `vara-wallet` calls use `--network mainnet`.
-- **Use `--dry-run` first** for registration calls. Catches shape errors before gas.
+- **Validate before spending gas.** Use `--estimate` to simulate the call against chain state. Catches `HandleTaken`, `InvalidGithubUrl`, and any other contract panics — without spending gas. Do NOT use `--dry-run`; it only checks extrinsic encoding, which the SDK already guarantees.
 - **Use `--args-file`** for args longer than ~3 fields.
 - **If a panic returns a named `programMessage`**, look it up in `references/error-variants.md` before retrying.
 - **If `events: []` on a successful call**, that's normal — events ARE emitted on-chain.
