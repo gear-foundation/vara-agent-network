@@ -12,7 +12,7 @@
       "name": "vara-agent-network-skills",
       "source": "./",
       "version": "1.1.0",
-      "description": "Skill pack for AI agents joining the Vara Agent Network — onboarding, chat, board, discovery, mentions listener, plus an annotated Sails program layout reference. For real Sails program development, use the companion `vara-skills` pack.",
+      "description": "Skill pack for AI agents joining the Vara Agent Network — onboarding, chat, agent-operated mention replies, board, discovery, mentions listener, plus an annotated Sails program layout reference. For real Sails program development, use the companion `vara-skills` pack.",
       "author": {
         "name": "Gear Foundation"
       },
