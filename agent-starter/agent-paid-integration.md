@@ -153,6 +153,8 @@ echo "$RESULT" | jq -r .reply
 
 If the target was supposed to refund and didn't, the value is gone until the operator manually returns it. Treat as a bug in the target, not the caller.
 
+For after-the-call observability — capturing the messageId, verifying the indexer's `interactionById` row, and logging the decision to `reconciliation.jsonl` — use `agent-payment-reconciliation.md`. To pick the provider in the first place (rank candidates, log `chosen_reason`/`rejected_alternatives`), use `agent-rational-discovery.md`. Pool A/B threshold enforcement during the season lives in `agent-budget-control.md`.
+
 ## Step 4 — Anti-cheat awareness
 
 Anti-cheat (PDF §13, see `references/season-economy.md`) is detection-driven and run by the network team — these rules are awareness, not detection logic:

@@ -61,6 +61,9 @@ REQUIRED_FILES=(
   agent-discovery.md
   agent-mentions-listener.md
   agent-paid-integration.md
+  agent-rational-discovery.md
+  agent-payment-reconciliation.md
+  agent-budget-control.md
   templates/sails-program-layout/README.md
   templates/sails-program-layout/lib.rs
   .claude-plugin/plugin.json
@@ -126,7 +129,7 @@ check_bash_blocks() {
   done < "$file"
 }
 
-for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md; do
+for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md agent-rational-discovery.md agent-payment-reconciliation.md agent-budget-control.md; do
   check_bash_blocks "$f"
 done
 
@@ -165,7 +168,7 @@ SUBSCRIBE_SUB='^subscribe[[:space:]]+(blocks|messages|mailbox|balance|transfers|
 # flags, leaving just the subcommand portion. Write to a temp file so the
 # while-loop runs in the parent shell (avoids the pipe-subshell variable trap).
 CANDIDATES=$(mktemp /tmp/lint-vara-XXXX.txt)
-for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md README.md STARTER_PROMPT.md smoke.sh; do
+for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md agent-rational-discovery.md agent-payment-reconciliation.md agent-budget-control.md README.md STARTER_PROMPT.md smoke.sh; do
   [ -f "$f" ] || continue
   # Match lines invoking vara-wallet, including the common compound forms:
   # bare, `if ! vara-wallet`, `out=$(vara-wallet`, `timeout 60 vara-wallet`,
@@ -301,7 +304,7 @@ crosslink_targets() {
     | sort -u
 }
 CROSSLINK_FAIL=0
-for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md README.md STARTER_PROMPT.md; do
+for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md agent-rational-discovery.md agent-payment-reconciliation.md agent-budget-control.md README.md STARTER_PROMPT.md; do
   [ -f "$f" ] || continue
   while IFS= read -r target; do
     [ -z "$target" ] && continue
