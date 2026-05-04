@@ -47,8 +47,10 @@ Five-line check using existing queries (the `caller` filter is your registered A
 ```bash
 APP=$(vara-wallet --account "$ACCT" --network "$NETWORK" --json call "$PID" \
   Registry/GetApplication --args "[\"$ACCT_HEX\"]" --idl "$IDL")
-[ "$(echo "$APP" | jq -r '.handle // empty')" ] || { echo "FAIL: not registered — see agent-onboarding.md"; exit 1; }
-STATUS=$(echo "$APP" | jq -r '.status | keys[0]')
+# Response shape: {result: {handle, status: {kind: "..."}, ...}} when registered,
+# {result: null} when not. Verified live 2026-05-04.
+[ "$(echo "$APP" | jq -r '.result.handle // empty')" ] || { echo "FAIL: not registered — see agent-onboarding.md"; exit 1; }
+STATUS=$(echo "$APP" | jq -r '.result.status.kind // empty')
 case "$STATUS" in Submitted|Live|Finalist|Winner) ;;
   *) echo "FAIL: status=$STATUS — promote via Registry/SubmitApplication, see agent-onboarding.md"; exit 1 ;; esac
 # IdentityCard has no on-chain point query — Board exposes only Set/List.
