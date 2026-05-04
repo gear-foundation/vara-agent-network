@@ -63,10 +63,18 @@ RESULT=$(vara-wallet --account "$ACCT" --network mainnet --json call "$TARGET_HE
   --args-file /tmp/method-args.json \
   --idl "$TARGET_IDL")
 
-MSG_ID=$(echo "$RESULT" | jq -r .messageId)
-TX_HASH=$(echo "$RESULT" | jq -r .txHash)
-BLOCK_NUMBER=$(echo "$RESULT" | jq -r .blockNumber)
-REPLY=$(echo "$RESULT" | jq -r .result)
+MSG_ID=$(echo "$RESULT" | jq -r '.messageId // empty')
+TX_HASH=$(echo "$RESULT" | jq -r '.txHash // empty')
+BLOCK_NUMBER=$(echo "$RESULT" | jq -r '.blockNumber // 0')
+REPLY=$(echo "$RESULT" | jq -c '.result')
+
+# Bail out early if the call didn't produce a messageId — Step 4 reconciliation
+# can't run without it. This handles the query-method case (vara-wallet returns
+# {result: ...} with no messageId for read-only methods).
+if [ -z "$MSG_ID" ]; then
+  echo "ERROR: no messageId in call output — was this a query method? Aborting reconciliation."
+  exit 1
+fi
 ```
 
 `vara-wallet --json call` for state-changing functions returns `{txHash, blockHash, blockNumber, messageId, voucherId, result, events}` (verified against `vara-wallet@0.16` bundled output emission). The `messageId` is the Gear messageId — identical to the suffix used by the indexer's `interaction:${messageId}` id format. Capture it; Step 4 needs it.
@@ -126,15 +134,24 @@ If `$ROW` is null after 30s: log as reconciliation failure and try fallbacks in 
 
 This is where decision quality becomes auditable. Append-only NDJSON; one row per paid call.
 
+The variables `CHOSEN_REASON`, `REJECTED_ALTERNATIVES_JSON`, and `RANK_INPUTS_JSON` come from `agent-rational-discovery.md` Step 4 output (the top-K array — pick the chosen one's `reason`, the others' `{program_id, reason}` for rejected, the chosen one's `components` for rank inputs). `VALUE_RAW_PLANCKS` = `$VALUE_VARA * 10^12` as a decimal string. `OUTCOME` derives from your Step 3 decode: `Ok(_)` → `"ok"`, `Err(_)` → `"err"`, no reply → `"timeout"`, indexer never returned a row → `"indexer_missing"`.
+
 ```bash
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INDEXER_ROW_PRESENT=$([ "$ROW" != "null" ] && echo "true" || echo "false")
-ELAPSED_BLOCKS=$(( BLOCK_NUMBER - $(echo "$ROW" | jq -r '.substrateBlockNumber // 0') ))
+ROW_BLOCK=$(echo "$ROW" | jq -r '.substrateBlockNumber // 0')
+ELAPSED_BLOCKS=$(( BLOCK_NUMBER - ROW_BLOCK ))
 [ "$ELAPSED_BLOCKS" -lt 0 ] && ELAPSED_BLOCKS=0   # row is from a later block than our send
 
+# Compute VALUE_RAW_PLANCKS from the human VARA amount.
+VALUE_RAW_PLANCKS=$(awk -v v="$VALUE_VARA" 'BEGIN { printf "%.0f", v * 1e12 }')
+
 # OUTCOME: ok | err | timeout | indexer_missing
-# Decide based on: did REPLY decode? did the IDL Result variant come back as Ok or Err?
-OUTCOME="ok"   # set by your decode logic above
+OUTCOME="${OUTCOME:-ok}"   # set by your Step 3 decode logic
+# Default empty inputs if the caller didn't pass them (decision quality scoring will flag empties).
+CHOSEN_REASON="${CHOSEN_REASON:-}"
+REJECTED_ALTERNATIVES_JSON="${REJECTED_ALTERNATIVES_JSON:-[]}"
+RANK_INPUTS_JSON="${RANK_INPUTS_JSON:-{}}"
 
 # CHOSEN_REASON + REJECTED_ALTERNATIVES come from agent-rational-discovery.md Step 4 output.
 jq -nc \

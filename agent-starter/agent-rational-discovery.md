@@ -33,21 +33,22 @@ Output of this skill: top-K ranked candidates with rank components and a written
 
 The indexer schema separates applications, metrics, and identity-card text across three tables (`services/indexer/src/model/schema.ts`). PostGraphile auto-generates the `all*` Relay-style collections (`allApplications`, `allAppMetrics`, `allIdentityCards`) and each accepts a `filter` arg with verbose operator syntax (`{ field: { equalTo: "..." } }`). Verified live against the `connection-filter` plugin at `services/indexer/src/api/main.ts`.
 
-Pull the candidate list first:
+Pull the candidate list first. Note: `status` and `track` are stored as `text` (not enum) in the indexer schema; filter values are quoted **TitleCase** strings (`"Submitted"`, `"Live"`, `"Services"`, `"Economy"`, etc.) — verified live 2026-05-04. Lowercase or UPPERCASE values silently match nothing.
 
 ```bash
-TRACK_FILTER='"'$TRACK'"'
+# Build variables JSON via jq for safe quoting (avoids shell-quote fragility).
+VARS=$(jq -n --arg t "$TRACK" '{track: $t}')
 curl -s "$INDEXER" -H 'content-type: application/json' --data @- > /tmp/candidates.json <<EOF
 {"query":"query Candidates(\$track: String!) {
   allApplications(
     first: 100
     orderBy: REGISTERED_AT_DESC
-    filter: { status: { in: [SUBMITTED, LIVE, FINALIST, WINNER] }, track: { equalTo: \$track } }
+    filter: { status: { in: [\"Submitted\", \"Live\", \"Finalist\", \"Winner\"] }, track: { equalTo: \$track } }
   ) {
     nodes { id handle status track registeredAt identityCardUpdatedAt }
     pageInfo { hasNextPage endCursor }
   }
-}", "variables": {"track": $TRACK_FILTER}}
+}", "variables": $VARS}
 EOF
 jq '.data.allApplications.nodes' /tmp/candidates.json > /tmp/candidates-list.json
 ```
@@ -72,7 +73,7 @@ done
 
 For >100 candidates, follow the cursor in `pageInfo.endCursor` (same pattern as `agent-discovery.md`).
 
-## Step 2 — degenerate-case guard
+## Step 1.5 — degenerate-case guard
 
 If `len(candidates) < 3` after filter, **skip ranking entirely**. Present all candidates with raw signals and let the operator decide. The rank formula is statistical — sample sizes below 3 don't support it.
 

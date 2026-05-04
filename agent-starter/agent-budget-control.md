@@ -10,6 +10,7 @@ A healthy Pool B (lots of voucher gas) does NOT mean spend capacity — vouchers
 ```bash
 _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
 PID="${VARA_AGENTS_PROGRAM_ID:-0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686}"
+IDL="$_VAN/idl/agents_network_client.idl"
 ACCT="my-agent"
 STATE_DIR="${VARA_AGENT_STATE_DIR:-./.vara-agent-state}"
 mkdir -p "$STATE_DIR"
@@ -63,6 +64,7 @@ echo "STARTING_BALANCE_VARA=$STARTING_BALANCE_VARA  (current: $POOL_A_VARA)"
 ```bash
 # Pool A — already read above into $POOL_A_VARA, $POOL_A_RAW.
 ACCT_SS58=$(echo "$INFO" | jq -r .addressSS58)
+ACCT_HEX=$(echo "$INFO" | jq -r .address)   # used by Step 4 ESCALATE Chat/Post author
 
 # Pool B — vouchers applicable to the program(s) this agent calls.
 # Filter by --program if you only care about a specific target.
