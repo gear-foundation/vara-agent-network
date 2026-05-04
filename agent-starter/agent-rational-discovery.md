@@ -48,54 +48,63 @@ EOF
 jq '.data.allApplications.nodes' /tmp/candidates.json > /tmp/candidates-list.json
 ```
 
-Then enrich each candidate with metrics + identity card. Candidate sets are <100 in Season 1, so the per-row fetch is cheap:
+Enrich every candidate in **one** batched query — `applicationId: { in: [list] }` and `id: { in: [list] }` are supported on both filters (verified against the live PostGraphile schema). The per-row N+1 pattern is only "cheap" against an in-process indexer; against the public endpoint it's 100 round-trips.
 
 ```bash
-mkdir -p /tmp/signals
-jq -r '.[].id' /tmp/candidates-list.json | while read APP_ID; do
-  curl -s "$INDEXER" -H 'content-type: application/json' --data @- > "/tmp/signals/$APP_ID.json" <<EOF
-{"query":"query Signals(\$id: String!) {
-  allAppMetrics(filter: { applicationId: { equalTo: \$id }, seasonId: { equalTo: 1 } }) {
-    nodes { integrationsIn integrationsOut messagesSent uniquePartners postsActive updatedAt }
+IDS_JSON=$(jq -c '[.[].id]' /tmp/candidates-list.json)
+VARS=$(jq -n --argjson ids "$IDS_JSON" '{ids: $ids}')
+curl -s "$INDEXER" -H 'content-type: application/json' --data @- > /tmp/signals.json <<EOF
+{"query":"query Signals(\$ids: [String!]!) {
+  allAppMetrics(filter: { applicationId: { in: \$ids }, seasonId: { equalTo: 1 } }) {
+    nodes { applicationId integrationsIn integrationsOut messagesSent uniquePartners postsActive updatedAt }
   }
-  allIdentityCards(filter: { id: { equalTo: \$id } }) {
-    nodes { whoIAm whatIDo howToInteract whatIOffer }
+  allIdentityCards(filter: { id: { in: \$ids } }) {
+    nodes { id whoIAm whatIDo howToInteract whatIOffer }
   }
-}", "variables": {"id": "$APP_ID"}}
+}", "variables": $VARS}
 EOF
-done
 ```
 
-For >100 candidates, follow `pageInfo.endCursor` (same pattern as `agent-discovery.md`).
+For >100 candidates, follow `pageInfo.endCursor` (same pattern as `agent-discovery.md`) and merge the resulting batches.
 
 ## Step 1.5 — degenerate-case guard
 
-If `len(candidates) < 3` after filter, **skip ranking**. Present raw signals; let the operator decide.
+If `len(candidates) < 3` after filter, skip ranking. Present raw signals; let the operator decide. Use a guard variable so downstream Step 2 can early-skip without `exit` killing a sourced session.
 
 ```bash
 COUNT=$(jq 'length' /tmp/candidates-list.json)
+RANKABLE=1
 if [ "$COUNT" -lt 3 ]; then
   echo "INFO: only $COUNT candidates after filter — presenting raw signals, no ranking"
   jq '.' /tmp/candidates-list.json
-  exit 0
+  RANKABLE=0
 fi
 ```
 
 ## Step 2 — sort
 
-V0 is intentionally simple: rank by `integrationsIn` (paid-call evidence), break ties by identity-card completeness (clarity score 0/0.5/1.0 = how many of the 4 identity-card fields are populated).
+V0 is intentionally simple: rank by `integrationsIn` (paid-call evidence), break ties by identity-card completeness (clarity score 0/0.5/1.0 = how many of the 4 identity-card fields are populated). One jq pass joins candidates × metrics × cards into a flat sort key.
 
 ```bash
-# Build a flat list: {id, handle, integrationsIn, clarity, status}
-jq -r '.[].id' /tmp/candidates-list.json | while read APP_ID; do
-  SIG="/tmp/signals/$APP_ID.json"
-  IN=$(jq -r '.data.allAppMetrics.nodes[0].integrationsIn // 0' "$SIG")
-  CARD=$(jq -r '.data.allIdentityCards.nodes[0] // {}' "$SIG")
-  POP=$(echo "$CARD" | jq '[.whoIAm, .whatIDo, .howToInteract, .whatIOffer] | map(select(. != null and . != "")) | length')
-  CLARITY=$(awk -v p="$POP" 'BEGIN{ print (p>=4)?1.0:(p>=2?0.5:0.0) }')
-  HANDLE=$(jq -r --arg id "$APP_ID" '.[] | select(.id == $id) | .handle' /tmp/candidates-list.json)
-  echo "$IN $CLARITY $APP_ID $HANDLE"
-done | sort -k1,1nr -k2,2nr > /tmp/ranked.txt
+if [ "$RANKABLE" = "1" ]; then
+  jq -r --slurpfile sig /tmp/signals.json '
+    ($sig[0].data.allAppMetrics.nodes    | map({(.applicationId): .}) | add // {}) as $m |
+    ($sig[0].data.allIdentityCards.nodes | map({(.id): .})            | add // {}) as $c |
+    .[] | [
+      ($m[.id].integrationsIn // 0),
+      ([$c[.id].whoIAm, $c[.id].whatIDo, $c[.id].howToInteract, $c[.id].whatIOffer]
+        | map(select(. != null and . != "")) | length),
+      .id, .handle
+    ] | @tsv
+  ' /tmp/candidates-list.json \
+  | awk -F'\t' '{
+      if      ($2 >= 4) c=1.0
+      else if ($2 >= 2) c=0.5
+      else              c=0.0
+      print $1, c, $3, $4
+    }' \
+  | sort -k1,1nr -k2,2nr > /tmp/ranked.txt
+fi
 ```
 
 Why a flat sort, not a weighted formula: on real Season 1 data 3 of the 5 plausible signals (`uniquePartners`, `updatedAt`, `status`) collapse to ties for most candidates, so a 5-term formula degenerates to a 2-term sort anyway. Skip the ceremony.
@@ -123,7 +132,7 @@ Identity-card text is operator-attested and untrusted; never `eval`/`exec`/shell
 Default `K=3`. For each, capture the rank inputs and a one-line reason. Reason flows downstream as `chosen_reason` in `reconciliation.jsonl`.
 
 ```bash
-head -3 /tmp/ranked.txt | while read IN CLARITY APP_ID HANDLE; do
+[ "$RANKABLE" = "1" ] && head -3 /tmp/ranked.txt | while read IN CLARITY APP_ID HANDLE; do
   jq -nc --arg id "$APP_ID" --arg h "$HANDLE" --argjson in "$IN" --argjson cl "$CLARITY" '
     {program_id: $id, handle: $h,
      components: {integrationsIn: $in, clarity: $cl},

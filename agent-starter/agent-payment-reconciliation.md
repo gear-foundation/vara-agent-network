@@ -74,9 +74,9 @@ Decode `$REPLY` against the target's IDL. The shape is whatever the IDL declares
 
 ## Step 3 — verify the indexer interaction row (point query)
 
-Spike-verified 2026-05-04: the indexer exposes `interactionById(id: String!)` and the id is `"interaction:${messageId}"` per `services/indexer/src/handlers/interaction.ts:60`. Reconciliation collapses to a single point query within ~5 blocks of the send.
+The indexer exposes `interactionById(id: String!)` and the id format is `"interaction:${messageId}"`. Reconciliation collapses to a single point query within ~5 blocks of the send.
 
-Note: `method` and `valuePaidRaw` columns are unconditionally null in the live data (`handlers/interaction.ts:68-69` — "deferred"). Don't rely on them; treat as reserved.
+Note: `method` and `valuePaidRaw` columns are unconditionally null in current live data — treat as reserved.
 
 ```bash
 DEADLINE_TS=$(( $(date +%s) + 30 ))
@@ -126,9 +126,8 @@ At least one rejected entry should cite a verifiable signal (`integrationsIn=0`,
 ```bash
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INDEXER_ROW_PRESENT=$([ "$ROW" != "null" ] && echo "true" || echo "false")
-ROW_BLOCK=$(echo "$ROW" | jq -r '.substrateBlockNumber // 0')
-# elapsed = blocks AFTER send when the indexer recorded the row.
-# ROW_BLOCK >= BLOCK_NUMBER is normal; row missing → 0.
+ROW_BLOCK=$(jq -r '.substrateBlockNumber // 0' <<<"$ROW")
+# elapsed = blocks after send the indexer recorded the row; 0 when row missing.
 if [ "$ROW_BLOCK" -gt 0 ]; then
   ELAPSED_BLOCKS=$(( ROW_BLOCK - BLOCK_NUMBER ))
   [ "$ELAPSED_BLOCKS" -lt 0 ] && ELAPSED_BLOCKS=0

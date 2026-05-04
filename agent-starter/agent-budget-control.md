@@ -48,10 +48,10 @@ ACCT_HEX=$(echo "$INFO"  | jq -r .address)
 VOUCHERS=$(vara-wallet --network testnet --json voucher list "$ACCT_SS58")
 HEAD_BLOCK=$(vara-wallet --network testnet --json query system number | jq -r .result)
 
-POOL_B_COUNT=$(echo "$VOUCHERS" | jq 'length')
-POOL_B_TOTAL_RAW=$(echo "$VOUCHERS" | jq '[.[].value | tonumber] | add // 0')
+read POOL_B_COUNT POOL_B_TOTAL_RAW MIN_EXPIRY < <(jq -r --argjson h "$HEAD_BLOCK" \
+  '[length, ([.[].value | tonumber] | add // 0), ([.[].expiry - $h] | min // 0)] | @tsv' \
+  <<<"$VOUCHERS")
 POOL_B_TOTAL_VARA=$(awk -v r="$POOL_B_TOTAL_RAW" 'BEGIN { printf "%.6f", r / 1e12 }')
-MIN_EXPIRY=$(echo "$VOUCHERS" | jq --argjson h "$HEAD_BLOCK" '[.[].expiry - $h] | min // 0')
 ```
 
 `MIN_RUNWAY_VARA` is operator-set; pick a value that covers your expected outbound calls before next top-up. No defensible default — set it explicitly:
@@ -64,9 +64,7 @@ MIN_RUNWAY_VARA="${MIN_RUNWAY_VARA:-10}"   # operator-set; tune to your call rat
 
 ```bash
 STATE_A=$(awk -v s="$STARTING_BALANCE_VARA" -v c="$POOL_A_VARA" 'BEGIN {
-  # Zero current balance OR zero baseline → ESCALATE. A short-circuit to OK
-  # here would silently mask a wallet that was never funded (verified bug:
-  # baseline calibrated from a 0-balance wallet locks STATE_A=OK forever).
+  # Zero baseline or zero current → ESCALATE; collapsing to OK would hide an unfunded wallet.
   if (c <= 0 || s <= 0) { print "ESCALATE"; exit }
   p = (s - c) / s * 100
   if      (p >= 90) print "ESCALATE"
@@ -87,10 +85,9 @@ POOL_A_REMAINING_PCT=$(awk -v s="$STARTING_BALANCE_VARA" -v c="$POOL_A_VARA" 'BE
 
 STATE_B=$(awk -v cnt="$POOL_B_COUNT" -v r="$POOL_A_REMAINING_PCT" \
               -v e="$MIN_EXPIRY" -v v="$POOL_B_TOTAL_VARA" -v m="$MIN_RUNWAY_VARA" 'BEGIN {
-  # Expired entries collapse into the empty-pool branch.
   effective_cnt = (e <= 0) ? 0 : cnt
   if (effective_cnt == 0 && r < 5)  print "ESCALATE"   # both pools dry
-  else if (effective_cnt == 0)      print "WARN"        # expired-only OR truly empty
+  else if (effective_cnt == 0)      print "WARN"        # expired-only or truly empty
   else if (e < 1000)                print "WARN"        # tightest expiry inside ~10-min margin
   else if (v + 0 < m + 0)           print "WARN"        # below operator-set runway
   else                              print "OK"

@@ -43,7 +43,7 @@ Use the `vara-skills` pack to scaffold, build, and deploy the Sails program on *
 5. **Deploy:** `vara-wallet program upload <wasm> --init <Constructor> --args '[...]' --idl <idl-path>` on **testnet** (`--network testnet`) — the network the agent program is deployed on (`references/program-ids.md`). The operator must provide a funded wallet or a path to fund one.
 6. **Verify:** call a query on the deployed program to confirm it's alive.
 
-Do not use testnet. Do not deploy unmodified templates. Build something real.
+Do not deploy unmodified templates. Build something real.
 
 **Phase 3 acceptance criteria — do not report deploy complete until all are true:**
 

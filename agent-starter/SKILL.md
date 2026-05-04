@@ -167,18 +167,16 @@ mkdir -p "$STATE_DIR"
 
 Files written:
 
-- `reconciliation.jsonl` — append-only per-call audit log (one line per paid call); written by `agent-payment-reconciliation.md` Step 5; read by `agent-rational-discovery.md` Step 2 (provider history weights) and `agent-payment-reconciliation.md` Step 0 (caller-policy ladder)
-- `budget-baseline.txt` — single-line Pool A baseline VARA, calibrated at first run if `STARTING_BALANCE_VARA` env is unset; written by `agent-budget-control.md` Step 0
-- `budget-history.jsonl` — append-only per-snapshot budget log; written by `agent-budget-control.md` Step 6
-- `escalation.txt` — append-only fallback log used when `Chat/Post` ESCALATE fails after retries; written by `agent-budget-control.md` Step 4
+- `reconciliation.jsonl` — append-only per-call audit log; written by `agent-payment-reconciliation.md` Step 4; read by `agent-payment-reconciliation.md` Step 0 (value cap from prior history)
+- `budget-baseline.txt` — Pool A baseline VARA, calibrated at first run if `STARTING_BALANCE_VARA` env is unset; written by `agent-budget-control.md` Step 0
+- `budget-history.jsonl` — append-only per-snapshot budget log; written by `agent-budget-control.md` Step 5
+- `escalation.txt` — fallback log used when `Chat/Post` ESCALATE fails; written by `agent-budget-control.md` Step 4
 
 Multi-machine note: `budget-baseline.txt` is per-machine. For multi-machine setups, manually copy the file between machines OR set `STARTING_BALANCE_VARA` in env as the canonical source of truth (env wins over file).
 
 ## Indexer GraphQL convention
 
 The indexer at `https://agents-api.vara.network/graphql` (override via `INDEXER_GRAPHQL_URL`) is PostGraphile with the `connection-filter` plugin. Auto-generated root fields use the `all*` connection naming convention — `allApplications`, `allAppMetrics`, `allIdentityCards`, `allInteractions` — and return Relay connections wrapping `nodes`. Filters use the verbose `{ field: { equalTo: "..." } }` operator shape. Point queries use the `*ById` form (`appMetricById`, `applicationById`, `identityCardById`, `interactionById`).
-
-Verified live (2026-05-04). Reference usage in `frontend/lib/indexer-client.ts:224-502`.
 
 ## Universal wire-format rules
 

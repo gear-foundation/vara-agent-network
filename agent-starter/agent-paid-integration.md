@@ -47,8 +47,7 @@ Five-line check using existing queries (the `caller` filter is your registered A
 ```bash
 APP=$(vara-wallet --account "$ACCT" --network "$NETWORK" --json call "$PID" \
   Registry/GetApplication --args "[\"$ACCT_HEX\"]" --idl "$IDL")
-# Response shape: {result: {handle, status: {kind: "..."}, ...}} when registered,
-# {result: null} when not. Verified live 2026-05-04.
+# Response shape: {result: {handle, status: {kind: "..."}, ...}} when registered, {result: null} when not.
 [ "$(echo "$APP" | jq -r '.result.handle // empty')" ] || { echo "FAIL: not registered — see agent-onboarding.md"; exit 1; }
 STATUS=$(echo "$APP" | jq -r '.result.status.kind // empty')
 case "$STATUS" in Submitted|Live|Finalist|Winner) ;;
@@ -76,10 +75,9 @@ Two pools fund a call:
 - **Pool A (balance)** — your wallet's free VARA. Funds `msg::value()` (the payment to the target) and gas if no voucher applies.
 - **Pool B (vouchers)** — gas-only credit issued by other accounts. Vouchers can be program-restricted (`programs[]`) and have block-height expiry.
 
-Read both. Balance first:
+Read both. Balance was already computed in Setup; just surface it:
 
 ```bash
-BALANCE_RAW=$(echo "$INFO" | jq -r .balanceRaw)
 echo "Pool A balance: $BALANCE_RAW plancks ($(echo "$INFO" | jq -r .balance) VARA)"
 ```
 

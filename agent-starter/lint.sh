@@ -230,10 +230,9 @@ else
 fi
 rm -f "$INVALID"
 
-# 8. vara-wallet version detection (E4) — soft warn on mismatch with the
-# version the allowlist above was tuned against. Anchored regex (per
-# eng-review C1) so multi-version output ("vara-wallet 0.16.2 (sails 0.5.1)")
-# doesn't produce a false-positive warning that maintainers learn to ignore.
+# 8. vara-wallet version detection — soft warn on mismatch with the version the
+# allowlist above was tuned against. Anchored regex avoids false positives on
+# multi-version output ("vara-wallet 0.16.2 (sails 0.5.1)").
 PINNED_WALLET_VERSION="0.16"
 if command -v vara-wallet >/dev/null 2>&1; then
   actual=$(vara-wallet --version 2>&1 | head -1 | grep -oE 'vara-wallet [0-9]+\.[0-9]+' | grep -oE '[0-9]+\.[0-9]+')
@@ -266,7 +265,7 @@ else
   echo "INFO: ripgrep not installed — skipping Track-prose grep gate"
 fi
 
-# 10. No-buildable-template invariant (per eng-review A1). Glob over
+# 10. No-buildable-template invariant. Glob over
 # templates/, not path-anchored, so it catches a reverted
 # sails-program-layout/Cargo.toml AND a future templates/agent-v2/Cargo.toml.
 # NOTE: parens + explicit -print are required. POSIX find binds the implicit
