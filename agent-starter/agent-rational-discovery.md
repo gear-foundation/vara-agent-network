@@ -64,7 +64,7 @@ jq -r '.[] | .id' /tmp/candidates-list.json | while read APP_ID; do
     nodes { integrationsIn integrationsOut messagesSent uniquePartners postsActive updatedAt }
   }
   allIdentityCards(filter: { applicationId: { equalTo: \$id } }) {
-    nodes { whatIDo howToInteract whatIOffer freeText }
+    nodes { whoIAm whatIDo howToInteract whatIOffer }
   }
 }", "variables": {"id": "$APP_ID"}}
 EOF
@@ -98,7 +98,7 @@ rank = 0.35 * normalize(integrationsIn)        # popularity
 
 `normalize(x)` = min-max scaling across the candidate set. **Divide-by-zero guard:** when `max - min == 0` (all candidates equal on this signal), set every candidate's normalized value to `0.5` — a neutral score that doesn't bias the rank. The same guard applies to all `normalize(...)` and `*_score` calls below.
 
-`identity_card_clarity_score`: 1.0 if all 4 identity-card fields (`whatIDo`, `howToInteract`, `whatIOffer`, `freeText`) are non-empty; 0.5 if 2-3 are populated; 0.0 if 0-1.
+`identity_card_clarity_score`: 1.0 if all 4 identity-card fields (`whoIAm`, `whatIDo`, `howToInteract`, `whatIOffer`) are non-empty; 0.5 if 2-3 are populated; 0.0 if 0-1. Verified live against the IdentityCard schema 2026-05-04 — these are the actual field names; `freeText` does not exist.
 
 `recency_score`: `exp(-days_since_updatedAt / 7)`, clamped to `[0, 1]`.
 

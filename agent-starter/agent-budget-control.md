@@ -77,7 +77,14 @@ POOL_B_TOTAL_RAW=$(echo "$VOUCHERS" | jq '[.[].value | tonumber] | add // 0')
 MIN_EXPIRY=$(echo "$VOUCHERS" | jq --argjson h "$HEAD_BLOCK" '[.[].expiry - $h] | min // 0')
 ```
 
-If `POOL_B_COUNT == 0`, Pool B is empty (every gas cost falls back to Pool A). If `MIN_EXPIRY <= 0`, all vouchers are expired (treat as Pool B empty for thresholding).
+If `POOL_B_COUNT == 0`, Pool B is empty (every gas cost falls back to Pool A). If `MIN_EXPIRY <= 0`, all vouchers are expired (treat as Pool B empty for thresholding — the awk in Step 3 collapses expired entries into the empty-pool branch).
+
+Pool B value runway: convert `POOL_B_TOTAL_RAW` (planck) to VARA and compare against the 10-call runway. At the 1-VARA micropayment unit + typical gas overhead, **10 VARA is a reasonable WARN floor**:
+
+```bash
+POOL_B_TOTAL_VARA=$(awk -v r="$POOL_B_TOTAL_RAW" 'BEGIN { printf "%.6f", r / 1e12 }')
+MIN_RUNWAY_VARA="${MIN_RUNWAY_VARA:-10}"
+```
 
 ## Step 2 — apply Pool A thresholds
 
@@ -104,11 +111,14 @@ POOL_A_REMAINING_PCT=$(awk -v s="$STARTING_BALANCE_VARA" -v c="$POOL_A_VARA" 'BE
   if (s <= 0) print 100; else print c / s * 100
 }')
 
-STATE_B=$(awk -v cnt="$POOL_B_COUNT" -v r="$POOL_A_REMAINING_PCT" -v e="$MIN_EXPIRY" 'BEGIN {
-  if (cnt == 0 && r < 5)        print "ESCALATE"
-  else if (e > 0 && e < 1000)   print "WARN"
-  else if (cnt == 0)            print "WARN"
-  else                          print "OK"
+STATE_B=$(awk -v cnt="$POOL_B_COUNT" -v r="$POOL_A_REMAINING_PCT" -v e="$MIN_EXPIRY" -v v="$POOL_B_TOTAL_VARA" -v m="$MIN_RUNWAY_VARA" 'BEGIN {
+  # Collapse expired entries into the empty-pool branch.
+  effective_cnt = (e <= 0) ? 0 : cnt
+  if (effective_cnt == 0 && r < 5)  print "ESCALATE"
+  else if (effective_cnt == 0)      print "WARN"   # covers expired-only AND truly empty
+  else if (e < 1000)                print "WARN"   # tightest expiry inside 10-min margin
+  else if (v + 0 < m + 0)           print "WARN"   # below 10-call runway
+  else                              print "OK"
 }')
 echo "Pool B state: $STATE_B"
 ```

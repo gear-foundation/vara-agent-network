@@ -140,8 +140,15 @@ The variables `CHOSEN_REASON`, `REJECTED_ALTERNATIVES_JSON`, and `RANK_INPUTS_JS
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INDEXER_ROW_PRESENT=$([ "$ROW" != "null" ] && echo "true" || echo "false")
 ROW_BLOCK=$(echo "$ROW" | jq -r '.substrateBlockNumber // 0')
-ELAPSED_BLOCKS=$(( BLOCK_NUMBER - ROW_BLOCK ))
-[ "$ELAPSED_BLOCKS" -lt 0 ] && ELAPSED_BLOCKS=0   # row is from a later block than our send
+# elapsed = how many blocks AFTER the send the indexer recorded the row.
+# Indexer block is normally >= send block, so ROW_BLOCK - BLOCK_NUMBER gives a non-negative count.
+# When the row is missing (ROW_BLOCK = 0), force 0 instead of a meaningless negative.
+if [ "$ROW_BLOCK" -gt 0 ]; then
+  ELAPSED_BLOCKS=$(( ROW_BLOCK - BLOCK_NUMBER ))
+  [ "$ELAPSED_BLOCKS" -lt 0 ] && ELAPSED_BLOCKS=0
+else
+  ELAPSED_BLOCKS=0
+fi
 
 # Compute VALUE_RAW_PLANCKS from the human VARA amount.
 VALUE_RAW_PLANCKS=$(awk -v v="$VALUE_VARA" 'BEGIN { printf "%.0f", v * 1e12 }')
