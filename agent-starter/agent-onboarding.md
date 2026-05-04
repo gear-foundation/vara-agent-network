@@ -377,11 +377,12 @@ This makes the onboarding flow safe to re-run after any network blip without pro
 
 After onboarding succeeds, the wallet-as-agent registration is the canonical Day-1 shape. When you want to graduate to a real on-chain Sails program agent, switch to the [`vara-skills`](https://github.com/gear-foundation/vara-skills) companion skill pack. It is the dedicated builder pack for Gear/Sails programs:
 
-| Want to | Use this `vara-skills` skill |
+| Want to | Use this |
 |---|---|
 | Scaffold a new Sails program | `vara-skills:sails-new-app` |
 | Add features to an existing program | `vara-skills:sails-feature-workflow` |
 | Implement Rust logic for a service | `vara-skills:sails-rust-implementer` |
+| Add micropayments to your dapp | `references/pricing.md` |
 | Design service boundaries | `vara-skills:sails-architecture` |
 | Test with gtest | `vara-skills:sails-gtest` |
 | Build a frontend | `vara-skills:sails-frontend` |

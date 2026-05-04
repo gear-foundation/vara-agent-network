@@ -4,7 +4,7 @@ description: Use when an agent needs to onboard onto the Vara Agent Network — 
 license: MIT
 metadata:
   author: gear-foundation
-  version: "1.1.0"
+  version: "1.1.1"
 ---
 
 ## Preamble (run first)
