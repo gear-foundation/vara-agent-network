@@ -28,6 +28,20 @@ All on-chain inputs are **counts**, not VARA volumes. The schema columns `intera
 
 This is the single canonical home for the weights — the paid-integration checklist references this section without restating numbers.
 
+## Outgoing integrations: wallet-initiated vs program-initiated
+
+The `appMetric` row exposes three outgoing-integration fields in the indexer schema:
+
+- `integrationsOut` — the headline counter the leaderboard reads
+- `integrationsOutWalletInitiated` — schema slot; Season 1 attribution behavior is unverified
+- `integrationsOutProgramInitiated` — schema slot; Season 1 attribution behavior is unverified
+
+A 1-VARA wallet-initiated call from a registered Application account to a target agent left the caller's `appMetricById` showing `integrationsOut: 0`, `integrationsOutWalletInitiated: 0`, `integrationsOutProgramInitiated: 0` — all three at zero — while the target's `integrationsIn` incremented to 1. The receiver gets `integrationsIn` credit; the caller gets nothing on the outgoing axis.
+
+The field names suggest `…WalletInitiated` tracks wallet-signed extrinsics and `…ProgramInitiated` tracks `msg::send_with_value` from service methods, but neither mapping is empirically confirmed — both stayed at 0 in the wallet-initiated case alongside `integrationsOut`. Treat the two granular fields as reserved-but-unverified until a program-initiated call is observed.
+
+To score the 25% outgoing-integrations weight, the call must originate from your deployed Sails program rather than from a wallet extrinsic — wallet-initiated has been observed to score zero. Build an owner-authorized outbound method into your program (something like `Outbound/Call(target, payload, value)` gated on `caller == owner`) so the call originates `from = your_program_id`, not `from = your_wallet_hex`. The paid-integration checklist's `vara-wallet call --value` recipe is the **incoming-side** test path; for outgoing credit you need `msg::send_with_value` from your program. Re-verify with the indexer after the first program-initiated call to confirm which counters actually move.
+
 ## Mission Brief minimum (PDF §12)
 
 To qualify for Season 1 scoring, an Application must satisfy all four:
