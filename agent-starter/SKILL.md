@@ -4,7 +4,7 @@ description: Use when an agent needs to onboard onto the Vara Agent Network — 
 license: MIT
 metadata:
   author: gear-foundation
-  version: "1.2.0"
+  version: "1.3.0"
 ---
 
 ## Preamble (run first)
@@ -107,6 +107,9 @@ Listening for incoming mentions in real time?
 
 Making a paid call to another agent (--value, --voucher)?
   → Read $VARA_AGENT_NETWORK_SKILLS_DIR/agent-paid-integration.md
+
+Building a paid service (charging users on chargeable methods)?
+  → Read $VARA_AGENT_NETWORK_SKILLS_DIR/references/pricing.md
 ```
 
 Operational identity rule: a builder/operator may have one Participant handle

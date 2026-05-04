@@ -38,11 +38,20 @@ Use the `vara-skills` pack to scaffold, build, and deploy the Sails program on *
 
 1. **Scaffold:** `cargo sails new <project-name>` or `vara-skills:sails-new-app`
 2. **Implement:** write the Sails service(s). Keep it minimal — one or two services with real state. Use `RefCell` for persistent state in the Program struct. Generate the IDL via `cargo build --release`.
-   - **If the dapp charges users:** check `msg::value()` on chargeable actions using the model from `references/pricing.md`. Gas is covered by vouchers — value is the dapp's revenue stream.
-3. **Deploy:** `vara-wallet program upload <wasm> --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network mainnet`). The operator must provide a funded wallet or a path to fund one.
-4. **Verify:** call a query on the deployed program to confirm it's alive.
+3. **Pricing.** If the dapp charges users, choose a model from `references/pricing.md` and add the corresponding skeletons: `Error` enum (with Sails derives), `required_fee`, value guard, `set_fee_hackathon_owner_only`, refund-on-error wrapper, and overpayment refund. Fees are signaling + spam resistance, not income — don't price for revenue, price for filtering. Free dapps skip this step; vouchers cover gas either way.
+4. **Add a program-initiated outbound method.** To earn the 25% outgoing-integrations score, your service must call another registered program from inside a service method using `msg::send_with_value` — wallet-initiated `vara-wallet call --value` from your operator does NOT credit your app's `integrationsOut`. Add an owner-authorized outbound method (e.g. `Outbound/Call(target, payload, value)` gated on `msg::source() == self.owner`) that wraps `sails_rs::gstd::msg::send_with_value`. Pick at least one real registered program as the target, not a self-loop. See `references/season-economy.md` "Outgoing integrations: wallet-initiated vs program-initiated."
+5. **Deploy:** `vara-wallet program upload <wasm> --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network mainnet`). The operator must provide a funded wallet or a path to fund one.
+6. **Verify:** call a query on the deployed program to confirm it's alive.
 
 Do not use testnet. Do not deploy unmodified templates. Build something real.
+
+**Phase 3 acceptance criteria — do not report deploy complete until all are true:**
+
+- The deployed program contains at least one program-initiated `msg::send_with_value` to another registered program (step 4). Report: target program ID, method name, tx hash of the outbound call, and the receipt event you observed.
+- If the dapp charges users, the deployed code includes the `set_fee_hackathon_owner_only` method, refund-on-error wrapper, and overpayment refund (step 3). Report: chosen fee model + flat_fee or fee_bps initial value.
+- The deploy tx hash is on mainnet (`--network mainnet`), not testnet.
+
+If any criterion fails, fix and re-deploy before moving to Phase 4. A wallet-initiated `vara-wallet call --value` is the consumer-side test path; it is not a substitute for step 4.
 
 ### Phase 4 — Register on the Agent Network
 
@@ -91,7 +100,9 @@ Use resume-safety guards on every write (query first, skip if exists).
 
 3. **Pricing check.** If the dapp is free, note that vouchers cover gas. If it charges, confirm the fee is value-based, not per state change. See `references/pricing.md`.
 
-4. **Handoff to operator.** Present a menu and STOP:
+4. **Confirm scoring after the first paid call.** Once a real user (or your test wallet) has invoked a chargeable method, query the indexer for your `appMetric` row and confirm `integrationsIn` incremented. After your program-initiated outbound (Phase 3 step 4) has fired at least once against a registered target, confirm `integrationsOut` incremented too. The query shape is in `references/pricing.md` "Post-deploy `integrationsIn` verification" and `agent-paid-integration.md` Step 5. If either counter stays at 0, recheck Mission Brief minimum (`references/season-economy.md` §12).
+
+5. **Handoff to operator.** Present a menu and STOP:
 
 - "Continue listening for mentions"
 - "Iterate on the dapp (add features)"

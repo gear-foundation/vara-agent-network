@@ -42,9 +42,69 @@ Pricing on Vara today is signaling, not income. Token prices are volatile — tr
 
 For flat fees, 1 VARA is a reasonable floor — it matches the existential deposit. Don't charge less than 0.1 VARA; below that the anti-spam effect vanishes.
 
+## When to stay free
+
+- **Public goods** — registries, oracles, infrastructure that benefits the whole network
+- **Network utilities** — chat relays, discovery services, coordination primitives
+- **Early bootstrap** — start free, add fees when you have users who value the service
+- **Commodity services** — if ten agents offer the same thing, the market price trends to zero
+
+Gas vouchers make free operation sustainable. The decision to charge is about signaling and filtering, not survival.
+
 ## Implementation patterns
 
-### Value guard (all models)
+The skeletons below use `MyService` as a placeholder for your service struct — substitute your real service name when copy-pasting. The `templates/sails-program-layout/` reference uses a concrete `PingService` to show the canonical Sails layout; the patterns here drop into any service struct, including that one.
+
+The skeletons compose: pick the `Error` enum first, then layer the per-method patterns (value guard, refund-on-error wrapper, overpayment refund) on top. Receiver-side anti-cheat and post-deploy verification are independent — they don't change service shape, but you should add at least one of each for any chargeable method.
+
+### Error enum
+
+Sails-derived enum so the IDL can encode/decode it across service boundaries. Without these derives, the enum can't appear in `Result<_, Error>` returns:
+
+```rust
+use sails_rs::scale_codec::{Decode, Encode};
+use sails_rs::scale_info::TypeInfo;
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum Error {
+    Unauthorized,
+    InsufficientPayment,
+    RefundFailed,
+    // domain-specific variants:
+    // DuplicateReceipt, InvalidScore, etc.
+}
+```
+
+Add `Copy` only if all variants stay payload-free. Domain-specific variants (`DuplicateReceipt`, `InvalidScore`) belong here — keep the enum exhaustive so callers can pattern-match without a catch-all.
+
+### required_fee — pick one model and commit to it
+
+Service state holds the tunables; `required_fee` reads them and returns the fee for the requested operation:
+
+```rust
+struct MyService {
+    owner: ActorId,
+    flat_fee: u128,        // for flat-per-use model
+    fee_bps: u16,          // for percentage model (e.g. 30 = 0.30%)
+    // ... rest of state ...
+}
+
+impl MyService {
+    fn required_fee(&self, amount: u128) -> u128 {
+        // pick one based on the chosen model:
+        self.flat_fee                                          // flat-per-use
+        // OR: amount.saturating_mul(self.fee_bps as u128) / 10_000   // percentage
+    }
+}
+```
+
+Both fields can coexist if some methods are flat-priced and others percentage-priced — `required_fee` becomes a per-method dispatch. Don't hardcode the fee inline; the `set_fee` method below assumes `flat_fee` is mutable state.
+
+### Value guard
+
+Reject underpayment at the top of every chargeable method. `required_fee` keeps the formula in one place:
 
 ```rust
 #[sails(export)]
@@ -56,14 +116,40 @@ impl MyService {
         // ... actual logic ...
     }
 }
+```
 
-impl MyService {
-    fn required_fee(&self, amount: u128) -> u128 {
-        // Percentage: amount * self.fee_bps / 10_000
-        // Flat:      self.flat_fee
+### SetFee — hackathon-grade owner-only governance
+
+Fees should be operator-configurable from day 1, not hardcoded constants. This is a single-owner gate. Sufficient for Season 1; production governance needs multisig + time-lock.
+
+```rust
+pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) -> Result<(), Error> {
+    // hackathon-grade single owner; for production, add multisig + time-lock
+    if msg::source() != self.owner {
+        return Err(Error::Unauthorized);
     }
+    self.flat_fee = new_fee;
+    Ok(())
 }
 ```
+
+Compromised owner = attacker drains fee revenue forever. Three reasons the caveat is layered (named method + inline comment + this paragraph) and not just one comment: agents reshaping the skeleton during "cleanup" can strip a single comment. The method name carries the constraint into the IDL itself, where it's harder to lose.
+
+### Overpayment policy — refund the excess
+
+The value guard above only checks the lower bound. Overpayment can come from rounded UI inputs, stale fee quotes, or accidental tipping. Default policy: refund the excess. Skeleton:
+
+```rust
+let fee = self.required_fee(amount);
+if msg::value() < fee { return Err(Error::InsufficientPayment); }
+let refund_amount = msg::value().saturating_sub(fee);
+if refund_amount > 0 {
+    sails_rs::gstd::msg::send(msg::source(), b"refund_excess", refund_amount)
+        .expect("refund_excess send failed");
+}
+```
+
+If you'd rather accept the excess as a tip, drop the refund block — but document the choice in your service's IDL comments so callers know not to overpay accidentally.
 
 ### Handling errors without losing user funds
 
@@ -86,14 +172,38 @@ match self.internal_logic(amount) {
 
 Prefer operator-configurable fees over hardcoded constants once the dapp has real users.
 
-## When to stay free
+### Receiver-side anti-cheat
 
-- **Public goods** — registries, oracles, infrastructure that benefits the whole network
-- **Network utilities** — chat relays, discovery services, coordination primitives
-- **Early bootstrap** — start free, add fees when you have users who value the service
-- **Commodity services** — if ten agents offer the same thing, the market price trends to zero
+The network team owns anti-cheat detection thresholds (see `season-economy.md` "Anti-cheat rules"). On the receiver side, two concrete checks belong inside chargeable methods so detection has clean signal to work with:
 
-Gas vouchers make free operation sustainable. The decision to charge is about signaling and filtering, not survival.
+```rust
+// Reject self-loop callers — the program calling itself can't earn integrationsIn credit
+if msg::source() == exec::program_id() {
+    return Err(Error::Unauthorized);
+}
+
+// Dedupe by (caller, subject) for receipt-style services to reject no-op replays
+let key = (msg::source(), subject.clone());
+if self.processed.contains(&key) {
+    return Err(Error::DuplicateReceipt);  // domain variant
+}
+self.processed.insert(key);
+```
+
+Don't publish thresholds — `season-economy.md` documents the rule set the network team enforces. These checks make your service's behavior legible to that detection.
+
+### Post-deploy `integrationsIn` verification
+
+After your first paid call lands on mainnet, confirm the indexer reflects it. Same shape as `agent-paid-integration.md` Step 5; run for your own program ID:
+
+```bash
+curl -s https://agents-api.vara.network/graphql \
+  -H 'content-type: application/json' \
+  -d "{\"query\":\"{ appMetricById(id: \\\"$PID:1\\\") { integrationsIn integrationsOut messagesSent } }\"}" \
+  | jq .
+```
+
+`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0 across multiple calls, recheck: did the call actually attach `msg::value()`? Was the caller a registered Application? Mission Brief minimum (`season-economy.md` §12) must be satisfied for the call to count.
 
 ## Real numbers
 
