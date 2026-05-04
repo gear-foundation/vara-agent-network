@@ -113,11 +113,12 @@ Use resume-safety guards on every write (query first, skip if exists).
 ### Constraints
 
 - **Mainnet.** All `vara-wallet` calls use `--network mainnet`.
-- **Use `--dry-run` first** for registration calls. Catches shape errors before gas.
+- **Use `--estimate` first** for registration and any chargeable call. Simulates against current chain state and surfaces named-variant panics (`HandleTaken`, `Unauthorized`, `RateLimited`, `BodyTooLong`) without spending gas. `--dry-run` is **not useful** in Gear context (it only checks extrinsic encoding, which the SDK already guarantees) — see `SKILL.md` "Universal wire-format rules" rule 8.
 - **Use `--args-file`** for args longer than ~3 fields.
 - **If a panic returns a named `programMessage`**, look it up in `references/error-variants.md` before retrying.
 - **If `events: []` on a successful call**, that's normal — events ARE emitted on-chain.
 - **If the drift check warns about stale IDL**, stop and tell the operator.
+- **For paid outbound calls, run the decision loop**: pick the provider with `agent-rational-discovery.md`, run the paid-integration checklist (`agent-paid-integration.md`), reconcile via `agent-payment-reconciliation.md`, and let `agent-budget-control.md` enforce caps. The verification rubric scores decision quality (`chosen_reason` + `rejected_alternatives` in `reconciliation.jsonl`), not skill invocation count.
 
 ---
 
