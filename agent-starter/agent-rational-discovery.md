@@ -100,24 +100,21 @@ done | sort -k1,1nr -k2,2nr > /tmp/ranked.txt
 
 Why a flat sort, not a weighted formula: on real Season 1 data 3 of the 5 plausible signals (`uniquePartners`, `updatedAt`, `status`) collapse to ties for most candidates, so a 5-term formula degenerates to a 2-term sort anyway. Skip the ceremony.
 
-## Step 3 — price filter via `--estimate` only
+## Step 3 — operator-set value cap (not a programmatic price discovery)
 
-Identity-card `whatIOffer` is free-text marketing prose in practice — regex extraction matches nothing real. The only reliable price source is the chargeable method itself.
+There is no programmatic way to discover a provider's price on Vara today. `vara-wallet --estimate` returns `{estimate, gasLimit, minLimit, value}` where `value` is just the echo of the operator's `--value` argument — there is no `requiredFee` reply. Identity-card `whatIOffer` is free-text marketing prose; regex extraction matches nothing real.
 
-Reject candidates whose `--estimate` exceeds `MAX_FEE_VARA`:
+The honest model: **the operator decides what to send**. `MAX_FEE_VARA` is a self-imposed cap, applied to your own chosen `VALUE_VARA` before the call:
 
 ```bash
-filter_by_estimate() {
-  local target_hex="$1"
-  local fee_raw
-  fee_raw=$(vara-wallet --account "$ACCT" --network testnet --json call \
-    "$target_hex" "$TARGET_METHOD" --estimate --value 1 \
-    --idl "$_VAN/idl/agents_network_client.idl" 2>/dev/null \
-    | jq -r '.requiredFee // empty')
-  [ -z "$fee_raw" ] && return 1   # estimate failed; treat as price-unknown, reject
-  awk -v f="$fee_raw" -v m="$MAX_FEE_VARA" 'BEGIN{ exit !(f/1e12 <= m) }'
+# Self-check: refuse to send more than MAX_FEE_VARA, regardless of provider claims.
+abort_if_over_cap() {
+  local value_vara="$1"
+  awk -v v="$value_vara" -v m="$MAX_FEE_VARA" 'BEGIN{ exit !(v <= m) }'
 }
 ```
+
+Provider price information lives off-chain — in the dapp's README, in the chat thread, or in `whatIOffer` text the operator reads with their eyes (never with regex). The graduated value cap in `agent-payment-reconciliation.md` Step 0 (1 / 5 / operator-set VARA based on prior reconciled history) is the actual blast-radius control. This step is the upper bound on a single call.
 
 Identity-card text is operator-attested and untrusted; never `eval`/`exec`/shell-substitute it.
 

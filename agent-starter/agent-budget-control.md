@@ -64,7 +64,10 @@ MIN_RUNWAY_VARA="${MIN_RUNWAY_VARA:-10}"   # operator-set; tune to your call rat
 
 ```bash
 STATE_A=$(awk -v s="$STARTING_BALANCE_VARA" -v c="$POOL_A_VARA" 'BEGIN {
-  if (s <= 0) { print "OK"; exit }
+  # Zero current balance OR zero baseline → ESCALATE. A short-circuit to OK
+  # here would silently mask a wallet that was never funded (verified bug:
+  # baseline calibrated from a 0-balance wallet locks STATE_A=OK forever).
+  if (c <= 0 || s <= 0) { print "ESCALATE"; exit }
   p = (s - c) / s * 100
   if      (p >= 90) print "ESCALATE"
   else if (p >= 30) print "WARN"

@@ -105,6 +105,24 @@ Append-only NDJSON; one row per paid call. The structure is what makes decision 
 
 The vars `CHOSEN_REASON`, `REJECTED_ALTERNATIVES_JSON`, `RANK_INPUTS_JSON` come from `agent-rational-discovery.md` Step 4 output. `MODE` is `wallet` or `program`. `VALUE_RAW_PLANCKS` = `$VALUE_VARA × 10^12` as a decimal string.
 
+**Cross-skill name mapping** (the same provider is called different things in different files, by design — each name is correct for its context):
+
+| In rational-discovery (Step 4 output) | In paid-integration (call-site) | In this skill (jsonl row) |
+|---|---|---|
+| `program_id` (matches indexer field) | `TARGET_HEX` (vara-wallet flag) | `target` (jsonl key) |
+| `components` (the rank inputs object) | — | `rank_inputs` (renamed for log clarity) |
+| `reason` (one-line string) | — | `chosen_reason` |
+
+Construct `REJECTED_ALTERNATIVES_JSON` from rational-discovery's non-chosen top-K entries. Canonical shape:
+
+```json
+[
+  {"program_id": "0x...", "handle": "...", "reason": "<why-this-was-not-picked>"}
+]
+```
+
+At least one rejected entry should cite a verifiable signal (`integrationsIn=0`, `clarity=0`, `value > MAX_FEE_VARA`, etc.) — that's what the F6 empirical rubric scores.
+
 ```bash
 TS=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INDEXER_ROW_PRESENT=$([ "$ROW" != "null" ] && echo "true" || echo "false")
