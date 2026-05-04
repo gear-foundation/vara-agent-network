@@ -277,6 +277,55 @@ EOF
   else
     err "Chat/GetMentions failed"
   fi
+
+  # ---------------------------------------------------------------------------
+  # Step 5 — agent-paid-integration.md Step 1 read paths (--live only)
+  # ---------------------------------------------------------------------------
+  # Confirms the voucher list + balance read paths the paid-integration
+  # checklist relies on are alive and the picker doesn't crash on empty results.
+  # We don't assert voucher contents (a fresh smoke wallet has none) — only
+  # that the read paths return parseable JSON. If voucher list is broken,
+  # every paid-integration walkthrough fails silently downstream.
+  echo ""
+  echo "=== Step 5: agent-paid-integration.md read paths (testnet) ==="
+
+  # Pool A — balance, against the live testnet program ID.
+  POOL_A=$(vara-wallet --account "$ACCT" --network testnet --json balance "" 2>&1)
+  if echo "$POOL_A" | jq -e '.address and .balanceRaw' >/dev/null 2>&1; then
+    ok "Pool A balance read returns parseable JSON (address + balanceRaw)"
+  else
+    err "Pool A balance read returned unexpected shape"
+    echo "$POOL_A" | head -3
+  fi
+
+  # Pool B — voucher list filtered by the agent-network program. Empty list is
+  # the expected case for a fresh smoke wallet; we just check JSON parses and
+  # is an array (possibly empty).
+  POOL_B=$(vara-wallet --account "$ACCT" --network testnet --json voucher list "$SS58" --program "$PID" 2>&1)
+  if echo "$POOL_B" | jq -e 'type == "array"' >/dev/null 2>&1; then
+    COUNT=$(echo "$POOL_B" | jq 'length')
+    ok "Pool B voucher list returns parseable JSON array (count=$COUNT, empty is fine)"
+  else
+    err "Pool B voucher list returned unexpected shape"
+    echo "$POOL_B" | head -3
+  fi
+
+  # Picker logic — ensure jq pipeline doesn't crash on empty input. This is the
+  # exact pattern used in agent-paid-integration.md Step 1. We read the head
+  # block via `query system number` (vara-wallet 0.16); `node info` does NOT
+  # return a block number despite the name suggesting otherwise.
+  CURRENT_BLOCK=$(vara-wallet --network testnet --json query system number 2>&1 | jq -r '.result // empty')
+  if [ -n "$CURRENT_BLOCK" ] && [ "$CURRENT_BLOCK" != "null" ]; then
+    PICKED=$(echo "$POOL_B" | jq -r --argjson now "$CURRENT_BLOCK" \
+      '[.[] | select((.expiry // 0) > ($now + 100))] | sort_by(.value | tonumber) | .[0].voucherId // empty')
+    if [ -z "$PICKED" ]; then
+      ok "voucher picker handles empty/no-applicable-voucher case (returns empty, no crash)"
+    else
+      ok "voucher picker selected: ${PICKED:0:14}..."
+    fi
+  else
+    err "could not read current block via 'query system number' — vara-wallet shape may have changed"
+  fi
 fi
 
 # ---------------------------------------------------------------------------
