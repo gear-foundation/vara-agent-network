@@ -179,35 +179,61 @@ set_state() {
 # ---------------------------------------------------------------------------
 
 recovery_scan() {
-  # 1. Reconcile orphan pending-call-{messageId}.json files.
-  local count=0
-  while IFS= read -r -d '' f; do
-    local base
-    base="$(basename "$f")"
-    if [[ "$base" == pending-call-INTENT-*.json ]]; then continue; fi
-    log_event "recovery_reconcile" --arg path "$f"
-    if run_script bash "$SCRIPT_DIR/payment-reconciliation.sh" --pending "$f"; then
-      log_event "recovery_reconcile_done" \
-        --arg path "$f" --arg code "$RUN_SCRIPT_CODE" --arg status "$RUN_SCRIPT_STATUS"
-    fi
-    count=$((count + 1))
-  done < <(find "$STATE_DIR" -maxdepth 1 -type f -name 'pending-call-0x*.json' \
-            -not -name '*.done' -print0 2>/dev/null)
+  # 1. Replay orphan pending-call-INTENT-*.json files via Steps A/B/C.
+  #    intent-recovery.sh is read-only with respect to the wallet; on
+  #    success it renames INTENT → pending-call-{messageId}.json so the
+  #    pending-file pass below picks it up and reconciles.
+  local intent
+  for intent in "$STATE_DIR"/pending-call-INTENT-*.json; do
+    [[ -e "$intent" ]] || continue
+    log_event "recovery_intent_replay" --arg path "$intent"
+    invoke_child "intent-recovery" bash "$SCRIPT_DIR/intent-recovery.sh" \
+      --intent "$intent"
+    case "$RUN_SCRIPT_CODE" in
+      RECOVERY_RENAMED)
+        log_event "recovery_intent_renamed" --arg path "$intent"
+        ;;
+      RECOVERY_TOO_SOON|RECOVERY_PENDING|INDEXER_DOWN)
+        # Architecture: do not advance, do not block the loop forever
+        # on a transient gap. The orphan stays; next tick re-tries.
+        log_event "recovery_intent_pending" \
+          --arg path "$intent" --arg code "$RUN_SCRIPT_CODE"
+        set_state "WAITING_RECOVERY" \
+          "{\"orphan_intent\":\"$(basename "$intent")\",\"reason\":\"$RUN_SCRIPT_CODE\"}"
+        status_retry "$RUN_SCRIPT_CODE" \
+          "intent-recovery: $RUN_SCRIPT_MESSAGE"
+        ;;
+      INTENT_AMBIGUOUS|INTENT_ABANDONED)
+        # Terminal: INTENT was quarantined; surface to operator.
+        log_event "recovery_intent_quarantined" \
+          --arg path "$intent" --arg code "$RUN_SCRIPT_CODE"
+        set_state "WAITING_RECOVERY" \
+          "{\"orphan_intent\":\"$(basename "$intent")\",\"reason\":\"$RUN_SCRIPT_CODE\"}"
+        status_err "$RUN_SCRIPT_CODE" \
+          "intent-recovery: $RUN_SCRIPT_MESSAGE"
+        ;;
+      *)
+        log_event "recovery_intent_unexpected" \
+          --arg path "$intent" --arg code "$RUN_SCRIPT_CODE"
+        status_err "PENDING_INTENT" \
+          "intent-recovery returned unexpected '$RUN_SCRIPT_CODE'; operator must triage"
+        ;;
+    esac
+  done
 
-  # 2. Detect orphan INTENT files. Day 5 skeleton: surface and abort the
-  #    loop so no in-flight call is double-attempted. Day 6 AM extends
-  #    this with the full Steps A/B/C replay.
-  local intent=""
-  local _intents=( "$STATE_DIR"/pending-call-INTENT-*.json )
-  if [[ -e "${_intents[0]}" ]]; then
-    intent="${_intents[0]}"
-  fi
-  if [[ -n "$intent" ]]; then
-    log_event "recovery_intent_found" --arg path "$intent"
-    set_state "WAITING_RECOVERY" "{\"orphan_intent\":\"$(basename "$intent")\"}"
-    status_err "PENDING_INTENT" \
-      "orphan INTENT $(basename "$intent"); operator must triage (Day 6 AM wires Steps A/B/C). reconciled $count pending file(s) before halting."
-  fi
+  # 2. Reconcile orphan pending-call-{messageId}.json files (read-only;
+  #    idempotent). Step A above may have just produced one of these.
+  local count=0 f
+  for f in "$STATE_DIR"/pending-call-0x*.json; do
+    [[ -e "$f" ]] || continue
+    [[ "$f" == *.done ]] && continue
+    log_event "recovery_reconcile" --arg path "$f"
+    invoke_child "recovery-reconcile" bash "$SCRIPT_DIR/payment-reconciliation.sh" \
+      --pending "$f"
+    log_event "recovery_reconcile_done" \
+      --arg path "$f" --arg code "$RUN_SCRIPT_CODE" --arg status "$RUN_SCRIPT_STATUS"
+    count=$((count + 1))
+  done
 }
 
 # ---------------------------------------------------------------------------

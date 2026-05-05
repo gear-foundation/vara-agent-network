@@ -129,29 +129,148 @@ else
 fi
 
 # ---------------------------------------------------------------------------
-# Test 3: orphan INTENT → PENDING_INTENT, loop refuses to advance
+# Test 3a: orphan INTENT, age <12s → RECOVERY_TOO_SOON (retry, rc=2),
+#          INTENT preserved, loop transitions to WAITING_RECOVERY but does
+#          not block forever (next tick will retry).
 # ---------------------------------------------------------------------------
 _init_state
 NONCE_ORPHAN="0123456789abcdef"
-echo '{"nonce":"'"$NONCE_ORPHAN"'","ts_pre_send":"2026-05-06T00:00:00Z"}' \
+TGT_ORPHAN="0xfafa0000000000000000000000000000000000000000000000000000fafa0000"
+mkdir -p "$WORK/state/decisions/active"
+jq -nc --arg n "$NONCE_ORPHAN" --arg t "$TGT_ORPHAN" \
+  '{nonce:$n, ts_pre_send:"2026-05-06T00:00:00Z",
+    selected:{target:$t, method:"Action/run", args_template:"[]", value_vara:"0.5"},
+    candidate_count:1, rejected:[], chosen_reason:"only candidate, integrationsIn=2",
+    rank_inputs:{integrationsIn:2,recentErrors:0,latencyMsP50:120}}' \
+  >"$WORK/state/decisions/active/${NONCE_ORPHAN}.json"
+jq -nc --arg n "$NONCE_ORPHAN" --arg t "$TGT_ORPHAN" --arg c "$ACCT" \
+  --arg dec "$WORK/state/decisions/active/${NONCE_ORPHAN}.json" \
+  '{nonce:$n, decision_path:$dec, target:$t, method:"Action/run",
+    args_template:"[]", value_vara:"0.5", value_raw_planks:"500000000000",
+    caller:$c, network:"testnet", ts_pre_send:"2026-05-06T00:00:00Z",
+    ts_decision:"2026-05-06T00:00:00Z", idl_cache_path:"/tmp/x.idl"}' \
   >"$WORK/state/pending-call-INTENT-${NONCE_ORPHAN}.json"
+
 set +e
 VARA_AGENT_STATE_DIR="$WORK/state" \
 VARA_AGENT_OWN_PROGRAM_ID="$OWN_PID" \
 VARA_WALLET_ACCOUNT="$ACCT" \
+RECOVERY_NOW_TS_OVERRIDE="2026-05-06T00:00:05Z" \
+RECOVERY_INDEXER_PROBE_CMD='echo "null"' \
   bash "$LOOP" --once --no-lock >"$WORK/t3.out" 2>/dev/null
 RC3=$?
 set -e 2>/dev/null || true
 RES3=$(tail -1 "$WORK/t3.out")
-if [ "$RC3" -eq 1 ] && printf '%s' "$RES3" | jq -e '.code=="PENDING_INTENT"' >/dev/null 2>&1; then
-  ok "orphan INTENT → PENDING_INTENT (Day 6 AM extends to full Steps A/B/C replay)"
+if [ "$RC3" -eq 2 ] && printf '%s' "$RES3" | jq -e '.code=="RECOVERY_TOO_SOON"' >/dev/null 2>&1; then
+  ok "orphan INTENT age <12s → RECOVERY_TOO_SOON (retry; loop yields to next tick)"
 else
-  err "intent-orphan: rc=$RC3 res=$RES3"
+  err "intent-too-soon: rc=$RC3 res=$RES3"
 fi
-if jq -e '.state=="WAITING_RECOVERY"' "$WORK/state/state.json" >/dev/null 2>&1; then
-  ok "state.json reflects WAITING_RECOVERY on orphan INTENT"
+if [ -f "$WORK/state/pending-call-INTENT-${NONCE_ORPHAN}.json" ]; then
+  ok "RECOVERY_TOO_SOON: INTENT preserved for next tick"
 else
-  err "intent-state: $(cat "$WORK/state/state.json" 2>/dev/null)"
+  err "INTENT consumed on TOO_SOON"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 3b: orphan INTENT, Step A finds messageId in wallet-cli-out →
+#          loop renames INTENT and reconciles in same recovery_scan pass.
+# ---------------------------------------------------------------------------
+_init_state
+mkdir -p "$WORK/state/decisions/active"
+NONCE_RECOV="recov0123recov01"
+TGT_RECOV="0xb0b00000000000000000000000000000000000000000000000000000b0b00001"
+MSG_RECOV="0xfeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedfacefeedface"
+jq -nc --arg n "$NONCE_RECOV" --arg t "$TGT_RECOV" \
+  '{nonce:$n, ts_pre_send:"2026-05-06T00:00:00Z",
+    selected:{target:$t, method:"Action/run", args_template:"[]", value_vara:"0.5"},
+    candidate_count:1, rejected:[], chosen_reason:"only candidate, integrationsIn=2",
+    rank_inputs:{integrationsIn:2,recentErrors:0,latencyMsP50:120}}' \
+  >"$WORK/state/decisions/active/${NONCE_RECOV}.json"
+jq -nc --arg n "$NONCE_RECOV" --arg t "$TGT_RECOV" --arg c "$ACCT" \
+  --arg dec "$WORK/state/decisions/active/${NONCE_RECOV}.json" \
+  '{nonce:$n, decision_path:$dec, target:$t, method:"Action/run",
+    args_template:"[]", value_vara:"0.5", value_raw_planks:"500000000000",
+    caller:$c, network:"testnet", ts_pre_send:"2026-05-06T00:00:00Z",
+    ts_decision:"2026-05-06T00:00:00Z", idl_cache_path:"/tmp/x.idl"}' \
+  >"$WORK/state/pending-call-INTENT-${NONCE_RECOV}.json"
+mkdir -p "$WORK/state/wallet-cli-out"
+printf '{"messageId":"%s","block":99}\n' "$MSG_RECOV" \
+  >"$WORK/state/wallet-cli-out/${NONCE_RECOV}.log"
+
+set +e
+VARA_AGENT_STATE_DIR="$WORK/state" \
+VARA_AGENT_OWN_PROGRAM_ID="$OWN_PID" \
+VARA_WALLET_ACCOUNT="$ACCT" \
+BUDGET_PROBE_CMD="$HAPPY_BUDGET" \
+DISCOVERY_PROBE_CMD='echo "[]"' \
+RECOVERY_NOW_TS_OVERRIDE="2026-05-06T00:00:05Z" \
+RECONCILE_OUTCOME_PROBE_CMD="$HAPPY_RECON" \
+  bash "$LOOP" --once --no-lock >"$WORK/t3b.out" 2>/dev/null
+RC3B=$?
+set -e 2>/dev/null || true
+RES3B=$(tail -1 "$WORK/t3b.out")
+if [ "$RC3B" -eq 0 ] && printf '%s' "$RES3B" | jq -e '.code=="LOOP_DONE"' >/dev/null 2>&1; then
+  ok "Step A: INTENT recovered + reconciled in one tick → LOOP_DONE"
+else
+  err "intent-recover-A: rc=$RC3B res=$RES3B"
+fi
+if [ -f "$WORK/state/pending-call-${MSG_RECOV}.json.done" ] \
+  && [ ! -f "$WORK/state/pending-call-INTENT-${NONCE_RECOV}.json" ] \
+  && [ ! -f "$WORK/state/pending-call-${MSG_RECOV}.json" ]; then
+  ok "Step A flow: INTENT → pending-{messageId} → .done in one recovery_scan pass"
+else
+  err "intent-flow: $(ls "$WORK/state/pending-call-"* 2>&1)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 3c: orphan INTENT, age ≥ 1h, no evidence → INTENT_AMBIGUOUS,
+#          loop emits err rc=1 with quarantine artifacts.
+# ---------------------------------------------------------------------------
+_init_state
+mkdir -p "$WORK/state/decisions/active"
+NONCE_AMBIG="ambig0123ambig01"
+TGT_AMBIG="0xc1c10000000000000000000000000000000000000000000000000000c1c10001"
+jq -nc --arg n "$NONCE_AMBIG" --arg t "$TGT_AMBIG" \
+  '{nonce:$n, ts_pre_send:"2026-05-06T00:00:00Z",
+    selected:{target:$t, method:"Action/run", args_template:"[]", value_vara:"0.5"},
+    candidate_count:1, rejected:[], chosen_reason:"only candidate, integrationsIn=2",
+    rank_inputs:{integrationsIn:2,recentErrors:0,latencyMsP50:120}}' \
+  >"$WORK/state/decisions/active/${NONCE_AMBIG}.json"
+jq -nc --arg n "$NONCE_AMBIG" --arg t "$TGT_AMBIG" --arg c "$ACCT" \
+  --arg dec "$WORK/state/decisions/active/${NONCE_AMBIG}.json" \
+  '{nonce:$n, decision_path:$dec, target:$t, method:"Action/run",
+    args_template:"[]", value_vara:"0.5", value_raw_planks:"500000000000",
+    caller:$c, network:"testnet", ts_pre_send:"2026-05-06T00:00:00Z",
+    ts_decision:"2026-05-06T00:00:00Z", idl_cache_path:"/tmp/x.idl"}' \
+  >"$WORK/state/pending-call-INTENT-${NONCE_AMBIG}.json"
+
+set +e
+VARA_AGENT_STATE_DIR="$WORK/state" \
+VARA_AGENT_OWN_PROGRAM_ID="$OWN_PID" \
+VARA_WALLET_ACCOUNT="$ACCT" \
+RECOVERY_NOW_TS_OVERRIDE="2026-05-06T01:30:00Z" \
+RECOVERY_INDEXER_PROBE_CMD='echo "null"' \
+  bash "$LOOP" --once --no-lock >"$WORK/t3c.out" 2>/dev/null
+RC3C=$?
+set -e 2>/dev/null || true
+RES3C=$(tail -1 "$WORK/t3c.out")
+if [ "$RC3C" -eq 1 ] && printf '%s' "$RES3C" | jq -e '.code=="INTENT_AMBIGUOUS"' >/dev/null 2>&1; then
+  ok "age ≥1h, no evidence → INTENT_AMBIGUOUS (loop halts; operator triages)"
+else
+  err "intent-ambig: rc=$RC3C res=$RES3C"
+fi
+if [ -f "$WORK/state/pending-call-AMBIGUOUS-${NONCE_AMBIG}.json" ] \
+  && [ ! -f "$WORK/state/pending-call-INTENT-${NONCE_AMBIG}.json" ]; then
+  ok "INTENT_AMBIGUOUS: INTENT moved to pending-call-AMBIGUOUS-{nonce}.json"
+else
+  err "ambig-quarantine: $(ls "$WORK/state/pending-call-"* 2>&1)"
+fi
+if [ -f "$WORK/state/decisions/done/${NONCE_AMBIG}.json" ] \
+  && jq -e '.outcome=="ambiguous"' "$WORK/state/decisions/done/${NONCE_AMBIG}.json" >/dev/null 2>&1; then
+  ok "INTENT_AMBIGUOUS: active decision closed with outcome=ambiguous"
+else
+  err "ambig-decision: $(ls "$WORK/state/decisions/"*"/${NONCE_AMBIG}.json" 2>&1)"
 fi
 
 # ---------------------------------------------------------------------------
