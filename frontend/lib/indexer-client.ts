@@ -37,11 +37,13 @@ type ParticipantRow = {
 type InteractionRow = {
   id: string
   caller: string
+  callerKind?: string | null
   callerHandle?: string | null
   callee: string
   calleeHandle?: string | null
   method?: string | null
   kind: string
+  origin?: string | null
   substrateBlockTs: string
 }
 
@@ -174,12 +176,34 @@ export type IntegratorLeaderboardEntry = {
   displayName: string
   track: string
   description: string
+  githubUrl: string
   uniquePartners: number
   integrationsOut: number
   integrationsIn: number
   messagesSent: number
   mentionCount: number
   postsActive: number
+}
+
+export type TopApplicationLiveEntry = {
+  applicationId: string
+  handle: string
+  displayName: string
+  track: string
+  description: string
+  githubUrl: string
+  score: number
+  uniqueUsers: number
+  returningUsers: number
+  activeDays: number
+  lastActiveAt: number | null
+  walletActions: number
+  retentionPct: number
+  badges: string[]
+  activityByDay: Array<{
+    date: string
+    transactions: number
+  }>
 }
 
 export type MentionTarget = {
@@ -516,6 +540,32 @@ const INTERACTION_GRAPH_QUERY = `
   }
 `
 
+const TOP_APPLICATIONS_LIVE_QUERY = `
+  query TopApplicationsLive {
+    applications: allApplications(first: 500, orderBy: REGISTERED_AT_ASC) {
+      nodes {
+        id
+        handle
+        status
+        track
+        description
+        githubUrl
+        registeredAt
+      }
+    }
+    interactions: allInteractions(first: 5000, orderBy: SUBSTRATE_BLOCK_TS_DESC) {
+      nodes {
+        id
+        caller
+        callerKind
+        callee
+        origin
+        substrateBlockTs
+      }
+    }
+  }
+`
+
 type RegistryQueryResult = {
   applications: Connection<ApplicationRow>
   appMetrics: Connection<AppMetricRow>
@@ -558,6 +608,11 @@ type MentionTargetsQueryResult = {
 type InteractionGraphQueryResult = {
   applications: Connection<Pick<ApplicationRow, 'id' | 'handle' | 'track'>>
   interactions: Connection<Pick<InteractionRow, 'id' | 'caller' | 'callee'>>
+}
+
+type TopApplicationsLiveQueryResult = {
+  applications: Connection<ApplicationRow>
+  interactions: Connection<Pick<InteractionRow, 'id' | 'caller' | 'callerKind' | 'callee' | 'origin' | 'substrateBlockTs'>>
 }
 
 function titleizeHandle(handle: string) {
@@ -768,6 +823,7 @@ export async function getIntegratorLeaderboard(): Promise<IntegratorLeaderboardE
       displayName: agent.displayName,
       track: agent.track,
       description: agent.description,
+      githubUrl: agent.githubUrl,
       uniquePartners: agent.metrics?.uniquePartners ?? 0,
       integrationsOut: agent.metrics?.integrationsOut ?? 0,
       integrationsIn: agent.metrics?.integrationsIn ?? 0,
@@ -782,6 +838,117 @@ export async function getIntegratorLeaderboard(): Promise<IntegratorLeaderboardE
       if (b.integrationsIn !== a.integrationsIn) return b.integrationsIn - a.integrationsIn
       if (b.mentionCount !== a.mentionCount) return b.mentionCount - a.mentionCount
       return b.postsActive - a.postsActive
+    })
+}
+
+export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[]> {
+  const data = await fetchIndexerGraphql<TopApplicationsLiveQueryResult>(TOP_APPLICATIONS_LIVE_QUERY)
+  if (!data) return []
+
+  type WalletStats = {
+    days: Set<string>
+    actions: number
+  }
+
+  type AppStats = {
+    users: Map<string, WalletStats>
+    dayActions: Map<string, number>
+    dayWallets: Map<string, Set<string>>
+    lastActiveAt: number | null
+    walletActions: number
+  }
+
+  const applicationIds = new Set(data.applications.nodes.map((app) => app.id.toLowerCase()))
+  const statsByApp = new Map<string, AppStats>()
+
+  const ensureStats = (applicationId: string) => {
+    const key = applicationId.toLowerCase()
+    let stats = statsByApp.get(key)
+    if (!stats) {
+      stats = {
+        users: new Map(),
+        dayActions: new Map(),
+        dayWallets: new Map(),
+        lastActiveAt: null,
+        walletActions: 0,
+      }
+      statsByApp.set(key, stats)
+    }
+    return stats
+  }
+
+  for (const interaction of data.interactions.nodes) {
+    const callee = interaction.callee.toLowerCase()
+    const caller = interaction.caller.toLowerCase()
+    if (!applicationIds.has(callee)) continue
+    if (applicationIds.has(caller)) continue
+    if (interaction.origin && interaction.origin !== 'wallet_initiated') continue
+    if (interaction.callerKind && interaction.callerKind !== 'Wallet') continue
+
+    const ts = Number(interaction.substrateBlockTs)
+    if (!Number.isFinite(ts) || ts <= 0) continue
+
+    const date = utcDateKey(ts)
+    const stats = ensureStats(callee)
+    const wallet = stats.users.get(caller) ?? { days: new Set<string>(), actions: 0 }
+    wallet.days.add(date)
+    wallet.actions += 1
+    stats.users.set(caller, wallet)
+
+    stats.dayActions.set(date, (stats.dayActions.get(date) ?? 0) + 1)
+    const wallets = stats.dayWallets.get(date) ?? new Set<string>()
+    wallets.add(caller)
+    stats.dayWallets.set(date, wallets)
+    stats.lastActiveAt = Math.max(stats.lastActiveAt ?? 0, ts)
+    stats.walletActions += 1
+  }
+
+  return data.applications.nodes
+    .map((app) => {
+      const stats = ensureStats(app.id)
+      const uniqueUsers = stats.users.size
+      const returningUsers = [...stats.users.values()].filter((wallet) => wallet.days.size >= 2).length
+      const activeDays = [...stats.dayActions.entries()].filter(([date, actions]) => {
+        const walletCount = stats.dayWallets.get(date)?.size ?? 0
+        return actions >= 3 && walletCount >= 2
+      }).length
+      const score = Math.round(
+        50 * Math.log1p(uniqueUsers)
+        + 30 * Math.log1p(returningUsers)
+        + 20 * activeDays,
+      )
+      const retentionPct = uniqueUsers > 0 ? Math.round((returningUsers / uniqueUsers) * 100) : 0
+      const badges = [
+        returningUsers > 0 ? 'Returning users' : null,
+        activeDays >= 3 ? 'Consistent usage' : null,
+        stats.lastActiveAt ? 'Has activity' : null,
+      ].filter((badge): badge is string => Boolean(badge))
+
+      return {
+        applicationId: app.id,
+        handle: `@${app.handle}`,
+        displayName: titleizeHandle(app.handle),
+        track: trackLabel(app.track),
+        description: app.description ?? '',
+        githubUrl: app.githubUrl ?? '',
+        score,
+        uniqueUsers,
+        returningUsers,
+        activeDays,
+        lastActiveAt: stats.lastActiveAt,
+        walletActions: stats.walletActions,
+        retentionPct,
+        badges,
+        activityByDay: [...stats.dayActions.entries()]
+          .sort(([a], [b]) => a.localeCompare(b))
+          .map(([date, transactions]) => ({ date, transactions })),
+      }
+    })
+    .sort((a, b) => {
+      if (b.score !== a.score) return b.score - a.score
+      if (b.returningUsers !== a.returningUsers) return b.returningUsers - a.returningUsers
+      if (b.uniqueUsers !== a.uniqueUsers) return b.uniqueUsers - a.uniqueUsers
+      return (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0)
     })
 }
 

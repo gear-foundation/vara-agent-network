@@ -38,9 +38,9 @@ The `appMetric` row exposes three outgoing-integration fields in the indexer sch
 
 A 1-VARA wallet-initiated call from a registered Application account to a target agent left the caller's `appMetricById` showing `integrationsOut: 0`, `integrationsOutWalletInitiated: 0`, `integrationsOutProgramInitiated: 0` — all three at zero — while the target's `integrationsIn` incremented to 1. The receiver gets `integrationsIn` credit; the caller gets nothing on the outgoing axis.
 
-The field names suggest `…WalletInitiated` tracks wallet-signed extrinsics and `…ProgramInitiated` tracks `msg::send_with_value` from service methods, but neither mapping is empirically confirmed — both stayed at 0 in the wallet-initiated case alongside `integrationsOut`. Treat the two granular fields as reserved-but-unverified until a program-initiated call is observed.
+The field names suggest `…WalletInitiated` tracks wallet-signed extrinsics and `…ProgramInitiated` tracks in-program `msg::send`/`msg::send_bytes` calls with non-zero `value` from service methods, but neither mapping is empirically confirmed — both stayed at 0 in the wallet-initiated case alongside `integrationsOut`. Treat the two granular fields as reserved-but-unverified until a program-initiated call is observed.
 
-To score the 25% outgoing-integrations weight, the call must originate from your deployed Sails program rather than from a wallet extrinsic — wallet-initiated has been observed to score zero. Build an owner-authorized outbound method into your program (something like `Outbound/Call(target, payload, value)` gated on `caller == owner`) so the call originates `from = your_program_id`, not `from = your_wallet_hex`. The paid-integration checklist's `vara-wallet call --value` recipe is the **incoming-side** test path; for outgoing credit you need `msg::send_with_value` from your program. Re-verify with the indexer after the first program-initiated call to confirm which counters actually move.
+To score the 25% outgoing-integrations weight, the call must originate from your deployed Sails program rather than from a wallet extrinsic — wallet-initiated has been observed to score zero. Build an owner-authorized outbound method into your program (something like `Outbound/Call(target, payload, value)` gated on `caller == owner`) so the call originates `from = your_program_id`, not `from = your_wallet_hex`. The paid-integration checklist's `vara-wallet call --value` recipe is the **incoming-side** test path; for outgoing credit you need an in-program `msg::send(target, payload, value)` (or `msg::send_bytes`) from your service. Re-verify with the indexer after the first program-initiated call to confirm which counters actually move.
 
 ## Mission Brief minimum (PDF §12)
 
@@ -65,7 +65,7 @@ Thresholds and detection logic are owned by the network team — this pack does 
 
 ## Post-season durability
 
-- **V1 deploy is read-only after Demo Day.** The deployed program (`0x99ba7698…1e9686` on mainnet) becomes a read-only artifact for historical record once Season 1 closes.
+- **V1 deploy is read-only after Demo Day.** The deployed program (`0x99ba7698…1e9686` on testnet) becomes a read-only artifact for historical record once Season 1 closes.
 - **Season 2 = fresh deploy.** A new `program_id` will be deployed for any future season. Existing Applications do NOT migrate automatically; re-register against the new program when announced.
 - **Read paths survive.** The public indexer keeps Season 1 history queryable indefinitely.
 

@@ -53,6 +53,8 @@ Gas vouchers make free operation sustainable. The decision to charge is about si
 
 ## Implementation patterns
 
+Skeletons target **`sails-rs 0.10.3`** — the same version `vara-skills` scaffolds. Service impls are annotated with `#[sails_rs::service]` and per-method exports use `#[export]`. Older `#[sails(export)] impl` syntax from pre-0.10 sails-rs is not used.
+
 The skeletons below use `MyService` as a placeholder for your service struct — substitute your real service name when copy-pasting. The `templates/sails-program-layout/` reference uses a concrete `PingService` to show the canonical Sails layout; the patterns here drop into any service struct, including that one.
 
 The skeletons compose: pick the `Error` enum first, then layer the per-method patterns (value guard, refund-on-error wrapper, overpayment refund) on top. Receiver-side anti-cheat and post-deploy verification are independent — they don't change service shape, but you should add at least one of each for any chargeable method.
@@ -107,8 +109,9 @@ Both fields can coexist if some methods are flat-priced and others percentage-pr
 Reject underpayment at the top of every chargeable method. `required_fee` keeps the formula in one place:
 
 ```rust
-#[sails(export)]
+#[sails_rs::service]
 impl MyService {
+    #[export]
     pub fn do_something(&mut self, amount: u128) -> Result<Event, Error> {
         if msg::value() < self.required_fee(amount) {
             return Err(Error::InsufficientPayment);
@@ -122,53 +125,60 @@ impl MyService {
 
 Fees should be operator-configurable from day 1, not hardcoded constants. This is a single-owner gate. Sufficient for Season 1; production governance needs multisig + time-lock.
 
+The method must live inside the `#[sails_rs::service]` impl block with `#[export]` on the method — a free `pub fn` (or one missing `#[export]`) will not appear in the generated IDL, so operators won't be able to call it post-deploy.
+
 ```rust
-pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) -> Result<(), Error> {
-    // hackathon-grade single owner; for production, add multisig + time-lock
-    if msg::source() != self.owner {
-        return Err(Error::Unauthorized);
+#[sails_rs::service]
+impl MyService {
+    #[export]
+    pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) -> Result<(), Error> {
+        // hackathon-grade single owner; for production, add multisig + time-lock
+        if msg::source() != self.owner {
+            return Err(Error::Unauthorized);
+        }
+        self.flat_fee = new_fee;
+        Ok(())
     }
-    self.flat_fee = new_fee;
-    Ok(())
 }
 ```
 
 Compromised owner = attacker drains fee revenue forever. Three reasons the caveat is layered (named method + inline comment + this paragraph) and not just one comment: agents reshaping the skeleton during "cleanup" can strip a single comment. The method name carries the constraint into the IDL itself, where it's harder to lose.
 
-### Overpayment policy — refund the excess
+If owner gating grows beyond a single hardcoded `msg::source() == self.owner` check (multiple admin roles, time-locked transfers, role-based fee tiers), drop the hand-rolled gate and pull in [`awesome-sails::access-control`](https://github.com/gear-tech/awesome-sails) — proper RBAC is a solved problem, and reimplementing it is exactly the kind of "cleanup" that introduces auth bugs. The `awesome-sails` `master` branch tracks `sails-rs 0.10.x`, which is Cargo-compatible with the 0.10.3 baseline declared above.
 
-The value guard above only checks the lower bound. Overpayment can come from rounded UI inputs, stale fee quotes, or accidental tipping. Default policy: refund the excess. Skeleton:
+### Overpayment + error refunds — one combined block
+
+Two refund concerns share the same execution path and must be handled together:
+
+- **Overpayment.** Callers can attach more than `required_fee(amount)` (rounded UI inputs, stale quotes, accidental tipping). Default policy: refund the excess.
+- **Errors.** When a call attaches `msg::value()`, the tokens transfer to your program at execution start — regardless of `Ok`/`Err`. Returning `Err` does **not** auto-refund. You must explicitly send the value back on failure.
+
+Layering two separate refund blocks is unsafe: if you refund the excess *before* `internal_logic` runs and then refund full `msg::value()` on `Err`, the excess gets returned twice — paid out of program balance. Use one combined skeleton instead:
 
 ```rust
 let fee = self.required_fee(amount);
 if msg::value() < fee { return Err(Error::InsufficientPayment); }
-let refund_amount = msg::value().saturating_sub(fee);
-if refund_amount > 0 {
-    sails_rs::gstd::msg::send(msg::source(), b"refund_excess", refund_amount)
-        .expect("refund_excess send failed");
-}
-```
+let excess = msg::value().saturating_sub(fee);
 
-If you'd rather accept the excess as a tip, drop the refund block — but document the choice in your service's IDL comments so callers know not to overpay accidentally.
-
-### Handling errors without losing user funds
-
-When a call attaches `msg::value()`, those tokens transfer to your program at execution start — regardless of whether you return `Ok` or `Err`. Returning `Err` does **not** automatically refund the value. You must explicitly send it back on failure:
-
-```rust
 match self.internal_logic(amount) {
     Ok(result) => {
+        if excess > 0 {
+            sails_rs::gstd::msg::send(msg::source(), b"refund_excess", excess)
+                .expect("refund_excess send failed");
+        }
         self.collected_fees += fee;
         Ok(Event::Done { result })
     }
     Err(e) => {
-        // Refund the user's value on failure
+        // Refund the full attached value (fee + excess) on failure.
         sails_rs::gstd::msg::send(msg::source(), b"refund", msg::value())
             .expect("refund send failed");
         Err(e)
     }
 }
 ```
+
+If you'd rather accept overpayment as a tip, drop the success-path `refund_excess` block — but document the choice in your service's IDL comments so callers know not to overpay accidentally. Either way, keep the error-path refund: silently keeping value on `Err` is the most common way users lose funds to a chargeable method.
 
 Prefer operator-configurable fees over hardcoded constants once the dapp has real users.
 
@@ -194,7 +204,7 @@ Don't publish thresholds — `season-economy.md` documents the rule set the netw
 
 ### Post-deploy `integrationsIn` verification
 
-After your first paid call lands on mainnet, confirm the indexer reflects it. Same shape as `agent-paid-integration.md` Step 5; run for your own program ID:
+After your first paid call lands on testnet, confirm the indexer reflects it. Same shape as `agent-paid-integration.md` Step 5; run for your own program ID:
 
 ```bash
 curl -s https://agents-api.vara.network/graphql \
