@@ -183,7 +183,17 @@ recovery_scan() {
   #    intent-recovery.sh is read-only with respect to the wallet; on
   #    success it renames INTENT → pending-call-{messageId}.json so the
   #    pending-file pass below picks it up and reconciles.
+  #
+  # Accumulate verdicts across ALL orphan INTENTs before deciding whether
+  # to halt. Bailing on the first RECOVERY_TOO_SOON would strand later
+  # INTENTs whose wallet-cli-out has the messageId — those should advance
+  # to reconcile in the same scan.
   local intent
+  local last_transient_code=""
+  local last_transient_msg=""
+  local terminal_code=""
+  local terminal_msg=""
+  local terminal_intent=""
   for intent in "$STATE_DIR"/pending-call-INTENT-*.json; do
     [[ -e "$intent" ]] || continue
     log_event "recovery_intent_replay" --arg path "$intent"
@@ -194,34 +204,73 @@ recovery_scan() {
         log_event "recovery_intent_renamed" --arg path "$intent"
         ;;
       RECOVERY_TOO_SOON|RECOVERY_PENDING|INDEXER_DOWN)
-        # Architecture: do not advance, do not block the loop forever
-        # on a transient gap. The orphan stays; next tick re-tries.
         log_event "recovery_intent_pending" \
           --arg path "$intent" --arg code "$RUN_SCRIPT_CODE"
-        set_state "WAITING_RECOVERY" \
-          "{\"orphan_intent\":\"$(basename "$intent")\",\"reason\":\"$RUN_SCRIPT_CODE\"}"
-        status_retry "$RUN_SCRIPT_CODE" \
-          "intent-recovery: $RUN_SCRIPT_MESSAGE"
+        last_transient_code="$RUN_SCRIPT_CODE"
+        last_transient_msg="$RUN_SCRIPT_MESSAGE"
         ;;
       INTENT_AMBIGUOUS|INTENT_ABANDONED)
-        # Terminal: INTENT was quarantined; surface to operator.
         log_event "recovery_intent_quarantined" \
           --arg path "$intent" --arg code "$RUN_SCRIPT_CODE"
-        set_state "WAITING_RECOVERY" \
-          "{\"orphan_intent\":\"$(basename "$intent")\",\"reason\":\"$RUN_SCRIPT_CODE\"}"
-        status_err "$RUN_SCRIPT_CODE" \
-          "intent-recovery: $RUN_SCRIPT_MESSAGE"
+        # Terminal verdicts must surface; remember the last one and
+        # stop after this loop so the operator sees it. We still let
+        # other INTENTs in this scan run — they may also need it.
+        terminal_code="$RUN_SCRIPT_CODE"
+        terminal_msg="$RUN_SCRIPT_MESSAGE"
+        terminal_intent="$intent"
+        ;;
+      RECOVERY_RENAME_FAILED)
+        log_event "recovery_rename_failed" \
+          --arg path "$intent" --arg msg "$RUN_SCRIPT_MESSAGE"
+        terminal_code="RECOVERY_RENAME_FAILED"
+        terminal_msg="$RUN_SCRIPT_MESSAGE"
+        terminal_intent="$intent"
         ;;
       *)
         log_event "recovery_intent_unexpected" \
           --arg path "$intent" --arg code "$RUN_SCRIPT_CODE"
-        status_err "PENDING_INTENT" \
-          "intent-recovery returned unexpected '$RUN_SCRIPT_CODE'; operator must triage"
+        terminal_code="PENDING_INTENT"
+        terminal_msg="intent-recovery returned unexpected '$RUN_SCRIPT_CODE': $RUN_SCRIPT_MESSAGE"
+        terminal_intent="$intent"
         ;;
     esac
   done
 
-  # 2. Reconcile orphan pending-call-{messageId}.json files (read-only;
+  # Severity priority: terminal > transient. RENAMED is silent (the
+  # pending-file pass below picks them up).
+  if [[ -n "$terminal_code" ]]; then
+    set_state "WAITING_RECOVERY" \
+      "{\"orphan_intent\":\"$(basename "$terminal_intent")\",\"reason\":\"$terminal_code\"}"
+    status_err "$terminal_code" "intent-recovery: $terminal_msg"
+  fi
+  if [[ -n "$last_transient_code" ]]; then
+    set_state "WAITING_RECOVERY" \
+      "{\"reason\":\"$last_transient_code\"}"
+    status_retry "$last_transient_code" "intent-recovery: $last_transient_msg"
+  fi
+
+  # 2. Progress AMBIGUOUS quarantines to ABANDONED once they age past
+  #    RECOVERY_ABANDONED_SEC (default 24h). This keeps the AMBIGUOUS
+  #    bucket from growing without bound when the call truly never
+  #    landed. INTENT_ABANDONED is terminal — operator triages.
+  local ambig
+  for ambig in "$STATE_DIR"/pending-call-AMBIGUOUS-*.json; do
+    [[ -e "$ambig" ]] || continue
+    log_event "recovery_ambiguous_scan" --arg path "$ambig"
+    invoke_child "intent-recovery-ambig" bash "$SCRIPT_DIR/intent-recovery.sh" \
+      --ambiguous "$ambig"
+    case "$RUN_SCRIPT_CODE" in
+      INTENT_ABANDONED)
+        log_event "recovery_ambiguous_abandoned" --arg path "$ambig"
+        # Surface to operator but do not halt — abandoned is a label,
+        # not a live spend safety risk.
+        ;;
+      RECOVERY_PENDING) ;;
+      *) log_event "recovery_ambiguous_unexpected" --arg code "$RUN_SCRIPT_CODE" ;;
+    esac
+  done
+
+  # 3. Reconcile orphan pending-call-{messageId}.json files (read-only;
   #    idempotent). Step A above may have just produced one of these.
   local count=0 f
   for f in "$STATE_DIR"/pending-call-0x*.json; do

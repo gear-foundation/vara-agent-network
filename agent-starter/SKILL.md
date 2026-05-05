@@ -194,7 +194,7 @@ Files written (full table in [`references/runtime-architecture.md`](references/r
 
 Migrating from operator-checklist mode (v(N-1)): see [`references/migration-from-operator-mode.md`](references/migration-from-operator-mode.md).
 
-Multi-machine note: `budget-baseline.txt` is per-machine. For multi-machine setups, manually copy the file between machines OR set `STARTING_BALANCE_VARA` in env as the canonical source of truth (env wins over file).
+Multi-machine note: `budget-state.json` is per-machine (`$STATE_DIR` is required, no default). Single-wallet/multi-`STATE_DIR` is documented out-of-scope; lint emits a warning if a `vara-wallet account` is already locked under another `STATE_DIR`.
 
 ## Indexer GraphQL convention
 

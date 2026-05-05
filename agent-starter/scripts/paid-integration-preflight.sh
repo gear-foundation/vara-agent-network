@@ -213,10 +213,28 @@ probe_target() {
     | jq -c '.data.application // null' 2>/dev/null
 }
 
+_log_target_deregistered() {
+  # Append an info row to reconciliation.jsonl so discovery's lookback
+  # decrement counts this target's deregistration. NOT a bad-actor mark
+  # (the provider may have legitimately deregistered) — runtime-arch
+  # §"Failure codes" calls this an info row.
+  local recon="$STATE_DIR/reconciliation.jsonl"
+  local row
+  row=$(jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --arg target "$SEL_TARGET" \
+    '{ts: $ts, target: $target, outcome: "abandoned",
+      audit_status: "complete", audit_violations: [],
+      info: "TARGET_DEREGISTERED",
+      detail: "target not in applications at preflight time",
+      messageId: ""}' 2>/dev/null) || return 0
+  printf '%s\n' "$row" >>"$recon" 2>/dev/null || true
+}
+
 if ! TGT_INFO=$(probe_target "$SEL_TARGET"); then
   status_retry "INDEXER_DOWN" "target probe failed for $SEL_TARGET"
 fi
 if [[ -z "$TGT_INFO" || "$TGT_INFO" = "null" ]]; then
+  _log_target_deregistered
   status_err "TARGET_DEREGISTERED" "target $SEL_TARGET not in applications anymore"
 fi
 if ! printf '%s' "$TGT_INFO" | jq -e . >/dev/null 2>&1; then
@@ -227,8 +245,10 @@ TGT_REGISTERED=$(printf '%s' "$TGT_INFO" | jq -r '.registered // false')
 TGT_IDL_URL=$(printf '%s'    "$TGT_INFO" | jq -r '.idlUrl // empty')
 TGT_IDL_HASH=$(printf '%s'   "$TGT_INFO" | jq -r '.idlHash // empty')
 
-[[ "$TGT_REGISTERED" = "true" ]] \
-  || status_err "TARGET_DEREGISTERED" "target $SEL_TARGET registered=false"
+if [[ "$TGT_REGISTERED" != "true" ]]; then
+  _log_target_deregistered
+  status_err "TARGET_DEREGISTERED" "target $SEL_TARGET registered=false"
+fi
 
 [[ -n "$TGT_IDL_URL" && -n "$TGT_IDL_HASH" ]] \
   || status_err "IDL_HASH_MISMATCH" "target $SEL_TARGET registry row missing idl_url or idl_hash"

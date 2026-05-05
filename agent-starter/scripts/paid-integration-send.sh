@@ -188,6 +188,7 @@ atomic_write "$INTENT_PATH" "$INTENT_BODY" \
 # ---------------------------------------------------------------------------
 
 WALLET_LOG="$STATE_DIR/wallet-cli-out/${NONCE}.log"
+WALLET_LOG_ERR="$STATE_DIR/wallet-cli-out/${NONCE}.stderr.log"
 
 run_wallet() {
   if [[ -n "${SEND_WALLET_CMD:-}" ]]; then
@@ -208,13 +209,24 @@ run_wallet() {
     "${idl_args[@]}"
 }
 
-# Tee wallet output to disk for post-mortem and recovery Step A. Capture
-# both stdout (the JSON we parse) and stderr (operator diagnostics).
+# Write wallet stdout/stderr DIRECTLY to disk during the call, not after.
+# A SIGKILL between wallet exit and the parse below would otherwise lose
+# the messageId — Step A recovery (which only greps wallet-cli-out)
+# would then rely entirely on indexer Step B. WALLET_LOG receives stdout
+# (the JSON line we parse). WALLET_LOG_ERR keeps stderr separate so jq
+# in Step A can decode lines without stripping ANSI / progress noise.
+#
+# The wallet runs in a subshell so an `exit N` inside the eval'd
+# SEND_WALLET_CMD (test stub) or any abnormal wallet exit only kills the
+# subshell — the parent shell continues to the WALLET_RC check and emits
+# WALLET_PROBE_FAILED via status_retry. Without the subshell, eval'd exit
+# would terminate the script under the file-redirected stdout, dropping
+# the JSON status line into WALLET_LOG instead of the script's stdout.
 set +e
-WALLET_OUT=$(run_wallet 2> >(tee -a "$WALLET_LOG" >&2))
+( run_wallet ) >>"$WALLET_LOG" 2>>"$WALLET_LOG_ERR"
 WALLET_RC=$?
 set -e 2>/dev/null || true
-printf '%s\n' "$WALLET_OUT" >> "$WALLET_LOG"
+WALLET_OUT=$(cat "$WALLET_LOG" 2>/dev/null || true)
 
 if [[ "$WALLET_RC" -ne 0 ]]; then
   # Leave INTENT on disk; recovery scan will reconcile based on indexer

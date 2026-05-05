@@ -86,21 +86,34 @@ setup_status_trap
 # ---------------------------------------------------------------------------
 
 INTENT_PATH=""
+AMBIGUOUS_PATH=""
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --intent) INTENT_PATH="$2"; shift 2 ;;
-    --help|-h) sed -n '2,75p' "$0"; exit 0 ;;
+    --ambiguous) AMBIGUOUS_PATH="$2"; shift 2 ;;
+    --help|-h) sed -n '2,80p' "$0"; exit 0 ;;
     *) status_err "OPERAND" "unknown arg '$1'" ;;
   esac
 done
 
+if [[ -n "$AMBIGUOUS_PATH" && -n "$INTENT_PATH" ]]; then
+  status_err "OPERAND" "--intent and --ambiguous are mutually exclusive"
+fi
+
 require_state_dir
 
-[[ -n "$INTENT_PATH" ]] || status_err "OPERAND" "--intent <path> required"
-[[ -f "$INTENT_PATH" ]] || status_err "NO_INTENT" "intent path not found: $INTENT_PATH"
-
-if ! INTENT=$(jq -ec . "$INTENT_PATH" 2>/dev/null); then
-  status_err "NO_INTENT" "intent file unreadable / not JSON: $INTENT_PATH"
+if [[ -n "$AMBIGUOUS_PATH" ]]; then
+  [[ -f "$AMBIGUOUS_PATH" ]] || status_err "NO_INTENT" "ambiguous path not found: $AMBIGUOUS_PATH"
+  if ! INTENT=$(jq -ec . "$AMBIGUOUS_PATH" 2>/dev/null); then
+    status_err "NO_INTENT" "ambiguous file unreadable / not JSON: $AMBIGUOUS_PATH"
+  fi
+  INTENT_PATH="$AMBIGUOUS_PATH"  # for downstream "remove the file" logic
+else
+  [[ -n "$INTENT_PATH" ]] || status_err "OPERAND" "--intent or --ambiguous required"
+  [[ -f "$INTENT_PATH" ]] || status_err "NO_INTENT" "intent path not found: $INTENT_PATH"
+  if ! INTENT=$(jq -ec . "$INTENT_PATH" 2>/dev/null); then
+    status_err "NO_INTENT" "intent file unreadable / not JSON: $INTENT_PATH"
+  fi
 fi
 
 NONCE=$(printf '%s' "$INTENT" | jq -r '.nonce // empty')
@@ -215,6 +228,38 @@ quarantine_ambiguous() {
 }
 
 # ---------------------------------------------------------------------------
+# --ambiguous mode: only check the abandoned progression. Per the
+# architecture's verdict-by-age table, an INTENT that has been quarantined
+# to pending-call-AMBIGUOUS-{nonce}.json escalates to INTENT_ABANDONED
+# once age (relative to ts_pre_send) reaches RECOVERY_ABANDONED_SEC.
+# This is the terminal label that prevents the AMBIGUOUS bucket from
+# growing without bound.
+# ---------------------------------------------------------------------------
+
+if [[ -n "$AMBIGUOUS_PATH" ]]; then
+  PRE_SEND_EPOCH_AMB=$(to_epoch "$TS_PRE_SEND") || \
+    status_err "OPERAND" "ts_pre_send='$TS_PRE_SEND' could not be parsed"
+  NOW_EPOCH_AMB=$(now_epoch) || \
+    status_err "OPERAND" "could not read system clock"
+  AGE_AMB=$(( NOW_EPOCH_AMB - PRE_SEND_EPOCH_AMB ))
+  if [[ "$AGE_AMB" -lt "$ABANDONED_SEC" ]]; then
+    status_retry "RECOVERY_PENDING" \
+      "AMBIGUOUS nonce=$NONCE age=${AGE_AMB}s < ${ABANDONED_SEC}s; not yet abandoned"
+  fi
+  ABANDONED_PATH="$STATE_DIR/pending-call-ABANDONED-${NONCE}.json"
+  body=$(printf '%s' "$INTENT" | jq -c \
+    --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
+    --argjson age "$AGE_AMB" \
+    '. + {abandoned_at: $ts, age_at_abandon_sec: $age, recovered_via_scan: "abandoned"}')
+  atomic_write "$ABANDONED_PATH" "$body" \
+    || status_err "INTENT_ABANDONED" \
+       "could not write abandoned label for nonce=$NONCE; operator must triage"
+  rm -f "$AMBIGUOUS_PATH"
+  status_err "INTENT_ABANDONED" \
+    "nonce=$NONCE age=${AGE_AMB}s; AMBIGUOUS exhausted abandoned-window; labeled at $ABANDONED_PATH"
+fi
+
+# ---------------------------------------------------------------------------
 # Step A — wallet-cli-out replay
 # ---------------------------------------------------------------------------
 
@@ -222,9 +267,16 @@ if [[ -f "$WALLET_LOG" ]]; then
   while IFS= read -r line; do
     [[ -z "$line" ]] && continue
     if msgid=$(extract_msgid_from_json_line "$line"); then
+      # The first line that yields a 0x-hex messageId is authoritative.
+      # If the rename fails, abort — we must NOT iterate to the next
+      # line and rename to a different messageId from a later progress
+      # event in the same log. status_err stops the loop here.
       if rename_intent_to_post "$msgid"; then
         status_ok "RECOVERY_RENAMED" \
           "Step A: nonce=$NONCE messageId=$msgid (wallet-cli-out replay)"
+      else
+        status_err "RECOVERY_RENAME_FAILED" \
+          "Step A: matched messageId=$msgid for nonce=$NONCE but rename failed (rc=$?); operator must triage"
       fi
     fi
   done <"$WALLET_LOG"

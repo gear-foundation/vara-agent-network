@@ -121,7 +121,7 @@ Every script's last stdout line is a JSON object with `status` (`ok` | `err` | `
 | `NO_IDENTITY_CARD` | `paid-integration-preflight.sh` | halt + skill pointer to `agent-board.md` Step 1 (`Board/SetIdentityCard`); exit 1 |
 | `TARGET_DEREGISTERED` | `paid-integration-preflight.sh` Step 1.6 (target-registration recheck) | discard decision; mark provider in `reconciliation.jsonl` (info, not bad-actor); loop → DISCOVERING |
 | `INDEXER_DOWN` | `paid-integration-preflight.sh`; `payment-reconciliation.sh` | retry with backoff (3 × 30s); on persistent failure → IDLE, retry next tick |
-| `IDL_HASH_MISMATCH` | `paid-integration-preflight.sh` Step 1.5 | mark provider bad-actor in `reconciliation.jsonl`; loop returns to DISCOVERING with this provider excluded |
+| `IDL_HASH_MISMATCH` | `paid-integration-preflight.sh` Step 1.5 | mark provider bad-actor in `reconciliation.jsonl`; loop returns to DISCOVERING. The next discovery cycle reads recent errors from `reconciliation.jsonl` and applies a score decrement to this provider; it is not hard-excluded, but a clean rival will outrank it |
 | `NO_PROVIDER` | `rational-discovery.sh` | log to `budget-history.jsonl`; loop → IDLE; next tick retries discovery |
 | `LOCK_BUSY` | any `with-lock.sh` invocation | another caller active on same lock; skip this tick; retry next |
 | `LOCK_CORRUPT` | `with-lock.sh` startup, when stamp file is partial / unreadable / inconsistent | refuse to reclaim; require operator inspection; exit 1 |
@@ -245,7 +245,7 @@ For each $STATE_DIR/pending-call-INTENT-*.json:
     Let age = now - ts_pre_send.
     If age < 2 blocks (≤12s): leave INTENT in place; retry recovery next tick.
     If 2 blocks ≤ age < 1h AND indexer is healthy: leave INTENT in place;
-      schedule another recovery in 60s. The 1h window covers indexer lag,
+      next loop tick re-runs recovery (no separate scheduler). The 1h window covers indexer lag,
       reorgs, and minor outages without losing evidence.
     If 1h ≤ age AND indexer healthy AND no match across all evidence sources:
       emit INTENT_AMBIGUOUS. Move INTENT → pending-call-AMBIGUOUS-{nonce}.json.
@@ -315,9 +315,9 @@ Two invariants this gives:
 
 The audit gate validates structure, not just non-emptiness:
 
-- `chosen_reason` must be non-empty AND match `^[A-Za-z][A-Za-z0-9_=, .:-]{4,256}$`. The five-char minimum and printable-ASCII restriction stops "x", `"  "`, and similar garbage.
-- `rank_inputs` must be a JSON object with at least one of the documented score keys (`integrationsIn`, `integrationsOut`, `reconErrors`, `latencyMsP50`, `valuePaidRaw`). Unknown keys are allowed; an empty object fails.
-- `candidate_count` must be a positive integer and equal `len(rejected) + 1` when `rejected` is non-empty. `rejected = []` is allowed when `candidate_count == 1` (P1-C6 degenerate single-candidate case).
+- `chosen_reason` must be non-empty AND match `^[A-Za-z][A-Za-z0-9_=, .:-]{4,255}$`. The five-char minimum and printable-ASCII restriction stops `"x"`, `"  "`, and similar garbage. Upper bound is 255 (the bash 3.2 `=~` engine's max repetition count on macOS).
+- `rank_inputs` must be a JSON object with at least one of the documented score keys (`integrationsIn`, `integrationsOut`, `recentErrors`, `reconErrors`, `latencyMsP50`, `score`). Unknown keys are allowed; an empty object fails. (`recentErrors` is the rolling penalty input from the discovery rank decrement; `score` is the final composite the discovery emitted; both are accepted so reconciliation can validate either.)
+- `candidate_count` must be a positive integer. When `candidate_count > 1`, `len(rejected) >= candidate_count - 1`: discovery may emit one rejection row per filter applied (`self`, `in_flight`, `no_howToInteract`, `lower_score=...`), so `rejected` can exceed `candidate_count - 1` when the same target was filtered by multiple rules before the survivor was chosen. `rejected = []` is allowed when `candidate_count == 1` (P1-C6 degenerate single-candidate case).
 - `target` must be a 32-byte hex address; `value_raw_planks` must be a non-negative integer string (no scientific notation, no decimals).
 
 If any check fails, the row is still written but with `audit_status: "incomplete"` and an `audit_violations` array listing the failed checks. `outcome` is independent and reflects the actual call result.

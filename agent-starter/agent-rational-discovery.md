@@ -13,15 +13,15 @@ Do not use for outbound payment mechanics ([`agent-payment-reconciliation.md`](a
    - the agent's own program id
    - candidates without a complete `howToInteract` block (B+ contract — see [`references/runtime-architecture.md`](references/runtime-architecture.md) §"Identity-card howToInteract contract")
    - candidates currently in `$STATE_DIR/decisions/active` (a call to that target is in flight)
-   - candidates marked bad-actor in `$STATE_DIR/reconciliation.jsonl` (recent IDL_HASH_MISMATCH or repeated reconciliation errors)
-3. Ranks survivors:
+3. Applies a score *decrement* (not exclusion) for candidates with recent reconciliation errors in `$STATE_DIR/reconciliation.jsonl` (recent IDL_HASH_MISMATCH or AUDIT_INCOMPLETE within `DISCOVERY_LOOKBACK_HOURS`). A repeatedly failing provider can still win if everyone else is worse — but the decrement makes that unlikely. Providers recover by accumulating clean reconciliations.
+4. Ranks survivors:
    ```
    score = integrationsIn
-         - 2 * recent_errors_within_24h
-         - latency_ms_p50 / 1000
+         - DISCOVERY_RANK_DECREMENT * recent_errors_within_LOOKBACK_HOURS
+         - latency_ms_p50 / DISCOVERY_RANK_LATENCY_DIVISOR
    ```
-   Deterministic tiebreaker: lexicographic on program id hex.
-4. Writes one decision to `$STATE_DIR/decisions/inbox/{ts}.json` with the selected candidate plus the rejected list (for audit).
+   Defaults: `DISCOVERY_RANK_DECREMENT=2`, `DISCOVERY_RANK_LATENCY_DIVISOR=1000`, `DISCOVERY_LOOKBACK_HOURS=24`. Deterministic tiebreaker: lexicographic on program id hex.
+5. Writes one decision to `$STATE_DIR/decisions/inbox/{YYYYMMDDTHHMMSSZ}-{rand}.json` with the selected candidate plus the rejected list (for audit).
 
 ## When to use
 
@@ -48,7 +48,7 @@ Do not use for outbound payment mechanics ([`agent-payment-reconciliation.md`](a
 
 | Code | Status | Meaning |
 |---|---|---|
-| `DISCOVERY_DONE` | ok | wrote `decisions/inbox/{ts}.json`; preflight runs next tick |
+| `DISCOVERY_DONE` | ok | wrote `decisions/inbox/{YYYYMMDDTHHMMSSZ}-{rand}.json`; preflight runs next tick |
 | `NO_PROVIDER` | err | no candidate met all filters; loop returns to IDLE and retries next tick |
 | `INDEXER_DOWN` | retry | indexer probe failed transiently; retry next tick |
 | `MISSING_STATE_DIR` / `MISSING_OWN_PID` | err | required env not set |
@@ -57,33 +57,40 @@ Do not use for outbound payment mechanics ([`agent-payment-reconciliation.md`](a
 
 | File | Lifecycle |
 |---|---|
-| `decisions/inbox/{ts}.json` | one-shot; preflight archives it to `decisions/active/{nonce}.json`, or DECISION_STALE discards it after 1h |
+| `decisions/inbox/{YYYYMMDDTHHMMSSZ}-{rand}.json` | one-shot; preflight archives it to `decisions/active/{nonce}.json`, or DECISION_STALE discards it after 1h |
 
 ## Decision file shape
 
 ```json
 {
   "ts": "2026-05-06T12:00:00Z",
+  "candidate_count": 3,
+  "own_program_id": "0x...",
   "selected": {
-    "program_id": "0x...",
-    "handle": "@example",
+    "target": "0x...",
     "method": "Action/run",
     "args_template": "[]",
     "value_vara": "0.5"
   },
   "rank_inputs": {
     "integrationsIn": 7,
+    "latencyMsP50": 320,
     "recentErrors": 0,
-    "latencyMsP50": 320
+    "score": 6.68,
+    "lookback_hours": 24
   },
-  "candidate_count": 3,
   "rejected": [
-    {"program_id": "0x...", "reason": "NO_IDENTITY_CARD"},
-    {"program_id": "0x...", "reason": "score=2 < winner=5"}
+    {"target": "0x...", "reason": "lower_score=4.5"},
+    {"target": "0x...", "reason": "self"},
+    {"target": "0x...", "reason": "no_howToInteract"}
   ],
-  "chosen_reason": "integrationsIn=7, no prior failures"
+  "chosen_reason": "integrationsIn=7, recentErrors=0, latencyMsP50=320, score=6.68"
 }
 ```
+
+Filename pattern: `decisions/inbox/{YYYYMMDDTHHMMSSZ}-{rand}.json` (the random suffix disambiguates two ticks landing in the same second).
+
+Rejection reasons emitted by discovery: `self`, `in_flight`, `no_howToInteract`, `lower_score=<n>`. The bad-actor decrement (recent IDL_HASH_MISMATCH or repeated reconciliation errors) is applied as a score *decrement* (see `rank_inputs.recentErrors`), not as an exclusion — providers can recover by accumulating clean reconciliations within `DISCOVERY_LOOKBACK_HOURS`.
 
 The `chosen_reason` and `rejected` array are the audit contract with [`agent-payment-reconciliation.md`](agent-payment-reconciliation.md). The reconciliation script's audit gate validates this shape ([`references/runtime-architecture.md`](references/runtime-architecture.md) §"Audit gate").
 

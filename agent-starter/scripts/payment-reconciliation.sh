@@ -130,8 +130,13 @@ fi
 
 RECON_FILE="$STATE_DIR/reconciliation.jsonl"
 ALREADY=0
-if [[ -f "$RECON_FILE" ]] && jq -e --arg id "$MESSAGE_ID" \
-  'select(.messageId==$id)' "$RECON_FILE" >/dev/null 2>&1; then
+# `jq -e select(...)` over a JSONL stream only exits 0 if the LAST output
+# is non-null/non-false, so a duplicate messageId in the middle of the
+# file slips through and we'd write a second row. `-s` slurps into an
+# array; `any(.[]; ...)` returns a single boolean over all entries so
+# `-e` is unambiguous.
+if [[ -f "$RECON_FILE" ]] && jq -se --arg id "$MESSAGE_ID" \
+  'any(.[]; .messageId==$id)' "$RECON_FILE" >/dev/null 2>&1; then
   ALREADY=1
 fi
 

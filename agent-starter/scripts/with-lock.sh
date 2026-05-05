@@ -75,14 +75,24 @@ _get_start_time() {
 
 _pid_alive() {
   # Returns 0 if pid exists, 1 if ESRCH (gone), 2 if EPERM (alive but not ours).
+  #
+  # `kill -0` returns 1 for BOTH ESRCH and EPERM; the shell can't see errno.
+  # That makes the case "$?" form unreliable — and reading $? after `if cmd;
+  # then ... fi` actually reads the if-statement's rc, not kill's rc, which
+  # silently treats EPERM as "gone" and lets the lock be reclaimed while a
+  # foreign-uid process still holds it (wallet.lock invariant break).
+  #
+  # Fix: probe with kill first; on failure, ask `ps` whether the process
+  # exists. ps respects different uid namespaces, so a present-but-EPERM
+  # process shows up as alive-not-ours. Truly gone processes fall through.
   local pid="$1"
   if kill -0 "$pid" 2>/dev/null; then
     return 0
   fi
-  case "$?" in
-    1) return 2 ;;  # EPERM observed via shell — treat as alive-not-ours
-    *) return 1 ;;  # ESRCH or other → gone
-  esac
+  if ps -p "$pid" >/dev/null 2>&1; then
+    return 2  # alive but not ours (EPERM)
+  fi
+  return 1  # ESRCH (gone)
 }
 
 # ---------------------------------------------------------------------------

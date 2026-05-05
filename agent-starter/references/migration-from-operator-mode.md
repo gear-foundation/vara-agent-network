@@ -80,4 +80,4 @@ These were ad-hoc per-step files. The autonomous loop uses durable state in `$ST
 
 - Architecture: [`runtime-architecture.md`](runtime-architecture.md)
 - Per-skill docs: [`agent-autonomous-loop.md`](../agent-autonomous-loop.md), [`agent-rational-discovery.md`](../agent-rational-discovery.md), [`agent-paid-integration.md`](../agent-paid-integration.md), [`agent-payment-reconciliation.md`](../agent-payment-reconciliation.md), [`agent-budget-control.md`](../agent-budget-control.md)
-- Funding flow (PR #25): [`../services/seed-backend/README.md`](../services/seed-backend/README.md)
+- Funding flow (PR #25): seed-backend service (`services/seed-backend/`, lands with PR #25; this branch references the design without a vendored link).

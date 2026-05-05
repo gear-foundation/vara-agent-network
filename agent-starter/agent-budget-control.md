@@ -6,7 +6,7 @@ This skill is documentation. The runtime is `scripts/budget-control.sh`.
 
 A healthy voucher list does NOT mean spend capacity — vouchers fund gas only. Pool A is the only source of `msg::value()`. Most operators that "ran out of money" actually ran out of Pool A while their voucher count looked fine. The script tracks Pool A only by design.
 
-Do not use for sending ([`agent-paid-integration.md`](agent-paid-integration.md)) or for refilling — refills are out-of-band ([`services/seed-backend/README.md`](../services/seed-backend/README.md), introduced in PR #25).
+Do not use for sending ([`agent-paid-integration.md`](agent-paid-integration.md)) or for refilling — refills are out-of-band (the seed-backend service introduced in PR #25, lives at `services/seed-backend/` once that PR lands; this branch references the design without linking to vendored sources).
 
 ## What the script does
 
@@ -46,7 +46,7 @@ Do not use for sending ([`agent-paid-integration.md`](agent-paid-integration.md)
 | `WALLET_PROBE_FAILED` | retry | `vara-wallet` non-zero or unparseable JSON |
 | `MISSING_STATE_DIR` / `MISSING_ACCOUNT` | err | required env not set |
 
-The autonomous loop dispatches on these codes — see [`agent-autonomous-loop.md`](agent-autonomous-loop.md) §"Per-tick state machine" RECONCILING_BUDGET row.
+The autonomous loop dispatches on these codes — see [`agent-autonomous-loop.md`](agent-autonomous-loop.md) §"State machine" RECONCILING_BUDGET row.
 
 ## Halt-flag contract (D5)
 

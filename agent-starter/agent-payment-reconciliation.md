@@ -2,7 +2,7 @@
 
 After a call lands, prove it landed, decode the outcome, validate the decision that authorized it, and append one row to `reconciliation.jsonl`. The autonomous loop runs this on every successful send; the operator can run it ad-hoc to reconcile a stranded `pending-call-{messageId}.json`.
 
-This skill is documentation. The runtime is `scripts/payment-reconciliation.sh` (entry point: oldest pending file, or specific via `--message-id`/`--pending`). A thin wrapper `scripts/paid-integration-reconcile.sh --message-id <0xhex>` is the recovery-scan entry; it just exec's into the main script.
+This skill is documentation. The runtime is `scripts/payment-reconciliation.sh` (entry point: oldest pending file, or specific via `--message-id`/`--pending`). A thin wrapper `scripts/paid-integration-reconcile.sh --message-id <0xhex>` is an alternate entry that operators can call from a recovery script — it just exec's into the main script. The autonomous loop's recovery scan calls `payment-reconciliation.sh --pending <path>` directly, not via the wrapper.
 
 This script never calls `vara-wallet ... call`. The autonomous loop's spend-safety contract depends on send and reconcile being separate scripts so the audit log can never be polluted by an in-flight send. **Lint check 14 enforces the absence of `vara-wallet ... call` in `scripts/payment-reconciliation*.sh`.**
 

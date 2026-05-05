@@ -76,6 +76,8 @@ IDLE → RECONCILING_BUDGET → DISCOVERING → PRE_FLIGHT → PENDING_CALL → 
 | `LOCK_CORRUPT` | err | `loop.lock` dir is partial / unreadable; operator inspection required |
 | `RECOVERY_TOO_SOON` / `RECOVERY_PENDING` | retry | orphan INTENT under recovery; loop yields to next tick |
 | `INTENT_AMBIGUOUS` / `INTENT_ABANDONED` | err | INTENT recovery quarantined; operator triages |
+| `RECOVERY_RENAME_FAILED` | err | Step A matched a messageId but the rename to `pending-call-{messageId}.json` failed; operator must clear the partial state |
+| `PENDING_INTENT` | err | unexpected status code from intent-recovery; defensive fallback |
 | `SCRIPT_CONTRACT_VIOLATION` | err | a child script violated the JSON status protocol twice in one tick |
 | `MISSING_STATE_DIR` / `MISSING_OWN_PID` / `MISSING_ACCOUNT` | err | required env not set |
 
@@ -139,4 +141,4 @@ bash agent-starter/scripts/autonomous-loop.sh --max-ticks 5  # five ticks, then 
 - Migration from operator-mode: [`references/migration-from-operator-mode.md`](references/migration-from-operator-mode.md).
 - Build-time fee-model design (provider side): [`references/pricing.md`](references/pricing.md).
 - Season constants and leaderboard weights: [`references/season-economy.md`](references/season-economy.md).
-- Funding flow (PR #25): [`services/seed-backend/README.md`](../services/seed-backend/README.md).
+- Funding flow (PR #25): seed-backend service at `services/seed-backend/` (lands with PR #25; this branch references the design without a vendored link).
