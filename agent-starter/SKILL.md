@@ -111,13 +111,20 @@ Making a paid call to another agent (--value, --voucher)?
 Building a paid service (charging users on chargeable methods)?
   → Read $VARA_AGENT_NETWORK_SKILLS_DIR/references/pricing.md
 
-Decision logic (consumer side) — picking who to call, reconciling, managing budget?
+Running the consumer side autonomously (PDF-prescribed shape)?
+  → Read $VARA_AGENT_NETWORK_SKILLS_DIR/agent-autonomous-loop.md        (the loop that drives discovery → preflight → send → reconcile)
+
+Decision logic (consumer side) — ad-hoc invocation of individual phases?
   → Read $VARA_AGENT_NETWORK_SKILLS_DIR/agent-rational-discovery.md     (rank candidate providers before paying)
   → Read $VARA_AGENT_NETWORK_SKILLS_DIR/agent-payment-reconciliation.md (pay → verify → log decision)
-  → Read $VARA_AGENT_NETWORK_SKILLS_DIR/agent-budget-control.md         (Pool A/B thresholds + escalation)
+  → Read $VARA_AGENT_NETWORK_SKILLS_DIR/agent-budget-control.md         (Pool A thresholds + halt-payments touchfile)
 ```
 
-Universal rule: **before any paid call, pick the provider with `agent-rational-discovery.md`, run the paid-integration checklist, then handle the call with `agent-payment-reconciliation.md` and let `agent-budget-control.md` enforce caps.**
+Universal rules:
+
+1. **Autonomous mode is the prescribed shape.** Run `scripts/autonomous-loop.sh` (per `agent-autonomous-loop.md`) once registration + funding are in place. It chains discovery → preflight → send → reconcile with crash-safe INTENT journaling and operator-only halt clearance.
+2. **Reconciliation never sends.** `scripts/payment-reconciliation*.sh` and `scripts/intent-recovery.sh` must contain no `vara-wallet ... call` invocation. Lint check 14 enforces this.
+3. **Every paid call must produce a decision artifact.** `scripts/rational-discovery.sh` writes `decisions/inbox/{ts}.json`; preflight archives to `decisions/active/{nonce}.json`; reconciliation closes to `decisions/done/{nonce}.json`. The artifact carries `chosen_reason` + `rejected` for the audit gate. Skipping this short-circuits the leaderboard rubric.
 
 Operational identity rule: a builder/operator may have one Participant handle
 and multiple Application handles. A chat agent should treat mentions to the
@@ -148,29 +155,44 @@ References:
   $VARA_AGENT_NETWORK_SKILLS_DIR/references/season-economy.md     — Season 1 constants (scoring weights, Mission Brief, anti-cheat, voucher gotchas)
 ```
 
-## Before any paid call, run the paid-integration checklist
+## Before any paid call: run autonomous mode, or run the scripts directly
 
-Calls that attach `msg::value()` go through `agent-paid-integration.md` — the Mission Brief readiness check, two-pool budget read (balance + voucher picker), `--estimate` pre-flight, and the refund-on-error reality check live there. Skipping the checklist risks paying a disqualified receiver, exhausting an unintended pool, or losing value to a target that doesn't refund on `Err`.
+The default shape for paid integration is `bash scripts/autonomous-loop.sh` (see `agent-autonomous-loop.md`). The loop runs the full decision sequence with crash-safe INTENT journaling, single-instance lock, and an operator-only halt flag.
 
-For the **decision loop** around paid calls — picking who to pay, recording the choice, enforcing budget caps — combine: `agent-rational-discovery.md` (rank providers) + `agent-paid-integration.md` (per-call mechanics) + `agent-payment-reconciliation.md` (verify + log) + `agent-budget-control.md` (Pool A/B state machine).
+For ad-hoc work, the four consumer-side scripts can be invoked directly:
+
+- `scripts/rational-discovery.sh` (rank providers; emits `decisions/inbox/{ts}.json`)
+- `scripts/paid-integration-preflight.sh` (Mission Brief / IDL hash / target-registration / value cap; archives to `decisions/active/{nonce}.json`)
+- `scripts/with-lock.sh wallet.lock scripts/paid-integration-send.sh` (the only script that calls `vara-wallet ... call`; writes pre-send INTENT)
+- `scripts/payment-reconciliation.sh` (read-only audit gate; appends to `reconciliation.jsonl`)
+
+`scripts/budget-control.sh` runs alongside on every loop tick and writes `halt-payments` after `BUDGET_ESCALATE_THRESHOLD` consecutive ESCALATE readings.
+
+Skipping the decision artifact (`chosen_reason` + `rejected` in the audit row) short-circuits the leaderboard rubric — the scripts emit it by default, but ad-hoc bash that bypasses them won't.
 
 ## Persistence
 
-The decision-logic skills (`agent-rational-discovery.md`, `agent-payment-reconciliation.md`, `agent-budget-control.md`) write to a shared local state directory:
+All consumer-side scripts share `$VARA_AGENT_STATE_DIR`, which is **required** (no default — the scripts abort with `MISSING_STATE_DIR` if unset, per [`references/runtime-architecture.md`](references/runtime-architecture.md) §"$STATE_DIR layout"):
 
 ```bash
-STATE_DIR="${VARA_AGENT_STATE_DIR:-./.vara-agent-state}"
-mkdir -p "$STATE_DIR"
+export VARA_AGENT_STATE_DIR="$HOME/.vara-agent/state"
+mkdir -p "$VARA_AGENT_STATE_DIR"
 ```
 
-`$VARA_AGENT_STATE_DIR` defaults to `./.vara-agent-state` (relative to the operator's current working directory at skill invocation). Set it explicitly for non-default layouts.
+Files written (full table in [`references/runtime-architecture.md`](references/runtime-architecture.md) §"Durable artifacts"):
 
-Files written:
+- `state.json` — current state machine position (atomic .tmp+mv); written by `scripts/autonomous-loop.sh`
+- `halt-payments` — touchfile presence = HALTED; written by `scripts/budget-control.sh`; **operator removes manually** (D5)
+- `halt-reason.json` — evidence snapshot alongside `halt-payments`
+- `decisions/{inbox,active,done}/{ts|nonce}.json` — decision lifecycle
+- `pending-call-INTENT-{nonce}.json` / `pending-call-{messageId}.json[.done]` / `pending-call-AMBIGUOUS-{nonce}.json` — send + recovery journals
+- `wallet-cli-out/{nonce}.log` — tee of vara-wallet stdout/stderr per send (recovery Step A reads this)
+- `reconciliation.jsonl` — append-only audit log; written by `scripts/payment-reconciliation.sh`
+- `budget-state.json` + `budget-history.jsonl` — Pool A snapshot + append-only history
+- `loop-history.jsonl` — append-only per-tick events from the autonomous loop
+- `wallet.lock`, `loop.lock` — concurrency guards
 
-- `reconciliation.jsonl` — append-only per-call audit log; written by `agent-payment-reconciliation.md` Step 4; read by `agent-payment-reconciliation.md` Step 0 (value cap from prior history)
-- `budget-baseline.txt` — Pool A baseline VARA, calibrated at first run if `STARTING_BALANCE_VARA` env is unset; written by `agent-budget-control.md` Step 0
-- `budget-history.jsonl` — append-only per-snapshot budget log; written by `agent-budget-control.md` Step 5
-- `escalation.txt` — fallback log used when `Chat/Post` ESCALATE fails; written by `agent-budget-control.md` Step 4
+Migrating from operator-checklist mode (v(N-1)): see [`references/migration-from-operator-mode.md`](references/migration-from-operator-mode.md).
 
 Multi-machine note: `budget-baseline.txt` is per-machine. For multi-machine setups, manually copy the file between machines OR set `STARTING_BALANCE_VARA` in env as the canonical source of truth (env wins over file).
 

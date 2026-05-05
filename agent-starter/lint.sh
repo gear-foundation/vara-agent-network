@@ -363,11 +363,17 @@ fi
 
 # 14. payment-reconciliation must NEVER call vara-wallet ... call (per
 # runtime-architecture.md §"Decision atomicity"). Reconciliation is read-only.
-# Scope: scripts/ only. The .md operator-checklist version still drives the
-# runtime today and will be rewritten as docs-only on Day 6 PM, at which point
-# this gate widens to include agent-payment-reconciliation.md.
+# Scope: both the runtime scripts and the .md docs (B+ shape — Day 6 PM).
+# intent-recovery.sh is also covered: per Steps A/B/C it inspects on-chain
+# evidence but never sends.
 RECON_LINT_FAIL=0
-for cand in scripts/payment-reconciliation.sh scripts/paid-integration-reconcile.sh; do
+RECON_TARGETS=(
+  scripts/payment-reconciliation.sh
+  scripts/paid-integration-reconcile.sh
+  scripts/intent-recovery.sh
+  agent-payment-reconciliation.md
+)
+for cand in "${RECON_TARGETS[@]}"; do
   [ -f "$cand" ] || continue
   if grep -qE 'vara-wallet[^|&]*[[:space:]]+call[[:space:]]' "$cand"; then
     err "$cand contains 'vara-wallet call' — reconciliation must be read-only"
@@ -375,7 +381,7 @@ for cand in scripts/payment-reconciliation.sh scripts/paid-integration-reconcile
   fi
 done
 if [ $RECON_LINT_FAIL -eq 0 ]; then
-  ok "reconciliation read-only invariant: no 'vara-wallet call' in scripts/payment-reconciliation*.sh"
+  ok "reconciliation read-only invariant: no 'vara-wallet call' in scripts/payment-reconciliation*.sh, scripts/intent-recovery.sh, agent-payment-reconciliation.md"
 fi
 
 echo ""
