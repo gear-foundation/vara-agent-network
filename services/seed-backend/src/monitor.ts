@@ -8,16 +8,27 @@ const SUSPICIOUS_PAUSE_THRESHOLD = varaToPlanck(config.suspiciousPauseThresholdV
 
 export class SpendMonitor {
   private running = false;
+  private tickRunning = false;
 
   constructor(private readonly chain: ChainClient) {}
 
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    await this.tick().catch((error) => log.error("seed monitor initial tick failed", error));
+    await this.guardedTick().catch((error) => log.error("seed monitor initial tick failed", error));
     setInterval(() => {
-      this.tick().catch((error) => log.error("seed monitor tick failed", error));
+      this.guardedTick().catch((error) => log.error("seed monitor tick failed", error));
     }, config.monitorPollIntervalMs);
+  }
+
+  private async guardedTick(): Promise<void> {
+    if (this.tickRunning) return;
+    this.tickRunning = true;
+    try {
+      await this.tick();
+    } finally {
+      this.tickRunning = false;
+    }
   }
 
   private async tick(): Promise<void> {

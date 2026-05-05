@@ -87,7 +87,7 @@ export class ChainClient {
           reject(new Error(result.dispatchError.toString()));
           return;
         }
-        if (result.status.isFinalized || result.status.isInBlock) {
+        if (result.status.isFinalized) {
           clearTimeout(timeout);
           unsub?.();
           resolve(result.txHash.toHex());
@@ -129,8 +129,8 @@ export class ChainClient {
     records.forEach((record, eventIdx) => {
       if (record.event.section !== "balances" || record.event.method !== "Transfer") return;
       const data = record.event.data;
-      const from = normalizeAddress(data[0]);
-      const to = normalizeAddress(data[1]);
+      const from = normalizeAddress(String(data[0]));
+      const to = normalizeAddress(String(data[1]));
       const amountRaw = BigInt(toBigIntString(data[2]));
       if (!from || !to || amountRaw <= 0n || !fundedWallets.has(from)) return;
       const extrinsicIdx = record.phase.isApplyExtrinsic ? record.phase.asApplyExtrinsic?.toNumber() ?? null : null;

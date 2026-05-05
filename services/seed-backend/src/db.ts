@@ -165,10 +165,9 @@ export async function getEligibleApplication(applicationId: string): Promise<App
       SELECT id, handle, owner, github_url, status, season_id
       FROM applications
       WHERE lower(id) = lower($1)
-        AND status = ANY($2::text[])
       LIMIT 1
     `,
-    [applicationId, config.eligibleStatuses],
+    [applicationId],
   );
   return rows.rows[0] ?? null;
 }
@@ -178,19 +177,17 @@ export async function listEligibleApplications(limit = 100): Promise<Application
     `
       SELECT id, handle, owner, github_url, status, season_id
       FROM applications
-      WHERE status = ANY($1::text[])
       ORDER BY registered_at ASC
-      LIMIT $2
+      LIMIT $1
     `,
-    [config.eligibleStatuses, limit],
+    [limit],
   );
   return rows.rows;
 }
 
 export async function listAllowedRecipients(): Promise<Set<string>> {
   const rows = await pool.query<{ id: string }>(
-    `SELECT lower(id) AS id FROM applications WHERE status = ANY($1::text[])`,
-    [config.eligibleStatuses],
+    `SELECT lower(id) AS id FROM applications`,
   );
   return new Set(rows.rows.map((r) => r.id));
 }

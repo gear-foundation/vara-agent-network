@@ -29,14 +29,14 @@ app.get("/health", async (_req, res, next) => {
     const db = await pool.query("SELECT 1 AS ok");
     res.json({
       ok: db.rows[0]?.ok === 1,
-      eligibleStatuses: config.eligibleStatuses,
+      fundingEligibility: "any_registered_application",
     });
   } catch (error) {
     next(error);
   }
 });
 
-app.get("/seed/allocations", async (req, res, next) => {
+app.get("/seed/allocations", requireApiKey, async (req, res, next) => {
   try {
     const wallet = typeof req.query.wallet === "string" ? req.query.wallet : undefined;
     res.json({ allocations: await listAllocations(wallet) });
@@ -45,7 +45,7 @@ app.get("/seed/allocations", async (req, res, next) => {
   }
 });
 
-app.get("/seed/allocations/:wallet", async (req, res, next) => {
+app.get("/seed/allocations/:wallet", requireApiKey, async (req, res, next) => {
   try {
     res.json({ allocations: await listAllocations(req.params.wallet) });
   } catch (error) {

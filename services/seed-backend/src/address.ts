@@ -2,12 +2,13 @@ import { u8aToHex } from "@polkadot/util";
 import { decodeAddress } from "@polkadot/util-crypto";
 
 export function normalizeAddress(input: unknown): string | null {
-  if (typeof input !== "string") return null;
-  if (input.startsWith("0x")) return input.toLowerCase();
+  const value = stringifyAddressLike(input);
+  if (!value) return null;
+  if (value.startsWith("0x")) return value.toLowerCase();
   try {
-    return u8aToHex(decodeAddress(input)).toLowerCase();
+    return u8aToHex(decodeAddress(value)).toLowerCase();
   } catch {
-    return input.toLowerCase();
+    return value.toLowerCase();
   }
 }
 
@@ -29,4 +30,13 @@ export function toBigIntString(value: unknown): string {
     if (typeof maybe.toString === "function") return maybe.toString().replaceAll(",", "");
   }
   return "0";
+}
+
+function stringifyAddressLike(input: unknown): string | null {
+  if (typeof input === "string") return input;
+  if (input && typeof input === "object") {
+    const asString = String(input);
+    if (asString && asString !== "[object Object]") return asString;
+  }
+  return null;
 }

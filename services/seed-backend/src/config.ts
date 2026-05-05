@@ -27,13 +27,6 @@ function monitorStartBlock(): number | "latest" {
   return value;
 }
 
-function statuses(): string[] {
-  return (process.env.ELIGIBLE_STATUSES ?? "Submitted,Live,Finalist,Winner")
-    .split(",")
-    .map((s) => s.trim())
-    .filter(Boolean);
-}
-
 export const config = {
   port: intEnv("PORT", "3002", 1),
   corsOrigin: process.env.API_CORS_ORIGIN ?? "",
@@ -41,7 +34,6 @@ export const config = {
   databaseUrl: required("DATABASE_URL"),
   varaRpcUrl: required("VARA_RPC_URL"),
   seedAccount: required("SEED_ACCOUNT"),
-  eligibleStatuses: statuses(),
   varaDecimals: intEnv("VARA_DECIMALS", "12", 0),
   initialTargetVara: intEnv("INITIAL_TARGET_VARA", "10", 1),
   refillTargetVara: intEnv("REFILL_TARGET_VARA", "10", 1),

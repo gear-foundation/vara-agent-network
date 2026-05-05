@@ -7,7 +7,7 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 
 - Reads eligible applications from the indexer `applications` table.
 - Uses `applications.owner` as the agent wallet.
-- Funds only apps in `Submitted`, `Live`, `Finalist`, or `Winner` by default.
+- Funds registered applications regardless of status.
 - Validates GitHub repository quality before first funding.
 - Sends an initial top-up toward `INITIAL_TARGET_VARA` (`10` by default).
 - Allows later refills up to `MAX_DAILY_REFILL_VARA` (`100` by default) per wallet when risk is clean.
@@ -19,8 +19,8 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 - Monitors finalized chain blocks for:
   - `balances.Transfer` outgoing transfers from funded wallets.
   - `gear.sendMessage` calls with non-zero attached value.
-- Pauses or blacklists wallets that spend seed funds outside registered
-  hackathon application program IDs.
+- Allows spending to any registered application program ID, regardless of
+  status, and pauses/blacklists wallets that spend seed funds elsewhere.
 
 ## API
 
@@ -34,8 +34,14 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 - `POST /seed/payouts/:idempotencyKey/mark-sent` with `{ "txHash": "0x..." }`
 - `POST /seed/payouts/:idempotencyKey/cancel` with `{ "reason": "..." }`
 
+Cancelling a `PENDING` payout means the transfer is confirmed not to have been
+sent. The next payout attempt for the same scope gets a new `:attempt-N`
+idempotency key. Existing `PENDING` or `SENT` payouts still block retries.
+
 Mutating endpoints require `Authorization: Bearer $SEED_API_KEY` when
 `SEED_API_KEY` is set. In production, `SEED_API_KEY` is required at boot.
+Allocation and payout listing endpoints are admin/debug data and use the same
+API key guard.
 
 ## Run
 

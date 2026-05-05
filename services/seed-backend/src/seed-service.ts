@@ -20,6 +20,7 @@ import { ChainClient } from "./chain.js";
 import { requireAddress } from "./address.js";
 import { log } from "./logger.js";
 import { planPayout, type PayoutPolicy } from "./decision.js";
+import { payoutAttemptKey, payoutBaseKey, payoutBaseKeyLike } from "./payout-key.js";
 
 const INITIAL_TARGET = varaToPlanck(config.initialTargetVara);
 const REFILL_TARGET = varaToPlanck(config.refillTargetVara);
@@ -129,7 +130,7 @@ export class SeedService {
         applicationId,
         wallet: "",
         amountRaw: "0",
-        reason: `application is not found or not in eligible statuses: ${config.eligibleStatuses.join(", ")}`,
+        reason: "application is not registered",
       };
     }
     return this.fundApplication(app, mode);
@@ -228,19 +229,20 @@ export class SeedService {
         }
       }
 
-      const idempotencyKey = makePayoutKey(mode, wallet, applicationId);
-      const existing = await getPayout(client, idempotencyKey);
-      if (existing) {
+      const baseKey = payoutBaseKey(mode, wallet, applicationId);
+      const blockingPayout = await getBlockingPayout(client, baseKey);
+      if (blockingPayout) {
         await client.query("COMMIT");
         return {
-          status: existing.status === "SENT" ? "funded" : existing.status === "PENDING" ? "pending" : "skipped",
+          status: blockingPayout.status === "SENT" ? "funded" : "pending",
           applicationId,
           wallet,
-          amountRaw: existing.amount_raw,
-          reason: `payout is already ${existing.status.toLowerCase()}`,
-          txHash: existing.tx_hash ?? undefined,
+          amountRaw: blockingPayout.amount_raw,
+          reason: `payout is already ${blockingPayout.status.toLowerCase()}`,
+          txHash: blockingPayout.tx_hash ?? undefined,
         };
       }
+      const idempotencyKey = payoutAttemptKey(baseKey, await payoutAttemptCount(client, baseKey));
 
       await createPendingPayout(client, {
         idempotencyKey,
@@ -421,12 +423,32 @@ interface PayoutRow {
   tx_hash: string | null;
 }
 
-async function getPayout(client: pg.PoolClient, idempotencyKey: string): Promise<PayoutRow | null> {
+async function getBlockingPayout(client: pg.PoolClient, baseKey: string): Promise<PayoutRow | null> {
   const rows = await client.query<PayoutRow>(
-    `SELECT status, amount_raw::text, tx_hash FROM seed_payouts WHERE idempotency_key = $1 FOR UPDATE`,
-    [idempotencyKey],
+    `
+      SELECT status, amount_raw::text, tx_hash
+      FROM seed_payouts
+      WHERE (idempotency_key = $1 OR idempotency_key LIKE $2)
+        AND status IN ('PENDING', 'SENT')
+      ORDER BY created_at DESC
+      LIMIT 1
+      FOR UPDATE
+    `,
+    [baseKey, payoutBaseKeyLike(baseKey)],
   );
   return rows.rows[0] ?? null;
+}
+
+async function payoutAttemptCount(client: pg.PoolClient, baseKey: string): Promise<number> {
+  const rows = await client.query<{ count: string }>(
+    `
+      SELECT count(*)::text AS count
+      FROM seed_payouts
+      WHERE idempotency_key = $1 OR idempotency_key LIKE $2
+    `,
+    [baseKey, payoutBaseKeyLike(baseKey)],
+  );
+  return Number(rows.rows[0]?.count ?? 0);
 }
 
 async function createPendingPayout(
@@ -511,9 +533,4 @@ async function markPayoutSent(
   } finally {
     client.release();
   }
-}
-
-function makePayoutKey(mode: "initial" | "refill", wallet: string, applicationId: string): string {
-  if (mode === "initial") return `initial:${wallet}:${applicationId}`;
-  return `refill:${wallet}:${applicationId}:${new Date().toISOString().slice(0, 10)}`;
 }
