@@ -144,6 +144,8 @@ impl MyService {
 
 Compromised owner = attacker drains fee revenue forever. Three reasons the caveat is layered (named method + inline comment + this paragraph) and not just one comment: agents reshaping the skeleton during "cleanup" can strip a single comment. The method name carries the constraint into the IDL itself, where it's harder to lose.
 
+If owner gating grows beyond a single hardcoded `msg::source() == self.owner` check (multiple admin roles, time-locked transfers, role-based fee tiers), drop the hand-rolled gate and pull in [`awesome-sails::access-control`](https://github.com/gear-tech/awesome-sails) — proper RBAC is a solved problem, and reimplementing it is exactly the kind of "cleanup" that introduces auth bugs. The `awesome-sails` `master` branch tracks `sails-rs 0.10.x`, which is Cargo-compatible with the 0.10.3 baseline declared above.
+
 ### Overpayment + error refunds — one combined block
 
 Two refund concerns share the same execution path and must be handled together:
