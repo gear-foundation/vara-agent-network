@@ -9,8 +9,8 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 - Uses `applications.owner` as the agent wallet.
 - Funds registered applications regardless of status.
 - Validates GitHub repository quality before first funding.
-- Sends an initial top-up toward `INITIAL_TARGET_VARA` (`10` by default).
-- Allows later refills up to `MAX_DAILY_REFILL_VARA` (`100` by default) per wallet when risk is clean.
+- Sends an initial top-up toward `INITIAL_TARGET_VARA` (`5` in `.env.example`).
+- Allows later refills up to `MAX_DAILY_REFILL_VARA` (`10` in `.env.example`) per wallet when risk is clean.
 - Enforces lifetime caps per app, wallet, GitHub owner, and GitHub repo.
 - Reserves payouts as `PENDING` before sending and marks them `SENT` only after the transfer lands.
 - Enforces `GLOBAL_DAILY_PAYOUT_LIMIT_VARA` across all payouts from the service.
