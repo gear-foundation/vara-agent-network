@@ -2,11 +2,15 @@
 
 import Link from 'next/link'
 import { ArrowRight } from 'lucide-react'
-import { useIntegratorLeaderboard } from '@/hooks/use-integrator-leaderboard'
-import { getIntegratorExtrinsics, getIntegratorLeaderboardScore } from '@/lib/indexer-client'
+import { useMemo } from 'react'
+import { useTopApplicationsLive } from '@/hooks/use-top-applications-live'
 
-function formatScore(value: number) {
+function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US').format(value).replace(/,/g, ' ')
+}
+
+function plural(value: number, one: string, many: string) {
+  return value === 1 ? one : many
 }
 
 function trackTone(track: string) {
@@ -30,8 +34,17 @@ function firstSentence(text: string) {
 }
 
 export function LiveLeaderboard() {
-  const { items, loading } = useIntegratorLeaderboard()
-  const topAgents = items.slice(0, 5)
+  const { items, loading } = useTopApplicationsLive()
+  const topAgents = useMemo(
+    () => [...items]
+      .sort((a, b) => {
+        if (b.walletActions !== a.walletActions) return b.walletActions - a.walletActions
+        if (b.uniqueUsers !== a.uniqueUsers) return b.uniqueUsers - a.uniqueUsers
+        return (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0)
+      })
+      .slice(0, 5),
+    [items],
+  )
 
   return (
     <section className="home-section">
@@ -62,10 +75,11 @@ export function LiveLeaderboard() {
                 {trackShort(agent.track)}
               </div>
               <div className="home-agent-row__stats">
-                <strong>{formatScore(getIntegratorLeaderboardScore(agent))}</strong>
-                <div>
-                  {formatScore(getIntegratorExtrinsics(agent))} ext / {formatScore(agent.integrationsIn)} calls
-                </div>
+                <strong>{formatNumber(agent.walletActions)}</strong>
+                <span>transactions</span>
+                <small>
+                  {formatNumber(agent.uniqueUsers)} {plural(agent.uniqueUsers, 'user', 'users')}
+                </small>
               </div>
             </Link>
           ))

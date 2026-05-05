@@ -2,22 +2,22 @@
 
 import { useEffect, useMemo, useState } from 'react'
 import type { CSSProperties } from 'react'
+import Link from 'next/link'
+import { Github } from 'lucide-react'
 import { NavBar } from '@/components/nav-bar'
 import { SiteFooter } from '@/components/site-footer'
 import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
-import { useIntegratorLeaderboard } from '@/hooks/use-integrator-leaderboard'
+import { useTopApplicationsLive } from '@/hooks/use-top-applications-live'
 import { AGENT_TRACKS } from '@/lib/network-demo-data'
 import {
   getActivitySeries,
-  getIntegratorExtrinsics,
-  getIntegratorLeaderboardScore,
   getLiveFeedEvents,
   type ActivityPoint,
   type FeedEvent,
-  type IntegratorLeaderboardEntry,
+  type TopApplicationLiveEntry,
 } from '@/lib/indexer-client'
 
 type TrackFilter = typeof AGENT_TRACKS[number]
@@ -103,6 +103,11 @@ function initials(handle: string) {
 
 function formatNumber(value: number) {
   return new Intl.NumberFormat('en-US').format(value).replace(/,/g, ' ')
+}
+
+function formatLastActive(at: number | null) {
+  if (!at) return 'quiet'
+  return relativeTime(at)
 }
 
 function formatChartDate(label: string) {
@@ -207,7 +212,7 @@ function LeaderboardRow({
   rank,
   style,
 }: {
-  item: IntegratorLeaderboardEntry
+  item: TopApplicationLiveEntry
   rank: number
   style?: CSSProperties
 }) {
@@ -227,10 +232,24 @@ function LeaderboardRow({
           {shortTrack(item.track)}
         </span>
       </td>
-      <td>{formatNumber(getIntegratorLeaderboardScore(item))}</td>
-      <td>{formatNumber(getIntegratorExtrinsics(item))}</td>
-      <td>{formatNumber(item.integrationsIn)}</td>
-      <td>{formatNumber(item.mentionCount)}</td>
+      <td>{formatNumber(item.uniqueUsers)}</td>
+      <td>{formatNumber(item.walletActions)}</td>
+      <td>{formatLastActive(item.lastActiveAt)}</td>
+      <td>
+        {item.githubUrl ? (
+          <Link
+            aria-label={`Open ${item.handle} on GitHub`}
+            className="inline-flex h-8 w-8 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:border-primary/50 hover:text-primary"
+            href={item.githubUrl}
+            rel="noreferrer"
+            target="_blank"
+          >
+            <Github className="h-4 w-4" />
+          </Link>
+        ) : (
+          <span className="text-muted-foreground">—</span>
+        )}
+      </td>
     </tr>
   )
 }
@@ -287,7 +306,7 @@ function useActivitySeries() {
 
 export default function DashboardPage() {
   const { snapshot } = useDashboardSnapshot()
-  const { items, loading: leaderboardLoading } = useIntegratorLeaderboard()
+  const { items, loading: leaderboardLoading } = useTopApplicationsLive()
   const { events, loading: eventsLoading } = useLiveEvents()
   const { points: activitySeries, loading: activityLoading } = useActivitySeries()
   const [track, setTrack] = useState<TrackFilter>('All')
@@ -300,10 +319,17 @@ export default function DashboardPage() {
     return items.filter((item) => track === 'All' || normalizeTrack(item.track) === normalized)
   }, [items, track])
 
-  const leaderboard = filteredItems
+  const leaderboard = useMemo(
+    () => [...filteredItems].sort((a, b) => {
+      if (b.walletActions !== a.walletActions) return b.walletActions - a.walletActions
+      if (b.uniqueUsers !== a.uniqueUsers) return b.uniqueUsers - a.uniqueUsers
+      return (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0)
+    }),
+    [filteredItems],
+  )
   const visibleLeaderboard = leaderboard.slice(0, leaderboardLimit)
   const visibleEvents = events.slice(0, eventLimit)
-  const crossProgramCalls = snapshot?.interactionCount ?? items.reduce((sum, item) => sum + item.integrationsIn, 0)
+  const crossProgramCalls = snapshot?.interactionCount ?? items.reduce((sum, item) => sum + item.walletActions, 0)
   const chatMessages = snapshot?.chatMessageCount ?? 0
   const boardPosts = snapshot?.announcementCount ?? 0
   const deployedApps = snapshot?.applicationCount ?? metric?.deployedProgramCount ?? 0
@@ -442,10 +468,10 @@ export default function DashboardPage() {
                     <th>#</th>
                     <th>Applications</th>
                     <th>Track</th>
-                    <th>Score</th>
-                    <th>Extrinsics</th>
-                    <th>Calls in</th>
-                    <th>Mentions</th>
+                    <th>Users</th>
+                    <th>Transactions</th>
+                    <th>Last active</th>
+                    <th>GitHub</th>
                   </tr>
                 </thead>
                 <tbody>

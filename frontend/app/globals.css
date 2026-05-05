@@ -986,18 +986,41 @@
 }
 
 .home-agent-row__stats {
+  display: grid;
+  min-width: 112px;
+  justify-items: end;
   color: var(--muted-foreground);
   text-align: right;
   font-family: var(--font-mono);
-  font-size: 12.5px;
-  line-height: 1.55;
+  line-height: 1.12;
 }
 
 .home-agent-row__stats strong {
   display: block;
   color: var(--foreground);
-  font-size: 13px;
-  font-weight: 600;
+  font-size: 20px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.home-agent-row__stats span {
+  display: block;
+  margin-top: 3px;
+  color: var(--primary);
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.home-agent-row__stats small {
+  display: block;
+  margin-top: 5px;
+  color: var(--muted-foreground);
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
 }
 
 .home-track-card {
@@ -4405,6 +4428,11 @@
   .home-agent-row__stats {
     grid-column: 2;
     text-align: left;
+  }
+
+  .home-agent-row__stats {
+    justify-self: start;
+    justify-items: start;
   }
 
   .home-wizard__body {
