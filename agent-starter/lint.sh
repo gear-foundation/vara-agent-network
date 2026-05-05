@@ -50,6 +50,7 @@ REQUIRED_FILES=(
   references/staleness.md
   references/pricing.md
   references/season-economy.md
+  references/runtime-architecture.md
   examples/register_application.json
   examples/set_identity_card.json
   examples/post_announcement.json
@@ -315,6 +316,66 @@ for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discove
 done
 if [ $CROSSLINK_FAIL -eq 0 ]; then
   ok "cross-link integrity (every references/*.md and agent-*.md mention resolves)"
+fi
+
+# 13. Runtime scripts contract. Every scripts/*.sh that the autonomous loop
+# dispatches must (a) parse with `bash -n`, (b) declare `set -euo pipefail`
+# (or document why not), and (c) source lib/status.sh OR be a lib itself.
+# This catches a script that silently lost its status protocol guard.
+SCRIPT_FAIL=0
+RUNTIME_SCRIPTS=()
+if [ -d scripts ]; then
+  while IFS= read -r f; do
+    RUNTIME_SCRIPTS+=("$f")
+  done < <(find scripts -type f -name '*.sh' 2>/dev/null | sort)
+fi
+for f in "${RUNTIME_SCRIPTS[@]}"; do
+  if ! bash -n "$f" 2>/dev/null; then
+    err "scripts contract: bash -n failed: $f"
+    SCRIPT_FAIL=$((SCRIPT_FAIL+1))
+    continue
+  fi
+  case "$f" in
+    scripts/lib/*.sh)
+      # Libs are sourced; they must declare a load-guard sentinel.
+      if ! grep -qE '^_AGENT_STARTER_LIB_[A-Z_]+_LOADED=1' "$f"; then
+        err "scripts contract: lib missing load-guard sentinel: $f"
+        SCRIPT_FAIL=$((SCRIPT_FAIL+1))
+      fi
+      ;;
+    *)
+      # Top-level scripts must `set -euo pipefail` (modulo shebang/comments).
+      if ! grep -qE '^[[:space:]]*set[[:space:]]+-euo[[:space:]]+pipefail' "$f"; then
+        err "scripts contract: missing 'set -euo pipefail' in $f"
+        SCRIPT_FAIL=$((SCRIPT_FAIL+1))
+      fi
+      # Top-level scripts must source lib/status.sh.
+      if ! grep -qE 'lib/status\.sh' "$f"; then
+        err "scripts contract: $f does not source lib/status.sh"
+        SCRIPT_FAIL=$((SCRIPT_FAIL+1))
+      fi
+      ;;
+  esac
+done
+if [ $SCRIPT_FAIL -eq 0 ] && [ ${#RUNTIME_SCRIPTS[@]} -gt 0 ]; then
+  ok "scripts contract: ${#RUNTIME_SCRIPTS[@]} runtime scripts parse and follow the status-protocol contract"
+fi
+
+# 14. payment-reconciliation must NEVER call vara-wallet ... call (per
+# runtime-architecture.md §"Decision atomicity"). Reconciliation is read-only.
+# Scope: scripts/ only. The .md operator-checklist version still drives the
+# runtime today and will be rewritten as docs-only on Day 6 PM, at which point
+# this gate widens to include agent-payment-reconciliation.md.
+RECON_LINT_FAIL=0
+for cand in scripts/payment-reconciliation.sh scripts/paid-integration-reconcile.sh; do
+  [ -f "$cand" ] || continue
+  if grep -qE 'vara-wallet[^|&]*[[:space:]]+call[[:space:]]' "$cand"; then
+    err "$cand contains 'vara-wallet call' — reconciliation must be read-only"
+    RECON_LINT_FAIL=$((RECON_LINT_FAIL+1))
+  fi
+done
+if [ $RECON_LINT_FAIL -eq 0 ]; then
+  ok "reconciliation read-only invariant: no 'vara-wallet call' in scripts/payment-reconciliation*.sh"
 fi
 
 echo ""

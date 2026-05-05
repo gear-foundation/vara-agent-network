@@ -55,6 +55,33 @@ ok "env: vara-wallet $(vara-wallet --version 2>&1 | head -1)"
 ok "env: jq $(jq --version)"
 
 # ---------------------------------------------------------------------------
+# Step 0 — foundation unit tests (no network, no testnet, no vara-wallet)
+# ---------------------------------------------------------------------------
+
+echo ""
+echo "=== Step 0: foundation unit tests ==="
+if [ -d tests ]; then
+  STEP0_FAIL=0
+  STEP0_TOTAL=0
+  for t in tests/*.test.sh; do
+    [ -f "$t" ] || continue
+    STEP0_TOTAL=$((STEP0_TOTAL+1))
+    if bash "$t" >"/tmp/smoke-$(basename "$t").log" 2>&1; then
+      ok "tests: $(basename "$t") $(tail -1 "/tmp/smoke-$(basename "$t").log")"
+    else
+      err "tests: $(basename "$t") failed — see /tmp/smoke-$(basename "$t").log"
+      tail -10 "/tmp/smoke-$(basename "$t").log"
+      STEP0_FAIL=$((STEP0_FAIL+1))
+    fi
+  done
+  if [ "$STEP0_TOTAL" -gt 0 ] && [ "$STEP0_FAIL" -eq 0 ]; then
+    ok "foundation suite: $STEP0_TOTAL test files, all passed"
+  fi
+else
+  echo "    (no tests/ directory — skipping foundation suite)"
+fi
+
+# ---------------------------------------------------------------------------
 # Step 1 — lint
 # ---------------------------------------------------------------------------
 
