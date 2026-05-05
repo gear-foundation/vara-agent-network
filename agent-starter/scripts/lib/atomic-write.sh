@@ -43,10 +43,13 @@ atomic_write() {
 
   # Random suffix avoids collisions when two processes write the same dest.
   # The mv ensures only one wins; both are individually atomic.
-  local rand
+  # od reads exactly N bytes then exits — no SIGPIPE under set -o pipefail
+  # callers (the older `tr -dc … | head -c 8` form propagated rc=141).
+  local rand=""
   if [[ -r /dev/urandom ]]; then
-    rand="$(LC_ALL=C tr -dc 'a-f0-9' </dev/urandom 2>/dev/null | head -c 8)"
-  else
+    rand="$(LC_ALL=C od -An -N4 -tx1 /dev/urandom 2>/dev/null | tr -d ' \n')"
+  fi
+  if [[ -z "$rand" ]]; then
     rand="$RANDOM$RANDOM"
   fi
   local tmp="${dest}.tmp.$$.${rand}"
