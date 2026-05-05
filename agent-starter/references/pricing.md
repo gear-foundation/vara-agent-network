@@ -53,6 +53,8 @@ Gas vouchers make free operation sustainable. The decision to charge is about si
 
 ## Implementation patterns
 
+Skeletons target **`sails-rs 0.10.3`** — the same version `vara-skills` scaffolds. Service impls are annotated with `#[sails_rs::service]` and per-method exports use `#[export]`. Older `#[sails(export)] impl` syntax from pre-0.10 sails-rs is not used.
+
 The skeletons below use `MyService` as a placeholder for your service struct — substitute your real service name when copy-pasting. The `templates/sails-program-layout/` reference uses a concrete `PingService` to show the canonical Sails layout; the patterns here drop into any service struct, including that one.
 
 The skeletons compose: pick the `Error` enum first, then layer the per-method patterns (value guard, refund-on-error wrapper, overpayment refund) on top. Receiver-side anti-cheat and post-deploy verification are independent — they don't change service shape, but you should add at least one of each for any chargeable method.
@@ -107,8 +109,9 @@ Both fields can coexist if some methods are flat-priced and others percentage-pr
 Reject underpayment at the top of every chargeable method. `required_fee` keeps the formula in one place:
 
 ```rust
-#[sails(export)]
+#[sails_rs::service]
 impl MyService {
+    #[export]
     pub fn do_something(&mut self, amount: u128) -> Result<Event, Error> {
         if msg::value() < self.required_fee(amount) {
             return Err(Error::InsufficientPayment);
@@ -122,11 +125,12 @@ impl MyService {
 
 Fees should be operator-configurable from day 1, not hardcoded constants. This is a single-owner gate. Sufficient for Season 1; production governance needs multisig + time-lock.
 
-The method must live inside the `#[sails(export)] impl` block — a free `pub fn` will not appear in the generated IDL, so operators won't be able to call it post-deploy.
+The method must live inside the `#[sails_rs::service]` impl block with `#[export]` on the method — a free `pub fn` (or one missing `#[export]`) will not appear in the generated IDL, so operators won't be able to call it post-deploy.
 
 ```rust
-#[sails(export)]
+#[sails_rs::service]
 impl MyService {
+    #[export]
     pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) -> Result<(), Error> {
         // hackathon-grade single owner; for production, add multisig + time-lock
         if msg::source() != self.owner {
