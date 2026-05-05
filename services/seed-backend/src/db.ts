@@ -20,6 +20,8 @@ export interface AllocationRow {
   wallet: string;
   application_id: string;
   github_url: string;
+  github_owner: string | null;
+  github_repo: string | null;
   state: "active" | "paused" | "blacklisted";
   total_funded_raw: string;
   daily_funded_raw: string;
@@ -34,8 +36,26 @@ export interface AllocationRow {
   updated_at: Date;
 }
 
+export type PayoutStatus = "PENDING" | "SENT" | "FAILED" | "CANCELLED";
+
+export interface PayoutRow {
+  idempotency_key: string;
+  status: PayoutStatus;
+  wallet: string;
+  application_id: string;
+  github_owner: string;
+  github_repo: string;
+  amount_raw: string;
+  reason: string;
+  tx_hash: string | null;
+  error: string | null;
+  created_at: Date;
+  updated_at: Date;
+  sent_at: Date | null;
+}
+
 export interface FundingDecision {
-  status: "funded" | "skipped" | "paused" | "blacklisted";
+  status: "funded" | "pending" | "skipped" | "paused" | "blacklisted";
   applicationId: string;
   wallet: string;
   amountRaw: string;
@@ -67,6 +87,8 @@ export async function ensureSchema(): Promise<void> {
 
     CREATE INDEX IF NOT EXISTS seed_allocations_wallet_idx ON seed_allocations(wallet);
     CREATE INDEX IF NOT EXISTS seed_allocations_state_idx ON seed_allocations(state);
+    ALTER TABLE seed_allocations ADD COLUMN IF NOT EXISTS github_owner text;
+    ALTER TABLE seed_allocations ADD COLUMN IF NOT EXISTS github_repo text;
 
     CREATE TABLE IF NOT EXISTS seed_funding_events (
       id bigserial PRIMARY KEY,
@@ -77,6 +99,30 @@ export async function ensureSchema(): Promise<void> {
       reason text NOT NULL,
       created_at timestamptz NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS seed_payouts (
+      idempotency_key text PRIMARY KEY,
+      status text NOT NULL,
+      wallet text NOT NULL,
+      application_id text NOT NULL,
+      github_owner text NOT NULL,
+      github_repo text NOT NULL,
+      amount_raw numeric(78,0) NOT NULL,
+      reason text NOT NULL,
+      tx_hash text,
+      error text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      sent_at timestamptz
+    );
+
+    ALTER TABLE seed_payouts ADD COLUMN IF NOT EXISTS error text;
+
+    CREATE INDEX IF NOT EXISTS seed_payouts_status_idx ON seed_payouts(status);
+    CREATE INDEX IF NOT EXISTS seed_payouts_wallet_idx ON seed_payouts(wallet);
+    CREATE INDEX IF NOT EXISTS seed_payouts_app_idx ON seed_payouts(application_id);
+    CREATE INDEX IF NOT EXISTS seed_payouts_github_idx ON seed_payouts(github_owner);
+    CREATE INDEX IF NOT EXISTS seed_payouts_repo_idx ON seed_payouts(github_owner, github_repo);
 
     CREATE TABLE IF NOT EXISTS seed_spend_events (
       id text PRIMARY KEY,
@@ -152,21 +198,40 @@ export async function listAllowedRecipients(): Promise<Set<string>> {
 export async function upsertAllocation(
   app: ApplicationRow,
   githubOk: boolean,
+  githubOwner: string | null,
+  githubRepo: string | null,
 ): Promise<AllocationRow> {
   const rows = await pool.query<AllocationRow>(
     `
-      INSERT INTO seed_allocations (wallet, application_id, github_url, github_ok, github_checked_at)
-      VALUES (lower($1), lower($2), $3, $4, now())
+      INSERT INTO seed_allocations (
+        wallet, application_id, github_url, github_ok, github_checked_at, github_owner, github_repo
+      )
+      VALUES (lower($1), lower($2), $3, $4, now(), lower($5), lower($6))
       ON CONFLICT (wallet, application_id) DO UPDATE SET
         github_url = EXCLUDED.github_url,
         github_ok = EXCLUDED.github_ok,
         github_checked_at = EXCLUDED.github_checked_at,
+        github_owner = EXCLUDED.github_owner,
+        github_repo = EXCLUDED.github_repo,
         updated_at = now()
       RETURNING *
     `,
-    [app.owner, app.id, app.github_url, githubOk],
+    [app.owner, app.id, app.github_url, githubOk, githubOwner, githubRepo],
   );
   return rows.rows[0];
+}
+
+export async function findAllocation(wallet: string, applicationId: string): Promise<AllocationRow | null> {
+  const rows = await pool.query<AllocationRow>(
+    `
+      SELECT *
+      FROM seed_allocations
+      WHERE wallet = lower($1) AND application_id = lower($2)
+      LIMIT 1
+    `,
+    [wallet, applicationId],
+  );
+  return rows.rows[0] ?? null;
 }
 
 export async function getAllocationForUpdate(
@@ -198,6 +263,35 @@ export async function listAllocations(wallet?: string): Promise<AllocationRow[]>
     [wallet ?? null],
   );
   return rows.rows;
+}
+
+export async function listPayouts(status?: string): Promise<PayoutRow[]> {
+  const rows = await pool.query<PayoutRow>(
+    `
+      SELECT idempotency_key, status, wallet, application_id, github_owner, github_repo,
+             amount_raw::text, reason, tx_hash, error, created_at, updated_at, sent_at
+      FROM seed_payouts
+      WHERE ($1::text IS NULL OR status = upper($1))
+      ORDER BY updated_at DESC
+      LIMIT 500
+    `,
+    [status ?? null],
+  );
+  return rows.rows;
+}
+
+export async function getPayoutByKey(idempotencyKey: string): Promise<PayoutRow | null> {
+  const rows = await pool.query<PayoutRow>(
+    `
+      SELECT idempotency_key, status, wallet, application_id, github_owner, github_repo,
+             amount_raw::text, reason, tx_hash, error, created_at, updated_at, sent_at
+      FROM seed_payouts
+      WHERE idempotency_key = $1
+      LIMIT 1
+    `,
+    [idempotencyKey],
+  );
+  return rows.rows[0] ?? null;
 }
 
 export async function recordAudit(

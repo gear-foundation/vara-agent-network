@@ -53,6 +53,15 @@ app.get("/seed/allocations/:wallet", async (req, res, next) => {
   }
 });
 
+app.get("/seed/payouts", requireApiKey, async (req, res, next) => {
+  try {
+    const status = typeof req.query.status === "string" ? req.query.status : undefined;
+    res.json({ payouts: await seedService.listPayouts(status) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/seed/claim", requireApiKey, async (req, res, next) => {
   try {
     const applicationId = requireApplicationId(req.body);
@@ -75,6 +84,24 @@ app.post("/seed/scan", requireApiKey, async (req, res, next) => {
   try {
     const limit = Number.isInteger(req.body?.limit) ? Number(req.body.limit) : 100;
     res.json({ results: await seedService.scan(Math.max(1, Math.min(limit, 500))) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/seed/payouts/:idempotencyKey/mark-sent", requireApiKey, async (req, res, next) => {
+  try {
+    const txHash = requireString(req.body, "txHash");
+    res.json({ payout: await seedService.markPayoutSent(req.params.idempotencyKey, txHash) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/seed/payouts/:idempotencyKey/cancel", requireApiKey, async (req, res, next) => {
+  try {
+    const reason = requireString(req.body, "reason");
+    res.json({ payout: await seedService.cancelPayout(req.params.idempotencyKey, reason) });
   } catch (error) {
     next(error);
   }
@@ -110,4 +137,13 @@ function requireApplicationId(body: unknown): string {
     throw new Error("applicationId must be a hex ActorId");
   }
   return value;
+}
+
+function requireString(body: unknown, field: string): string {
+  if (!body || typeof body !== "object") throw new Error("request body is required");
+  const value = (body as Record<string, unknown>)[field];
+  if (typeof value !== "string" || value.trim().length === 0) {
+    throw new Error(`${field} must be a non-empty string`);
+  }
+  return value.trim();
 }

@@ -2,6 +2,7 @@ import { config, varaToPlanck } from "./config.js";
 import { ChainClient, type SpendEvent } from "./chain.js";
 import { listAllowedRecipients, pool, recordAudit } from "./db.js";
 import { log } from "./logger.js";
+import { applySpendRisk, isAllowedRecipient } from "./decision.js";
 
 const SUSPICIOUS_PAUSE_THRESHOLD = varaToPlanck(config.suspiciousPauseThresholdVara);
 
@@ -21,7 +22,7 @@ export class SpendMonitor {
 
   private async tick(): Promise<void> {
     const head = await this.chain.finalizedHeight();
-    let from = await this.resumePoint();
+    const from = await this.resumePoint(head);
     if (from > head) return;
 
     const fundedWallets = await this.fundedWallets();
@@ -30,26 +31,29 @@ export class SpendMonitor {
     for (let block = from; block <= head; block++) {
       const events = await this.chain.readSpendEvents(block, fundedWallets);
       for (const event of events) {
-        await this.recordSpend(event, allowedRecipients.has(event.recipient));
+        await this.recordSpend(event, isAllowedRecipient(event.recipient, allowedRecipients));
       }
       await this.advanceCursor(block);
     }
   }
 
-  private async resumePoint(): Promise<number> {
+  private async resumePoint(finalizedHead: number): Promise<number> {
     const rows = await pool.query<{ last_processed_block: number }>(
       `SELECT last_processed_block FROM seed_monitor_cursor WHERE id = 'main'`,
     );
     if (rows.rows[0]) return rows.rows[0].last_processed_block + 1;
+    const startBlock = config.monitorStartBlock === "latest"
+      ? finalizedHead
+      : config.monitorStartBlock;
     await pool.query(
       `
         INSERT INTO seed_monitor_cursor (id, last_processed_block)
         VALUES ('main', $1)
         ON CONFLICT (id) DO NOTHING
       `,
-      [Math.max(0, config.monitorStartBlock - 1)],
+      [Math.max(0, startBlock - 1)],
     );
-    return config.monitorStartBlock;
+    return startBlock;
   }
 
   private async advanceCursor(blockNumber: number): Promise<void> {
@@ -109,26 +113,38 @@ export class SpendMonitor {
   }
 
   private async applySuspicion(event: SpendEvent): Promise<void> {
-    const shouldPause = event.amountRaw >= SUSPICIOUS_PAUSE_THRESHOLD;
     const reason = `${event.kind} to non-hackathon recipient ${event.recipient}`;
 
     const rows = await pool.query<{ wallet: string; application_id: string; suspicious_count: number; state: string }>(
       `
-        UPDATE seed_allocations
-        SET suspicious_count = suspicious_count + 1,
+        UPDATE seed_allocations AS a
+        SET suspicious_count = d.next_suspicious_count,
             risk_score = risk_score + 1,
-            state = CASE
-              WHEN suspicious_count + 1 >= $2 THEN 'blacklisted'
-              WHEN $3::boolean THEN 'paused'
-              ELSE state
-            END,
+            state = d.next_state,
             last_reason = $4,
             updated_at = now()
+        FROM (
+          SELECT id,
+                 suspicious_count + 1 AS next_suspicious_count,
+                 CASE
+                   WHEN suspicious_count + 1 >= $2 THEN 'blacklisted'
+                   WHEN $3::numeric >= $5::numeric THEN 'paused'
+                   ELSE state
+                 END AS next_state
+          FROM seed_allocations
+          WHERE wallet = $1 AND state <> 'blacklisted'
+        ) d
         WHERE wallet = $1
-          AND state <> 'blacklisted'
-        RETURNING wallet, application_id, suspicious_count, state
+          AND a.id = d.id
+        RETURNING wallet, application_id, a.suspicious_count, a.state
       `,
-      [event.wallet, config.blacklistThreshold, shouldPause, reason],
+      [
+        event.wallet,
+        config.blacklistThreshold,
+        event.amountRaw.toString(),
+        reason,
+        SUSPICIOUS_PAUSE_THRESHOLD.toString(),
+      ],
     );
 
     for (const row of rows.rows) {
@@ -149,3 +165,5 @@ export class SpendMonitor {
     }
   }
 }
+
+export const spendRiskForTest = applySpendRisk;

@@ -17,6 +17,16 @@ function intEnv(name: string, fallback: string, min = 0): number {
   return value;
 }
 
+function monitorStartBlock(): number | "latest" {
+  const raw = process.env.MONITOR_START_BLOCK ?? "latest";
+  if (raw.toLowerCase() === "latest") return "latest";
+  const value = Number(raw);
+  if (!Number.isFinite(value) || !Number.isInteger(value) || value < 0) {
+    throw new Error(`MONITOR_START_BLOCK must be "latest" or an integer >= 0 (got "${raw}")`);
+  }
+  return value;
+}
+
 function statuses(): string[] {
   return (process.env.ELIGIBLE_STATUSES ?? "Submitted,Live,Finalist,Winner")
     .split(",")
@@ -36,14 +46,25 @@ export const config = {
   initialTargetVara: intEnv("INITIAL_TARGET_VARA", "10", 1),
   refillTargetVara: intEnv("REFILL_TARGET_VARA", "10", 1),
   maxDailyRefillVara: intEnv("MAX_DAILY_REFILL_VARA", "100", 1),
-  minRefillIntervalSec: intEnv("MIN_REFILL_INTERVAL_SEC", "3600", 1),
+  globalDailyPayoutLimitVara: intEnv("GLOBAL_DAILY_PAYOUT_LIMIT_VARA", "1000", 1),
+  lifetimeCapAppVara: intEnv("LIFETIME_CAP_APP_VARA", "100", 1),
+  lifetimeCapWalletVara: intEnv("LIFETIME_CAP_WALLET_VARA", "300", 1),
+  lifetimeCapGithubVara: intEnv("LIFETIME_CAP_GITHUB_VARA", "300", 1),
+  lifetimeCapRepoVara: intEnv("LIFETIME_CAP_REPO_VARA", "100", 1),
+  minRefillIntervalSec: intEnv("MIN_REFILL_INTERVAL_SEC", "86400", 1),
   suspiciousPauseThresholdVara: intEnv("SUSPICIOUS_PAUSE_THRESHOLD_VARA", "5", 1),
   blacklistThreshold: intEnv("BLACKLIST_THRESHOLD", "3", 1),
-  monitorStartBlock: intEnv("MONITOR_START_BLOCK", "0", 0),
+  monitorStartBlock: monitorStartBlock(),
   monitorPollIntervalMs: intEnv("MONITOR_POLL_INTERVAL_MS", "6000", 1000),
   githubToken: process.env.GITHUB_TOKEN ?? "",
   recentCommitDays: intEnv("RECENT_COMMIT_DAYS", "45", 1),
+  githubValidationTtlSec: intEnv("GITHUB_VALIDATION_TTL_SEC", "86400", 1),
+  minRefillActivityEvents: intEnv("MIN_REFILL_ACTIVITY_EVENTS", "1", 0),
 };
+
+if (process.env.NODE_ENV === "production" && !config.apiKey) {
+  throw new Error("SEED_API_KEY is required when NODE_ENV=production");
+}
 
 export function varaToPlanck(vara: number): bigint {
   return BigInt(vara) * 10n ** BigInt(config.varaDecimals);

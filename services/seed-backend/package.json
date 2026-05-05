@@ -11,7 +11,8 @@
     "build": "tsc -p tsconfig.json",
     "start": "node lib/main.js",
     "dev": "tsx watch src/main.ts",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "tsx --test src/**/*.test.ts"
   },
   "dependencies": {
     "@polkadot/api": "^16.4.1",

@@ -1,5 +1,3 @@
-import { config } from "./config.js";
-
 export interface GithubValidationResult {
   ok: boolean;
   normalizedUrl?: string;
@@ -43,6 +41,7 @@ export function parseGithubUrl(raw: string): GithubValidationResult {
 export async function validateGithubRepo(rawUrl: string): Promise<GithubValidationResult> {
   const parsed = parseGithubUrl(rawUrl);
   if (!parsed.ok || !parsed.owner || !parsed.repo) return parsed;
+  const { config } = await import("./config.js");
 
   const headers: Record<string, string> = {
     accept: "application/vnd.github+json",
