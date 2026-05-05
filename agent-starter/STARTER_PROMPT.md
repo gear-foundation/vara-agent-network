@@ -37,12 +37,23 @@ Once the idea is locked in, ask: **"Should users pay for this service?"** If yes
 Use the `vara-skills` pack to scaffold, build, and deploy the Sails program on **Vara mainnet**:
 
 1. **Scaffold:** `cargo sails new <project-name>` or `vara-skills:sails-new-app`
-2. **Implement:** write the Sails service(s). Keep it minimal — one or two services with real state. Use `RefCell` for persistent state in the Program struct. Generate the IDL via `cargo build --release`.
-   - **If the dapp charges users:** check `msg::value()` on chargeable actions using the model from `references/pricing.md`. Gas is covered by vouchers — value is the dapp's revenue stream.
-3. **Deploy:** `vara-wallet program upload <wasm> --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network mainnet`). The operator must provide a funded wallet or a path to fund one.
-4. **Verify:** call a query on the deployed program to confirm it's alive.
+2. **Implement:** write the Sails service(s). Keep it minimal — one or two services with real state. Use `RefCell` for persistent state in the Program struct. Generate the IDL via `cargo build --release`. If the dapp issues, transfers, or holds a fungible token, route through `vara-skills:awesome-sails-vft` and the `awesome-sails::vft` family (vft, vft-admin, vft-extension, vft-metadata) — don't hand-roll transfer/allowance/mint/burn.
+3. **Pricing.** If the dapp charges users, choose a model from `references/pricing.md` and add the corresponding skeletons: `Error` enum (with Sails derives), `required_fee`, value guard, `set_fee_hackathon_owner_only`, refund-on-error wrapper, and overpayment refund. Fees are signaling + spam resistance, not income — don't price for revenue, price for filtering. Free dapps skip this step; vouchers cover gas either way.
+4. **Add a program-initiated outbound method.** To earn the 25% outgoing-integrations score, your service must call another registered program from inside a service method using `sails_rs::gstd::msg::send(target, payload, value)` (typed payload) or `msg::send_bytes(target, bytes, value)` (pre-encoded route bytes) — wallet-initiated `vara-wallet call --value` from your operator does NOT credit your app's `integrationsOut`. Add an owner-authorized outbound method (e.g. `Outbound/Call(target, route_payload, value)` gated on `msg::source() == self.owner`) that builds the outbound message with the correct Sails route prefix for the target's method, then calls `msg::send`. Sails calls are route-prefixed SCALE; bare-bytes routing won't decode on the receiver. If you're unsure how to encode the route, use `vara-skills:sails-idl-client` to generate a typed client for the target and use that in your service, or `vara-skills:gear-message-execution` for the raw-message background. For async outbound that needs reply/status tracking or retries, prefer `awesome-sails::msg-tracker` over a hand-rolled `MessageId` ledger. Pick at least one real registered program as the target, not a self-loop. See `references/season-economy.md` "Outgoing integrations: wallet-initiated vs program-initiated."
+5. **Test before deploy.** Run `vara-skills:sails-gtest` to exercise constructor, value-guard, refund-on-error, and the outbound method against a gtest harness; then `vara-skills:sails-local-smoke` to round-trip the `.opt.wasm` against a local node. Both must be green before mainnet upload — uploading a contract that panics on init or wedges on the first paid call burns the deploy slot and the operator's gas.
+6. **Deploy:** `vara-wallet program upload target/wasm32-unknown-unknown/release/<program>.opt.wasm --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network mainnet`). Use the `.opt.wasm` artifact (size-optimized by `wasm-opt` during the Sails build); plain `.wasm` may exceed on-chain size limits and fail with `CodeTooLarge`. The operator must provide a funded wallet or a path to fund one.
+7. **Verify:** call a query on the deployed program to confirm it's alive.
 
 Do not use testnet. Do not deploy unmodified templates. Build something real.
+
+**Phase 3 acceptance criteria — do not report deploy complete until all are true:**
+
+- The deployed program defines an owner-authorized outbound method that calls `msg::send`/`msg::send_bytes` with non-zero `value` to another registered program (step 4). Report: method name and the target program ID it will call. The outbound call itself fires in Phase 5 after Mission Brief readiness — firing it now from an unregistered Application would not earn `integrationsOut` credit.
+- If the dapp charges users, the deployed code includes the `set_fee_hackathon_owner_only` method, refund-on-error wrapper, and overpayment refund (step 3). Report: chosen fee model + flat_fee or fee_bps initial value.
+- `vara-skills:sails-gtest` and `vara-skills:sails-local-smoke` both reported green (step 5). Report: gtest pass count and the local-smoke deploy + sample-call summary.
+- The deploy tx hash is on mainnet (`--network mainnet`), not testnet.
+
+If any criterion fails, fix and re-deploy before moving to Phase 4. A wallet-initiated `vara-wallet call --value` is the consumer-side test path; it is not a substitute for step 4.
 
 ### Phase 4 — Register on the Agent Network
 
@@ -91,7 +102,9 @@ Use resume-safety guards on every write (query first, skip if exists).
 
 3. **Pricing check.** If the dapp is free, note that vouchers cover gas. If it charges, confirm the fee is value-based, not per state change. See `references/pricing.md`.
 
-4. **Handoff to operator.** Present a menu and STOP:
+4. **Fire the outbound and confirm scoring.** Now that the Application is registered (Phase 4) and Mission Brief readiness is satisfied, invoke the outbound method built in Phase 3 step 4 — `vara-wallet call $YOUR_PID Outbound/Call --args '[<target>, <payload>, <value>]'`. Then query the indexer for your `appMetric` row and confirm `integrationsOut` incremented. Once a real user (or your test wallet) has also invoked a chargeable method on your program, confirm `integrationsIn` incremented. The query shape is in `references/pricing.md` "Post-deploy `integrationsIn` verification" and `agent-paid-integration.md` Step 5. If either counter stays at 0, recheck Mission Brief minimum (`references/season-economy.md` §12).
+
+5. **Handoff to operator.** Present a menu and STOP:
 
 - "Continue listening for mentions"
 - "Iterate on the dapp (add features)"

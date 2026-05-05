@@ -49,6 +49,7 @@ REQUIRED_FILES=(
   references/ownership-model.md
   references/staleness.md
   references/pricing.md
+  references/season-economy.md
   examples/register_application.json
   examples/set_identity_card.json
   examples/post_announcement.json
@@ -59,6 +60,7 @@ REQUIRED_FILES=(
   agent-board.md
   agent-discovery.md
   agent-mentions-listener.md
+  agent-paid-integration.md
   templates/sails-program-layout/README.md
   templates/sails-program-layout/lib.rs
   .claude-plugin/plugin.json
@@ -124,7 +126,7 @@ check_bash_blocks() {
   done < "$file"
 }
 
-for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md; do
+for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md; do
   check_bash_blocks "$f"
 done
 
@@ -163,7 +165,7 @@ SUBSCRIBE_SUB='^subscribe[[:space:]]+(blocks|messages|mailbox|balance|transfers|
 # flags, leaving just the subcommand portion. Write to a temp file so the
 # while-loop runs in the parent shell (avoids the pipe-subshell variable trap).
 CANDIDATES=$(mktemp /tmp/lint-vara-XXXX.txt)
-for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md README.md smoke.sh; do
+for f in SKILL.md agent-onboarding.md agent-chat-agent.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md README.md STARTER_PROMPT.md smoke.sh; do
   [ -f "$f" ] || continue
   # Match lines invoking vara-wallet, including the common compound forms:
   # bare, `if ! vara-wallet`, `out=$(vara-wallet`, `timeout 60 vara-wallet`,
@@ -282,6 +284,35 @@ if [ -f templates/sails-program-layout/lib.rs ]; then
   else
     err "templates/sails-program-layout/lib.rs missing 'LAYOUT REFERENCE ONLY' marker — invariant compromised"
   fi
+fi
+
+# 12. Cross-link integrity. Sub-page docs reference `references/X.md` and
+# `agent-X.md` siblings — every named target must exist on disk. Catches the
+# class of bug where a doc references a sibling that was never written, or was
+# renamed/deleted. This is a FAIL (not a warn): a broken cross-link in a doc
+# the user will copy-paste from is a real defect, not a rough edge.
+crosslink_targets() {
+  local file="$1"
+  [ -f "$file" ] || return 0
+  # Pattern A: `references/<name>.md` anywhere in the file (backticked or bare).
+  # Pattern B: `agent-<name>.md` anywhere in the file.
+  # Skip URLs (http/https) and inline-code that isn't a path reference.
+  grep -oE '(references/[a-z][a-z0-9_-]*\.md|agent-[a-z][a-z0-9_-]*\.md)' "$file" \
+    | sort -u
+}
+CROSSLINK_FAIL=0
+for f in SKILL.md agent-onboarding.md agent-chat.md agent-board.md agent-discovery.md agent-mentions-listener.md agent-paid-integration.md README.md STARTER_PROMPT.md; do
+  [ -f "$f" ] || continue
+  while IFS= read -r target; do
+    [ -z "$target" ] && continue
+    if [ ! -f "$target" ]; then
+      err "$f: cross-link target missing on disk: $target"
+      CROSSLINK_FAIL=$((CROSSLINK_FAIL+1))
+    fi
+  done < <(crosslink_targets "$f")
+done
+if [ $CROSSLINK_FAIL -eq 0 ]; then
+  ok "cross-link integrity (every references/*.md and agent-*.md mention resolves)"
 fi
 
 echo ""
