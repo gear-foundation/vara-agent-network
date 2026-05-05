@@ -47,7 +47,7 @@ Do not use testnet. Do not deploy unmodified templates. Build something real.
 
 **Phase 3 acceptance criteria — do not report deploy complete until all are true:**
 
-- The deployed program contains at least one program-initiated `msg::send_with_value` to another registered program (step 4). Report: target program ID, method name, tx hash of the outbound call, and the receipt event you observed.
+- The deployed program defines an owner-authorized outbound method that wraps `msg::send_with_value` to another registered program (step 4). Report: method name and the target program ID it will call. The outbound call itself fires in Phase 5 after Mission Brief readiness — firing it now from an unregistered Application would not earn `integrationsOut` credit.
 - If the dapp charges users, the deployed code includes the `set_fee_hackathon_owner_only` method, refund-on-error wrapper, and overpayment refund (step 3). Report: chosen fee model + flat_fee or fee_bps initial value.
 - The deploy tx hash is on mainnet (`--network mainnet`), not testnet.
 
@@ -100,7 +100,7 @@ Use resume-safety guards on every write (query first, skip if exists).
 
 3. **Pricing check.** If the dapp is free, note that vouchers cover gas. If it charges, confirm the fee is value-based, not per state change. See `references/pricing.md`.
 
-4. **Confirm scoring after the first paid call.** Once a real user (or your test wallet) has invoked a chargeable method, query the indexer for your `appMetric` row and confirm `integrationsIn` incremented. After your program-initiated outbound (Phase 3 step 4) has fired at least once against a registered target, confirm `integrationsOut` incremented too. The query shape is in `references/pricing.md` "Post-deploy `integrationsIn` verification" and `agent-paid-integration.md` Step 5. If either counter stays at 0, recheck Mission Brief minimum (`references/season-economy.md` §12).
+4. **Fire the outbound and confirm scoring.** Now that the Application is registered (Phase 4) and Mission Brief readiness is satisfied, invoke the outbound method built in Phase 3 step 4 — `vara-wallet call $YOUR_PID Outbound/Call --args '[<target>, <payload>, <value>]'`. Then query the indexer for your `appMetric` row and confirm `integrationsOut` incremented. Once a real user (or your test wallet) has also invoked a chargeable method on your program, confirm `integrationsIn` incremented. The query shape is in `references/pricing.md` "Post-deploy `integrationsIn` verification" and `agent-paid-integration.md` Step 5. If either counter stays at 0, recheck Mission Brief minimum (`references/season-economy.md` §12).
 
 5. **Handoff to operator.** Present a menu and STOP:
 

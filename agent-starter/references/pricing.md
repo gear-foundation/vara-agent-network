@@ -122,53 +122,57 @@ impl MyService {
 
 Fees should be operator-configurable from day 1, not hardcoded constants. This is a single-owner gate. Sufficient for Season 1; production governance needs multisig + time-lock.
 
+The method must live inside the `#[sails(export)] impl` block — a free `pub fn` will not appear in the generated IDL, so operators won't be able to call it post-deploy.
+
 ```rust
-pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) -> Result<(), Error> {
-    // hackathon-grade single owner; for production, add multisig + time-lock
-    if msg::source() != self.owner {
-        return Err(Error::Unauthorized);
+#[sails(export)]
+impl MyService {
+    pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) -> Result<(), Error> {
+        // hackathon-grade single owner; for production, add multisig + time-lock
+        if msg::source() != self.owner {
+            return Err(Error::Unauthorized);
+        }
+        self.flat_fee = new_fee;
+        Ok(())
     }
-    self.flat_fee = new_fee;
-    Ok(())
 }
 ```
 
 Compromised owner = attacker drains fee revenue forever. Three reasons the caveat is layered (named method + inline comment + this paragraph) and not just one comment: agents reshaping the skeleton during "cleanup" can strip a single comment. The method name carries the constraint into the IDL itself, where it's harder to lose.
 
-### Overpayment policy — refund the excess
+### Overpayment + error refunds — one combined block
 
-The value guard above only checks the lower bound. Overpayment can come from rounded UI inputs, stale fee quotes, or accidental tipping. Default policy: refund the excess. Skeleton:
+Two refund concerns share the same execution path and must be handled together:
+
+- **Overpayment.** Callers can attach more than `required_fee(amount)` (rounded UI inputs, stale quotes, accidental tipping). Default policy: refund the excess.
+- **Errors.** When a call attaches `msg::value()`, the tokens transfer to your program at execution start — regardless of `Ok`/`Err`. Returning `Err` does **not** auto-refund. You must explicitly send the value back on failure.
+
+Layering two separate refund blocks is unsafe: if you refund the excess *before* `internal_logic` runs and then refund full `msg::value()` on `Err`, the excess gets returned twice — paid out of program balance. Use one combined skeleton instead:
 
 ```rust
 let fee = self.required_fee(amount);
 if msg::value() < fee { return Err(Error::InsufficientPayment); }
-let refund_amount = msg::value().saturating_sub(fee);
-if refund_amount > 0 {
-    sails_rs::gstd::msg::send(msg::source(), b"refund_excess", refund_amount)
-        .expect("refund_excess send failed");
-}
-```
+let excess = msg::value().saturating_sub(fee);
 
-If you'd rather accept the excess as a tip, drop the refund block — but document the choice in your service's IDL comments so callers know not to overpay accidentally.
-
-### Handling errors without losing user funds
-
-When a call attaches `msg::value()`, those tokens transfer to your program at execution start — regardless of whether you return `Ok` or `Err`. Returning `Err` does **not** automatically refund the value. You must explicitly send it back on failure:
-
-```rust
 match self.internal_logic(amount) {
     Ok(result) => {
+        if excess > 0 {
+            sails_rs::gstd::msg::send(msg::source(), b"refund_excess", excess)
+                .expect("refund_excess send failed");
+        }
         self.collected_fees += fee;
         Ok(Event::Done { result })
     }
     Err(e) => {
-        // Refund the user's value on failure
+        // Refund the full attached value (fee + excess) on failure.
         sails_rs::gstd::msg::send(msg::source(), b"refund", msg::value())
             .expect("refund send failed");
         Err(e)
     }
 }
 ```
+
+If you'd rather accept overpayment as a tip, drop the success-path `refund_excess` block — but document the choice in your service's IDL comments so callers know not to overpay accidentally. Either way, keep the error-path refund: silently keeping value on `Err` is the most common way users lose funds to a chargeable method.
 
 Prefer operator-configurable fees over hardcoded constants once the dapp has real users.
 
