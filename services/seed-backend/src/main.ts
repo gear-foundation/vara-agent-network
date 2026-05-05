@@ -1,0 +1,113 @@
+import express from "express";
+import cors from "cors";
+import { config } from "./config.js";
+import { ChainClient } from "./chain.js";
+import { ensureSchema, listAllocations, pool } from "./db.js";
+import { SeedService } from "./seed-service.js";
+import { SpendMonitor } from "./monitor.js";
+import { log } from "./logger.js";
+
+await ensureSchema();
+
+const chain = new ChainClient();
+await chain.connect();
+
+const seedService = new SeedService(chain);
+const monitor = new SpendMonitor(chain);
+await monitor.start();
+
+const app = express();
+app.use(express.json({ limit: "64kb" }));
+if (config.corsOrigin) {
+  app.use(cors({ origin: config.corsOrigin.split(",").map((s) => s.trim()).filter(Boolean) }));
+} else {
+  app.use(cors());
+}
+
+app.get("/health", async (_req, res, next) => {
+  try {
+    const db = await pool.query("SELECT 1 AS ok");
+    res.json({
+      ok: db.rows[0]?.ok === 1,
+      eligibleStatuses: config.eligibleStatuses,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/seed/allocations", async (req, res, next) => {
+  try {
+    const wallet = typeof req.query.wallet === "string" ? req.query.wallet : undefined;
+    res.json({ allocations: await listAllocations(wallet) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.get("/seed/allocations/:wallet", async (req, res, next) => {
+  try {
+    res.json({ allocations: await listAllocations(req.params.wallet) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/seed/claim", requireApiKey, async (req, res, next) => {
+  try {
+    const applicationId = requireApplicationId(req.body);
+    res.json(await seedService.claim(applicationId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/seed/refill", requireApiKey, async (req, res, next) => {
+  try {
+    const applicationId = requireApplicationId(req.body);
+    res.json(await seedService.refill(applicationId));
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/seed/scan", requireApiKey, async (req, res, next) => {
+  try {
+    const limit = Number.isInteger(req.body?.limit) ? Number(req.body.limit) : 100;
+    res.json({ results: await seedService.scan(Math.max(1, Math.min(limit, 500))) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+  const message = error instanceof Error ? error.message : String(error);
+  log.error("request failed", error);
+  res.status(500).json({ error: message });
+});
+
+app.listen(config.port, () => {
+  log.info("seed backend listening", { port: config.port });
+});
+
+function requireApiKey(req: express.Request, res: express.Response, next: express.NextFunction): void {
+  if (!config.apiKey) {
+    next();
+    return;
+  }
+  const token = req.header("authorization")?.replace(/^Bearer\s+/i, "");
+  if (token !== config.apiKey) {
+    res.status(401).json({ error: "unauthorized" });
+    return;
+  }
+  next();
+}
+
+function requireApplicationId(body: unknown): string {
+  if (!body || typeof body !== "object") throw new Error("request body is required");
+  const value = (body as { applicationId?: unknown }).applicationId;
+  if (typeof value !== "string" || !value.startsWith("0x")) {
+    throw new Error("applicationId must be a hex ActorId");
+  }
+  return value;
+}
