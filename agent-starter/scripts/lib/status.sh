@@ -30,6 +30,12 @@ if [[ -n "${_AGENT_STARTER_LIB_STATUS_LOADED:-}" ]]; then
 fi
 _AGENT_STARTER_LIB_STATUS_LOADED=1
 
+# Internal flag — set by the status_* helpers to record that the script
+# is exiting deliberately. setup_status_trap's EXIT handler reads this to
+# avoid double-emitting an UNEXPECTED_EXIT line on top of a legitimate
+# status_err / status_retry / status_ok exit.
+_AGENT_STARTER_DELIBERATE_EXIT=0
+
 # JSON-escape a string for safe inline use in a single-line JSON object.
 # Handles backslashes, double quotes, newlines, carriage returns, tabs, and
 # C0 control characters. Stdin → stdout.
@@ -65,18 +71,34 @@ _status_emit() {
 
 status_ok() {
   # status_ok CODE MESSAGE — terminate with exit 0
+  _AGENT_STARTER_DELIBERATE_EXIT=1
   _status_emit "ok" "${1:-OK}" "${2:-}"
   exit 0
 }
 
 status_err() {
   # status_err CODE MESSAGE — terminate with exit 1
+  _AGENT_STARTER_DELIBERATE_EXIT=1
   _status_emit "err" "${1:-UNKNOWN}" "${2:-}"
   exit 1
 }
 
 status_retry() {
   # status_retry CODE MESSAGE — terminate with exit 2 (transient; loop retries)
+  _AGENT_STARTER_DELIBERATE_EXIT=1
   _status_emit "retry" "${1:-TRANSIENT}" "${2:-}"
   exit 2
+}
+
+# setup_status_trap — install an EXIT trap that emits UNEXPECTED_EXIT
+# when the script exits with non-zero status WITHOUT having called one
+# of the status_* helpers. Clears itself first to avoid re-entry loops.
+setup_status_trap() {
+  trap '
+    rc=$?
+    trap - EXIT
+    if (( rc != 0 )) && [[ "${_AGENT_STARTER_DELIBERATE_EXIT:-0}" -eq 0 ]]; then
+      status_err "UNEXPECTED_EXIT" "rc=$rc line=${BASH_LINENO[0]:-?}"
+    fi
+  ' EXIT
 }
