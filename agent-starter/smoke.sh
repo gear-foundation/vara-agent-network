@@ -12,8 +12,10 @@
 #      idempotency assertion (re-running RegisterApplication must fail fast).
 #
 # Usage:
-#   bash smoke.sh            # offline mode: lint + dry-run only (~30s)
-#   bash smoke.sh --live     # full mode: also run live testnet flow (~3min)
+#   bash smoke.sh                # offline mode: lint + dry-run only (~30s)
+#   bash smoke.sh --autonomous   # also run one full IDLE → … → IDLE tick
+#                                  on stubbed probes (no network, no spend)
+#   bash smoke.sh --live         # full mode: also run live testnet flow (~3min)
 #
 # Requires: bash, jq, openssl, vara-wallet 0.16+
 #
@@ -28,9 +30,11 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 LIVE=0
+AUTONOMOUS=0
 for arg in "$@"; do
   case "$arg" in
     --live) LIVE=1 ;;
+    --autonomous) AUTONOMOUS=1 ;;
     --help|-h) sed -n '2,18p' "$0"; exit 0 ;;
     *) echo "smoke.sh: unknown arg '$arg' (try --help)"; exit 2 ;;
   esac
@@ -160,6 +164,101 @@ for example in "${!EXAMPLE_METHOD[@]}"; do
     echo "$out" | head -5
   fi
 done
+
+# ---------------------------------------------------------------------------
+# Step 3.5 — Autonomous-loop end-to-end with stubbed probes (--autonomous)
+# ---------------------------------------------------------------------------
+#
+# Drives scripts/autonomous-loop.sh through one full IDLE → DISCOVERING →
+# PRE_FLIGHT → PENDING_CALL → RECONCILING_CALL → IDLE cycle using
+# the same probe overrides that tests/autonomous-loop.test.sh validates.
+# This is a complete dogfood of the inter-script wiring without spending
+# real testnet VARA — the wallet is never invoked.
+
+if [ $AUTONOMOUS -eq 1 ]; then
+  echo ""
+  echo "=== Step 3.5: autonomous-loop end-to-end (stubbed) ==="
+
+  AUTO_DIR="$(mktemp -d -t agent-starter.autosmoke.XXXXXX)"
+  trap "rm -rf '$AUTO_DIR' 2>/dev/null || true" EXIT
+  AUTO_STATE="$AUTO_DIR/state"
+  mkdir -p "$AUTO_STATE/decisions/inbox"
+  mkdir -p "$AUTO_STATE/decisions/active"
+  mkdir -p "$AUTO_STATE/decisions/done"
+  mkdir -p "$AUTO_STATE/wallet-cli-out"
+
+  # Same fixture used in tests/autonomous-loop.test.sh test 6.
+  AUTO_OWN_PID="0xabba00000000000000000000000000000000000000000000000000000000abba"
+  AUTO_TGT_PID="0xcafe00000000000000000000000000000000000000000000000000000000cafe"
+  AUTO_ACCT="autosmoke-acct"
+
+  AUTO_BUDGET='echo "{\"balanceRaw\":\"5000000000000\",\"addressSS58\":\"kGdummy\"}"'
+  AUTO_DISCOVERY=$(cat <<EOF
+echo '[{"programId":"$AUTO_TGT_PID","owner":"0xowner","identityCard":{"howToInteract":{"method":"Action/run","argsTemplate":"[]","valueVara":"0.5"}},"metrics":{"integrationsIn":2,"latencyMsP50":120}}]'
+EOF
+)
+  AUTO_OWN_PROBE='echo "{\"registered\":true,\"status\":\"approved\",\"hasIdentityCard\":true}"'
+  AUTO_IDL_BODY="service Action { run : (); }; "
+  AUTO_IDL_HASH=$(printf "%s" "$AUTO_IDL_BODY" | shasum -a 256 | awk '{print $1}')
+  AUTO_TGT_PROBE="echo '{\"registered\":true,\"idlUrl\":\"https://example.com/idl\",\"idlHash\":\"$AUTO_IDL_HASH\"}'"
+  AUTO_IDL_FETCH="printf %s '$AUTO_IDL_BODY'"
+  AUTO_SEND='echo "{\"messageId\":\"0x1111111111111111111111111111111111111111111111111111111111111111\",\"block\":99}"'
+  AUTO_RECON='echo "{\"outcome\":\"ok\",\"outcomeDetail\":\"reply ok\",\"block\":99,\"ts\":\"2026-05-06T00:00:02Z\"}"'
+
+  set +e
+  VARA_AGENT_STATE_DIR="$AUTO_STATE" \
+  VARA_AGENT_OWN_PROGRAM_ID="$AUTO_OWN_PID" \
+  VARA_WALLET_ACCOUNT="$AUTO_ACCT" \
+  BUDGET_PROBE_CMD="$AUTO_BUDGET" \
+  DISCOVERY_PROBE_CMD="$AUTO_DISCOVERY" \
+  PREFLIGHT_OWN_PROBE_CMD="$AUTO_OWN_PROBE" \
+  PREFLIGHT_TARGET_PROBE_CMD="$AUTO_TGT_PROBE" \
+  PREFLIGHT_IDL_FETCH_CMD="$AUTO_IDL_FETCH" \
+  SEND_WALLET_CMD="$AUTO_SEND" \
+  RECONCILE_OUTCOME_PROBE_CMD="$AUTO_RECON" \
+  MAX_VALUE_VARA="1" \
+    bash "$SCRIPT_DIR/scripts/autonomous-loop.sh" \
+      --max-ticks 2 --tick-sec 1 --no-lock \
+      >"$AUTO_DIR/loop.out" 2>"$AUTO_DIR/loop.err"
+  AUTO_RC=$?
+  set -e 2>/dev/null || true
+
+  AUTO_RESULT=$(tail -1 "$AUTO_DIR/loop.out")
+  if [ "$AUTO_RC" -eq 0 ] \
+    && printf '%s' "$AUTO_RESULT" | jq -e '.code=="LOOP_DONE"' >/dev/null 2>&1; then
+    ok "autonomous-loop --max-ticks 2: LOOP_DONE"
+  else
+    err "autonomous-loop --max-ticks 2 failed: rc=$AUTO_RC result=$AUTO_RESULT"
+    echo "    --- stderr (last 20) ---"
+    tail -20 "$AUTO_DIR/loop.err" || true
+  fi
+
+  # Verify state.json shows IDLE, reconciliation has at least one ok row,
+  # decisions/active is empty, no orphan INTENT.
+  if jq -e '.state=="IDLE"' "$AUTO_STATE/state.json" >/dev/null 2>&1; then
+    ok "autonomous-loop: state.json reflects IDLE on exit"
+  else
+    err "state.json wrong: $(jq -c . "$AUTO_STATE/state.json" 2>&1)"
+  fi
+  if [ -f "$AUTO_STATE/reconciliation.jsonl" ] \
+    && jq -se 'map(select(.outcome=="ok")) | length >= 1' \
+         "$AUTO_STATE/reconciliation.jsonl" >/dev/null 2>&1; then
+    ok "autonomous-loop: reconciliation.jsonl has outcome=ok row"
+  else
+    err "no outcome=ok row: $(cat "$AUTO_STATE/reconciliation.jsonl" 2>/dev/null)"
+  fi
+  AUTO_ACTIVE_LEFT=$(find "$AUTO_STATE/decisions/active" -type f -name '*.json' 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$AUTO_ACTIVE_LEFT" = "0" ]; then
+    ok "autonomous-loop: decisions/active/ cleared after reconcile"
+  else
+    err "decisions/active still has $AUTO_ACTIVE_LEFT file(s)"
+  fi
+  if ! ls "$AUTO_STATE"/pending-call-INTENT-*.json >/dev/null 2>&1; then
+    ok "autonomous-loop: no orphan INTENT after happy-path tick"
+  else
+    err "orphan INTENT remained: $(ls "$AUTO_STATE"/pending-call-INTENT-*.json 2>&1)"
+  fi
+fi
 
 # ---------------------------------------------------------------------------
 # Step 4 — Live unified onboarding flow (--live only)
@@ -362,7 +461,11 @@ fi
 echo ""
 echo "==========================================="
 echo "smoke.sh: $PASS pass, $FAIL fail"
-[ $LIVE -eq 0 ] && echo "(offline mode — re-run with --live for full unified onboarding trace)"
+if [ $LIVE -eq 0 ] && [ $AUTONOMOUS -eq 0 ]; then
+  echo "(offline mode — re-run with --autonomous for stubbed loop dogfood, or --live for full testnet trace)"
+elif [ $AUTONOMOUS -eq 1 ] && [ $LIVE -eq 0 ]; then
+  echo "(stubbed-loop mode — re-run with --live for full testnet trace)"
+fi
 echo "==========================================="
 
 [ $FAIL -eq 0 ] || exit 1
