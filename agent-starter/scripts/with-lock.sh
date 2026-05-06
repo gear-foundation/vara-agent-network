@@ -177,26 +177,39 @@ _acquire_mkdir_lock() {
       continue
     fi
 
-    # PID alive?
-    if _pid_alive "$s_pid"; then
-      local rc=$?
-      # rc==0 process exists; rc==2 EPERM — treat as alive.
-      # Compare start_time when available.
-      if [[ "$rc" -eq 0 ]]; then
+    # PID alive? Call _pid_alive directly and read its rc — `if cmd; then`
+    # reads the if-statement's exit status, not the inner function's, so the
+    # rc=2 (EPERM, alive-not-ours) branch silently fell through to reclaim.
+    # `cmd || rc=$?` captures the rc set-e-safely (a bare call would
+    # trigger errexit on rc=1 before the next line runs).
+    local rc=0
+    _pid_alive "$s_pid" || rc=$?
+    case "$rc" in
+      0)
+        # Alive and ours — verify start_time so a recycled PID after
+        # boot doesn't masquerade as a live holder.
         local now_start
         now_start="$(_get_start_time "$s_pid")"
         if [[ -n "$s_start" && -n "$now_start" && "$s_start" != "unknown" && "$now_start" != "unknown" && "$s_start" != "$now_start" ]]; then
-          # PID was reused after reboot/recycle — reclaim.
+          # PID was reused — reclaim.
           rm -rf "$lockdir" 2>/dev/null || true
           continue
         fi
-      fi
-      status_err "LOCK_BUSY" "pid $s_pid still alive on $s_host"
-    fi
-
-    # PID is gone (rc==1). Reclaim.
-    rm -rf "$lockdir" 2>/dev/null || true
-    continue
+        status_err "LOCK_BUSY" "pid $s_pid still alive on $s_host"
+        ;;
+      2)
+        # EPERM — process exists under a different uid namespace. We
+        # cannot safely reclaim; the foreign-uid holder may still be
+        # running paid-integration-send. status_err out and let the
+        # operator inspect.
+        status_err "LOCK_BUSY" "pid $s_pid alive but not visible to us (EPERM) on $s_host"
+        ;;
+      1|*)
+        # ESRCH — process is gone. Safe to reclaim.
+        rm -rf "$lockdir" 2>/dev/null || true
+        continue
+        ;;
+    esac
   done
 
   status_err "LOCK_BUSY" "mkdir lock contention after retries"

@@ -130,13 +130,15 @@ fi
 
 RECON_FILE="$STATE_DIR/reconciliation.jsonl"
 ALREADY=0
-# `jq -e select(...)` over a JSONL stream only exits 0 if the LAST output
-# is non-null/non-false, so a duplicate messageId in the middle of the
-# file slips through and we'd write a second row. `-s` slurps into an
-# array; `any(.[]; ...)` returns a single boolean over all entries so
-# `-e` is unambiguous.
-if [[ -f "$RECON_FILE" ]] && jq -se --arg id "$MESSAGE_ID" \
-  'any(.[]; .messageId==$id)' "$RECON_FILE" >/dev/null 2>&1; then
+# Duplicate detection. messageId is `0x[hex]`, unique enough that a
+# field-anchored substring search is unambiguous: there's no other field
+# whose value could collide with `"messageId":"0x..."`. grep is line-
+# oriented and constant-memory, so it survives a partial / malformed
+# trailing line in `reconciliation.jsonl` (which would otherwise make
+# `jq -se 2>/dev/null` fail open and write a duplicate row) and scales
+# to large season-long journals without slurping the whole file.
+if [[ -f "$RECON_FILE" ]] && \
+   LC_ALL=C grep -qF "\"messageId\":\"$MESSAGE_ID\"" "$RECON_FILE"; then
   ALREADY=1
 fi
 
@@ -177,6 +179,45 @@ if [[ "$ALREADY" -eq 0 ]]; then
     OUTCOME_DETAIL=$(printf '%s' "$OUTCOME_RAW" | jq -r '.outcomeDetail // .outcome_detail // ""')
     INTERACTION_BLOCK=$(printf '%s' "$OUTCOME_RAW" | jq -r '.block // ""')
     INTERACTION_TS=$(printf '%s'    "$OUTCOME_RAW" | jq -r '.ts // ""')
+  else
+    # Indexer responded but doesn't have this messageId yet. Right after
+    # send, this is normal indexer lag (block not finalized + indexer
+    # processing time). Don't finalize as `unknown` and rename pending
+    # → done — that would lose the chance to capture block/ts/outcome
+    # once the indexer catches up. Retry next tick (per-tick recovery
+    # scan re-runs reconciliation on still-pending files).
+    #
+    # Escape valve: after RECONCILE_LAG_TIMEOUT_SEC (default 1h) without
+    # the indexer ever seeing the message, finalize as `unknown` with
+    # detail="indexer_never_observed". 1h is well past Vara block time
+    # + typical indexer lag.
+    LAG_TIMEOUT_SEC="${RECONCILE_LAG_TIMEOUT_SEC:-3600}"
+    TS_POST_SEND=$(printf '%s' "$PENDING" | jq -r '.ts_post_send // empty')
+    if [[ -n "$TS_POST_SEND" ]]; then
+      # to_epoch is portable: GNU date -d, BSD/macOS date -j -f. Inline
+      # the macOS-friendly form here since payment-reconciliation.sh
+      # doesn't otherwise source intent-recovery.sh's helpers.
+      POST_EPOCH=$(date -j -f '%Y-%m-%dT%H:%M:%SZ' "$TS_POST_SEND" +%s 2>/dev/null \
+                || date -d "$TS_POST_SEND" +%s 2>/dev/null \
+                || echo "")
+      NOW_EPOCH=$(date -u +%s 2>/dev/null || echo "")
+      if [[ -n "$POST_EPOCH" && -n "$NOW_EPOCH" ]]; then
+        AGE_SEC=$(( NOW_EPOCH - POST_EPOCH ))
+        if [[ "$AGE_SEC" -lt "$LAG_TIMEOUT_SEC" ]]; then
+          status_retry "INDEXER_LAG" \
+            "interactionById($MESSAGE_ID) returned null; age=${AGE_SEC}s < ${LAG_TIMEOUT_SEC}s; retry next tick"
+        fi
+        OUTCOME_DETAIL="indexer_never_observed (age=${AGE_SEC}s >= ${LAG_TIMEOUT_SEC}s)"
+      else
+        # ts_post_send unparseable — fall through to finalize.
+        OUTCOME_DETAIL="indexer_returned_null; ts_post_send unparseable"
+      fi
+    else
+      # No ts_post_send (older pending file before this field was
+      # written). Fall through to finalize.
+      OUTCOME_DETAIL="indexer_returned_null; no ts_post_send for age check"
+    fi
+    # OUTCOME stays "unknown" — finalize on this attempt.
   fi
   case "$OUTCOME" in
     ok|err|timeout|unknown) ;;

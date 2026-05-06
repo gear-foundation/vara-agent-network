@@ -214,14 +214,21 @@ probe_target() {
 }
 
 _log_target_deregistered() {
-  # Append an info row to reconciliation.jsonl so discovery's lookback
-  # decrement counts this target's deregistration. NOT a bad-actor mark
-  # (the provider may have legitimately deregistered) — runtime-arch
-  # §"Failure codes" calls this an info row.
+  # Append an info row to reconciliation.jsonl. This row is BOTH a
+  # forensics record (operator can see deregistration events) AND a
+  # discovery rank-decrement signal (the same target picked next cycle
+  # gets a lower score). The "info" label refers to its provenance
+  # (preflight, not reconciliation), NOT to its scoring weight — info
+  # rows DO contribute to the decrement filter
+  # (`outcome != "ok" && != "ambiguous"` matches `outcome="unknown"`).
+  # That's intentional: a target that deregistered while being probed
+  # should be deprioritised on the next cycle. The decrement decays
+  # over DISCOVERY_LOOKBACK_HOURS, so re-registered providers recover.
   #
   # Schema notes:
-  #   info_row=true        — discriminator. Forensics queries that count
-  #                          real spends MUST filter `info_row != true`.
+  #   info_row=true        — provenance discriminator. Forensics queries
+  #                          that count real spends MUST filter
+  #                          `info_row != true` to avoid mixing.
   #   outcome="unknown"    — no call was attempted; no on-chain trace
   #                          either way. NOT "abandoned" (reserved for
   #                          INTENT-recovery spends that may have landed)

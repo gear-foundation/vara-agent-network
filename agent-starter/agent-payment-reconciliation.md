@@ -100,7 +100,7 @@ If `reconciliation.jsonl` already has a row with this messageId, the script skip
 
 ## Reading reconciliation.jsonl
 
-The journal contains two row classes: **paid-call rows** (written by reconciliation, audit-gated, carry `messageId`) and **info rows** (written by preflight on `TARGET_DEREGISTERED`, identifiable by `info_row: true`). Forensics queries that count real spends or audit-gate verdicts must filter info rows out — see [`references/runtime-architecture.md`](references/runtime-architecture.md) §"Info rows (TARGET_DEREGISTERED)" for the schema.
+The journal contains two row classes: **paid-call rows** (written by reconciliation, audit-gated, carry `messageId`) and **info rows** (written by preflight on `TARGET_DEREGISTERED`, identifiable by `info_row: true`). Forensics queries that count real spends or audit-gate verdicts must filter info rows out — see [`references/runtime-architecture.md`](references/runtime-architecture.md) §"Info rows (TARGET_DEREGISTERED)" for the schema. Info rows DO count toward discovery's rank-decrement: a deregistered target gets deprioritised on the next cycle, decaying over `DISCOVERY_LOOKBACK_HOURS`.
 
 ```bash
 # Last 5 paid-call outcomes (excludes info rows):

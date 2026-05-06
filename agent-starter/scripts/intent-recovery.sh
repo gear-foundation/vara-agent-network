@@ -293,9 +293,19 @@ probe_indexer() {
       eval "$RECOVERY_INDEXER_PROBE_CMD"
     return $?
   fi
-  # Production probe — exact GraphQL field names confirmed by Day 0.5
-  # spike. Until then, this returns "null" so production callers don't
-  # accidentally rely on an unverified surface.
+  # Production probe is gated on the Day 0.5 spike confirming the exact
+  # GraphQL field shape. Until the spike runs and the operator sets
+  # RECOVERY_INDEXER_PROBE_CMD, this returns "null" — Step C's age-based
+  # AMBIGUOUS verdict is the only floor. The fail-safe behavior is OK
+  # (AMBIGUOUS file lands, operator triages with all evidence on disk),
+  # but operators should know they're running without Step B.
+  #
+  # Emit a one-line warning to stderr per call so loop-history.jsonl
+  # captures it. Operators set RECOVERY_INDEXER_STUB_ACK=1 to silence
+  # after they've acknowledged the deferral.
+  if [[ "${RECOVERY_INDEXER_STUB_ACK:-0}" != "1" ]]; then
+    printf 'WARN intent-recovery: Step B indexer probe is unconfigured (Day 0.5 spike pending). Recovery falls through to age-based AMBIGUOUS verdict only. Set RECOVERY_INDEXER_PROBE_CMD to enable Step B, or RECOVERY_INDEXER_STUB_ACK=1 to silence this warning.\n' >&2
+  fi
   printf '%s\n' "null"
 }
 

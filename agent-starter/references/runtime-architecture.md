@@ -334,12 +334,12 @@ Info row schema:
 {"ts":"...","target":"0x...","outcome":"unknown","audit_status":"n/a","info_row":true,"info":"TARGET_DEREGISTERED","detail":"target not in applications at preflight time","messageId":""}
 ```
 
-- `info_row: true` is the **discriminator**. Forensics queries that count real spends (or audit-gate violations) MUST filter `select(.info_row != true)`.
+- `info_row: true` is the **provenance discriminator**, not a scoring filter. Forensics queries that count real spends or audit-gate violations MUST filter `select(.info_row != true)` to keep the two row classes separate. Discovery's rank-decrement does NOT filter info rows — see below.
 - `outcome: "unknown"` — no call was attempted, so no on-chain trace either way. Distinct from `abandoned`/`ambiguous` (those mean "call was sent, status unprovable") and from `ok`/`err` (those require a decoded reply).
 - `audit_status: "n/a"` — info rows are out of scope for the audit gate. Not `complete` (which would imply structural validation passed), not `incomplete` (which would imply the gate ran and failed).
 - `messageId: ""` — empty string, not absent, so filters using `.messageId == ""` and `.messageId | length == 0` both work.
 
-Discovery's rank-decrement filter `outcome != null && != "ok" && != "ambiguous"` matches `outcome="unknown"`, so info rows correctly count toward the target's recent-error tally. This is intentional: a target that deregistered while being probed should be deprioritised on the next cycle, even though no spend occurred.
+**Info rows DO contribute to the discovery rank-decrement.** The filter in `rational-discovery.sh` (`outcome != null && != "ok" && != "ambiguous"`) matches `outcome="unknown"`, so a target that deregistered mid-probe gets deprioritised on the next discovery cycle. This is intentional: the deregistration is real evidence about the target, even though no spend occurred. The decrement decays over `DISCOVERY_LOOKBACK_HOURS` (default 24h), so a re-registered provider recovers naturally. The "info" label refers to row provenance (preflight wrote it, not reconciliation) — not to invisibility from scoring.
 
 ## Halt-flag contract (D5)
 

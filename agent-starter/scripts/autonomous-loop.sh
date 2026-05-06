@@ -236,17 +236,32 @@ recovery_scan() {
     esac
   done
 
-  # Severity priority: terminal > transient. RENAMED is silent (the
-  # pending-file pass below picks them up).
-  if [[ -n "$terminal_code" ]]; then
-    set_state "WAITING_RECOVERY" \
-      "{\"orphan_intent\":\"$(basename "$terminal_intent")\",\"reason\":\"$terminal_code\"}"
-    status_err "$terminal_code" "intent-recovery: $terminal_msg"
-  fi
+  # Defer the verdict surface until all three passes have run. Codex
+  # caught that emitting status_err / status_retry here aborts the AMBIGUOUS
+  # aging pass and the pending-call reconciliation pass, so a single stuck
+  # INTENT could starve unrelated work. Track verdicts in locals; emit at
+  # the bottom of recovery_scan after all passes complete.
+  #
+  # Halt-worthy: RECOVERY_RENAME_FAILED, PENDING_INTENT (filesystem /
+  # contract-level — operator must inspect).
+  # Log-only: INTENT_AMBIGUOUS, INTENT_ABANDONED — quarantine wrote the
+  # file; loop keeps ticking; operator triages async.
+  # Transient: RECOVERY_TOO_SOON, RECOVERY_PENDING, INDEXER_DOWN — log
+  # and let the next tick re-run recovery; no exit.
+  local halt_code="" halt_msg=""
+  case "$terminal_code" in
+    RECOVERY_RENAME_FAILED|PENDING_INTENT)
+      halt_code="$terminal_code"
+      halt_msg="$terminal_msg"
+      ;;
+    INTENT_AMBIGUOUS|INTENT_ABANDONED)
+      log_event "recovery_intent_quarantined_silent" \
+        --arg path "$terminal_intent" --arg code "$terminal_code"
+      ;;
+  esac
   if [[ -n "$last_transient_code" ]]; then
-    set_state "WAITING_RECOVERY" \
-      "{\"reason\":\"$last_transient_code\"}"
-    status_retry "$last_transient_code" "intent-recovery: $last_transient_msg"
+    log_event "recovery_intent_transient" \
+      --arg code "$last_transient_code" --arg msg "$last_transient_msg"
   fi
 
   # 2. Progress AMBIGUOUS quarantines to ABANDONED once they age past
@@ -283,6 +298,14 @@ recovery_scan() {
       --arg path "$f" --arg code "$RUN_SCRIPT_CODE" --arg status "$RUN_SCRIPT_STATUS"
     count=$((count + 1))
   done
+
+  # Surface halt-worthy verdict from pass 1 NOW, after all three passes
+  # have completed. Other INTENTs and pending-calls have been processed.
+  # Caller (startup or per-tick driver) decides whether status_err is
+  # fatal or just informational — we expose it via globals.
+  RECOVERY_HALT_CODE="$halt_code"
+  RECOVERY_HALT_MSG="$halt_msg"
+  RECOVERY_HALT_INTENT="$terminal_intent"
 }
 
 # ---------------------------------------------------------------------------
@@ -326,6 +349,18 @@ tick_once() {
 
   # Per-tick env reread (P1-C13).
   export INDEXER_GRAPHQL_URL="${INDEXER_GRAPHQL_URL:-https://agents-api.vara.network/graphql}"
+
+  # 0. Per-tick recovery scan. SEND_AMBIGUOUS / WALLET_PROBE_FAILED leaves
+  #    an INTENT on disk; without per-tick recovery the loop would spin
+  #    forever (next tick sees existing INTENT, send refuses). Codex P0
+  #    on f61fdf9 + a7707c1.
+  RECOVERY_HALT_CODE=""; RECOVERY_HALT_MSG=""; RECOVERY_HALT_INTENT=""
+  recovery_scan
+  if [[ -n "$RECOVERY_HALT_CODE" ]]; then
+    set_state "WAITING_RECOVERY" \
+      "{\"orphan_intent\":\"$(basename "$RECOVERY_HALT_INTENT")\",\"reason\":\"$RECOVERY_HALT_CODE\"}"
+    status_err "$RECOVERY_HALT_CODE" "intent-recovery: $RECOVERY_HALT_MSG"
+  fi
 
   # 1. Budget check.
   set_state "RECONCILING_BUDGET"
@@ -464,8 +499,16 @@ log_event "loop_start" \
   --argjson max_ticks "$MAX_TICKS" \
   --argjson tick_sec "$TICK_SEC"
 
-# Recovery scan happens once at startup, before any tick.
+# Initial recovery scan + halt check before the first tick. The per-tick
+# driver also runs recovery_scan as step 0, so a startup with healthy
+# state is cheap (empty globs, no work).
+RECOVERY_HALT_CODE=""; RECOVERY_HALT_MSG=""; RECOVERY_HALT_INTENT=""
 recovery_scan
+if [[ -n "$RECOVERY_HALT_CODE" ]]; then
+  set_state "WAITING_RECOVERY" \
+    "{\"orphan_intent\":\"$(basename "$RECOVERY_HALT_INTENT")\",\"reason\":\"$RECOVERY_HALT_CODE\"}"
+  status_err "$RECOVERY_HALT_CODE" "intent-recovery: $RECOVERY_HALT_MSG"
+fi
 halt_check
 set_state "IDLE"
 

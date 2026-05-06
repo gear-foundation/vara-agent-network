@@ -161,8 +161,8 @@ RECOVERY_INDEXER_PROBE_CMD='echo "null"' \
 RC3=$?
 set -e 2>/dev/null || true
 RES3=$(tail -1 "$WORK/t3.out")
-if [ "$RC3" -eq 2 ] && printf '%s' "$RES3" | jq -e '.code=="RECOVERY_TOO_SOON"' >/dev/null 2>&1; then
-  ok "orphan INTENT age <12s → RECOVERY_TOO_SOON (retry; loop yields to next tick)"
+if [ "$RC3" -eq 0 ] && printf '%s' "$RES3" | jq -e '.code=="LOOP_DONE"' >/dev/null 2>&1; then
+  ok "orphan INTENT age <12s → tick completes; transient logged, INTENT preserved for next tick"
 else
   err "intent-too-soon: rc=$RC3 res=$RES3"
 fi
@@ -255,8 +255,8 @@ RECOVERY_INDEXER_PROBE_CMD='echo "null"' \
 RC3C=$?
 set -e 2>/dev/null || true
 RES3C=$(tail -1 "$WORK/t3c.out")
-if [ "$RC3C" -eq 1 ] && printf '%s' "$RES3C" | jq -e '.code=="INTENT_AMBIGUOUS"' >/dev/null 2>&1; then
-  ok "age ≥1h, no evidence → INTENT_AMBIGUOUS (loop halts; operator triages)"
+if [ "$RC3C" -eq 0 ] && printf '%s' "$RES3C" | jq -e '.code=="LOOP_DONE"' >/dev/null 2>&1; then
+  ok "age ≥1h, no evidence → AMBIGUOUS file written; loop continues; operator triages async"
 else
   err "intent-ambig: rc=$RC3C res=$RES3C"
 fi
