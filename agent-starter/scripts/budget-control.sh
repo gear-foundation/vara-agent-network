@@ -53,6 +53,8 @@ source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/state-dir.sh"
 # shellcheck source=lib/atomic-write.sh
 source "$SCRIPT_DIR/lib/atomic-write.sh"
+# shellcheck source=lib/env-require.sh
+source "$SCRIPT_DIR/lib/env-require.sh"
 
 setup_status_trap
 
@@ -61,11 +63,7 @@ setup_status_trap
 # ---------------------------------------------------------------------------
 
 require_state_dir   # exports STATE_DIR or exits MISSING_STATE_DIR
-
-ACCT="${VARA_WALLET_ACCOUNT:-}"
-if [[ -z "$ACCT" ]]; then
-  status_err "MISSING_ACCOUNT" "VARA_WALLET_ACCOUNT is required"
-fi
+require_wallet_account
 
 NETWORK="${VARA_AGENT_NETWORK:-testnet}"
 

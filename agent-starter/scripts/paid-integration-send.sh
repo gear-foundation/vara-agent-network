@@ -82,6 +82,8 @@ source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/state-dir.sh"
 # shellcheck source=lib/atomic-write.sh
 source "$SCRIPT_DIR/lib/atomic-write.sh"
+# shellcheck source=lib/env-require.sh
+source "$SCRIPT_DIR/lib/env-require.sh"
 
 setup_status_trap
 
@@ -101,9 +103,7 @@ while [[ $# -gt 0 ]]; do
 done
 
 require_state_dir
-
-ACCT="${VARA_WALLET_ACCOUNT:-}"
-[[ -n "$ACCT" ]] || status_err "MISSING_ACCOUNT" "VARA_WALLET_ACCOUNT is required"
+require_wallet_account
 
 NETWORK="${VARA_AGENT_NETWORK:-testnet}"
 DECIMALS="${VARA_DECIMALS:-12}"
@@ -113,15 +113,14 @@ case "$LOOP_MODE_RAW" in
   consumer|via-program) LOOP_MODE_VAL="$LOOP_MODE_RAW" ;;
   *) status_err "OPERAND" "LOOP_MODE='$LOOP_MODE_RAW' must be 'consumer' or 'via-program'" ;;
 esac
+OUTBOUND_METHOD="${VARA_AGENT_OUTBOUND_METHOD:-Outbound/Tip}"
 if [[ "$LOOP_MODE_VAL" = "via-program" ]]; then
-  OWN_PID="${VARA_AGENT_OWN_PROGRAM_ID:-}"
-  [[ -n "$OWN_PID" ]] || status_err "MISSING_OWN_PID" \
-    "LOOP_MODE=via-program requires VARA_AGENT_OWN_PROGRAM_ID (32-byte 0x-hex)"
-  [[ "$OWN_PID" =~ ^0x[0-9a-fA-F]{1,64}$ ]] || status_err "OPERAND" \
-    "VARA_AGENT_OWN_PROGRAM_ID='$OWN_PID' is not 0x-hex"
-  OWN_IDL_PATH="${VARA_AGENT_OWN_IDL_PATH:-}"
-  [[ -n "$OWN_IDL_PATH" && -f "$OWN_IDL_PATH" ]] || status_err "OPERAND" \
-    "LOOP_MODE=via-program requires VARA_AGENT_OWN_IDL_PATH to point at a readable IDL file"
+  require_own_program_id
+  # Send routes the wallet extrinsic at OWN_PID — must be valid hex.
+  [[ "$OWN_PID" =~ $RE_TARGET_HEX ]] || status_err "OPERAND" \
+    "VARA_AGENT_OWN_PROGRAM_ID='$OWN_PID' is not 32-byte 0x-hex"
+  require_readable_file VARA_AGENT_OWN_IDL_PATH
+  OWN_IDL_PATH="$VARA_AGENT_OWN_IDL_PATH"
 fi
 
 # ---------------------------------------------------------------------------
@@ -147,14 +146,19 @@ if ! DECISION=$(jq -e . "$DECISION_PATH" 2>/dev/null); then
 fi
 
 NONCE=$(printf '%s' "$DECISION" | jq -r '.nonce // empty')
-TARGET=$(printf '%s' "$DECISION" | jq -r '.selected.target // empty')
-METHOD=$(printf '%s' "$DECISION" | jq -r '.selected.method // empty')
-ARGS=$(printf '%s' "$DECISION"   | jq -r '.selected.args_template // empty')
-VALUE_VARA=$(printf '%s' "$DECISION" | jq -r '.selected.value_vara // empty')
-IDL_PATH=$(printf '%s' "$DECISION" | jq -r '.idl_cache_path // empty')
-TS_PRE_SEND=$(printf '%s' "$DECISION" | jq -r '.ts_pre_send // empty')
+# INNER_* are the canonical decision values: who we're paying and what we're
+# paying them for. WALLET_* (set below) are the routing values that the
+# wallet extrinsic actually carries. In consumer mode they're identical;
+# in via-program mode WALLET_TARGET=OWN_PID and INNER_TARGET is encoded
+# into Outbound/Tip args.
+INNER_TARGET=$(printf '%s' "$DECISION" | jq -r '.selected.target // empty')
+INNER_METHOD=$(printf '%s' "$DECISION" | jq -r '.selected.method // empty')
+INNER_ARGS=$(printf   '%s' "$DECISION" | jq -r '.selected.args_template // empty')
+VALUE_VARA=$(printf   '%s' "$DECISION" | jq -r '.selected.value_vara // empty')
+INNER_IDL_PATH=$(printf '%s' "$DECISION" | jq -r '.idl_cache_path // empty')
+TS_PRE_SEND=$(printf  '%s' "$DECISION" | jq -r '.ts_pre_send // empty')
 
-if [[ -z "$NONCE" || -z "$TARGET" || -z "$METHOD" || -z "$VALUE_VARA" ]]; then
+if [[ -z "$NONCE" || -z "$INNER_TARGET" || -z "$INNER_METHOD" || -z "$VALUE_VARA" ]]; then
   status_err "NO_ACTIVE" "active decision missing required fields (nonce/target/method/value_vara): $DECISION_PATH"
 fi
 
@@ -163,12 +167,6 @@ fi
 if ! awk -v v="$VALUE_VARA" 'BEGIN { exit !(v ~ /^[0-9]+(\.[0-9]+)?$/) }'; then
   status_err "OPERAND" "value_vara='$VALUE_VARA' must match ^[0-9]+(\\.[0-9]+)?\$"
 fi
-# Inner target = the provider being paid. In consumer mode this is also
-# the wallet-call target. In via-program mode the wallet call routes
-# through OWN_PID; the inner target is encoded into Outbound/Tip args.
-INNER_TARGET="$TARGET"
-INNER_METHOD="$METHOD"
-INNER_ARGS="$ARGS"
 
 VALUE_PLANCKS=$(awk -v v="$VALUE_VARA" -v d="$DECIMALS" 'BEGIN {
   # Multiply v * 10^d using long arithmetic to avoid floating-point loss.
@@ -205,34 +203,39 @@ if [[ -f "$INTENT_PATH" ]]; then
   status_err "OPERAND" "INTENT already exists at $INTENT_PATH; recovery scan must resolve before retrying"
 fi
 
-# In via-program mode, the wallet call targets OWN_PID/Outbound/Tip; the
-# inner provider being paid is INNER_TARGET. Recovery / forensics need
-# both views — wallet messageId belongs to the wallet→OWN_PID extrinsic,
-# and the program-internal msg::send (OWN_PID → INNER_TARGET) is a
-# separate on-chain event the indexer also records (with origin=program).
+# Resolve WALLET_* routing from LOOP_MODE. In consumer mode they mirror
+# INNER_*; in via-program mode the wallet call routes through OWN_PID's
+# Outbound method, with the inner target + value encoded into the args.
+# Recovery / forensics need both views — wallet messageId belongs to the
+# wallet→WALLET_TARGET extrinsic; the program-internal msg::send
+# (OWN_PID → INNER_TARGET) is a separate on-chain event the indexer
+# records with origin=program.
 if [[ "$LOOP_MODE_VAL" = "via-program" ]]; then
-  TARGET="$OWN_PID"
-  METHOD="Outbound/Tip"
-  # Outbound/Tip(target: ActorId, value: u128) — Sails encodes positional.
-  ARGS=$(jq -nc --arg t "$INNER_TARGET" --arg v "$VALUE_PLANCKS" \
-    '[$t, $v]')
-  IDL_PATH="$OWN_IDL_PATH"
+  WALLET_TARGET="$OWN_PID"
+  WALLET_METHOD="$OUTBOUND_METHOD"
+  WALLET_ARGS=$(jq -nc --arg t "$INNER_TARGET" --arg v "$VALUE_PLANCKS" '[$t, $v]')
+  WALLET_IDL_PATH="$OWN_IDL_PATH"
+else
+  WALLET_TARGET="$INNER_TARGET"
+  WALLET_METHOD="$INNER_METHOD"
+  WALLET_ARGS="$INNER_ARGS"
+  WALLET_IDL_PATH="$INNER_IDL_PATH"
 fi
 
 TS_INTENT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INTENT_BODY=$(jq -nc \
   --arg nonce "$NONCE" \
   --arg dec_path "$DECISION_PATH" \
-  --arg target "$TARGET" \
-  --arg method "$METHOD" \
-  --arg args "$ARGS" \
+  --arg target "$WALLET_TARGET" \
+  --arg method "$WALLET_METHOD" \
+  --arg args "$WALLET_ARGS" \
   --arg value_vara "$VALUE_VARA" \
   --arg value_planks "$VALUE_PLANCKS" \
   --arg caller "$ACCT" \
   --arg network "$NETWORK" \
   --arg ts "$TS_INTENT" \
   --arg ts_decision "$TS_PRE_SEND" \
-  --arg idl_path "$IDL_PATH" \
+  --arg idl_path "$WALLET_IDL_PATH" \
   --arg loop_mode "$LOOP_MODE_VAL" \
   --arg inner_target "$INNER_TARGET" \
   --arg inner_method "$INNER_METHOD" \
@@ -256,8 +259,8 @@ WALLET_LOG_ERR="$STATE_DIR/wallet-cli-out/${NONCE}.stderr.log"
 
 run_wallet() {
   if [[ -n "${SEND_WALLET_CMD:-}" ]]; then
-    TARGET="$TARGET" METHOD="$METHOD" ARGS="$ARGS" \
-    VALUE_PLANCKS="$VALUE_PLANCKS" IDL_PATH="$IDL_PATH" \
+    TARGET="$WALLET_TARGET" METHOD="$WALLET_METHOD" ARGS="$WALLET_ARGS" \
+    VALUE_PLANCKS="$VALUE_PLANCKS" IDL_PATH="$WALLET_IDL_PATH" \
     ACCT="$ACCT" NETWORK="$NETWORK" \
       eval "$SEND_WALLET_CMD"
     return $?
@@ -266,9 +269,9 @@ run_wallet() {
   # integration.md` Step 3 already uses today, kept identical to avoid
   # surprises during the operator → autonomous transition.
   local idl_args=()
-  [[ -n "$IDL_PATH" && -f "$IDL_PATH" ]] && idl_args=(--idl "$IDL_PATH")
-  vara-wallet --account "$ACCT" --network "$NETWORK" --json call "$TARGET" "$METHOD" \
-    --args "$ARGS" \
+  [[ -n "$WALLET_IDL_PATH" && -f "$WALLET_IDL_PATH" ]] && idl_args=(--idl "$WALLET_IDL_PATH")
+  vara-wallet --account "$ACCT" --network "$NETWORK" --json call "$WALLET_TARGET" "$WALLET_METHOD" \
+    --args "$WALLET_ARGS" \
     --value "$VALUE_PLANCKS" \
     "${idl_args[@]}"
 }
@@ -348,4 +351,4 @@ atomic_write "$POST_PATH" "$POST_BODY" \
   || status_retry "WALLET_PROBE_FAILED" "could not write post-send journal $POST_PATH; INTENT preserved"
 rm -f "$INTENT_PATH"
 
-status_ok "SEND_OK" "call sent: target=$TARGET method=$METHOD value=$VALUE_VARA messageId=$MESSAGE_ID nonce=$NONCE"
+status_ok "SEND_OK" "call sent: target=$WALLET_TARGET method=$WALLET_METHOD value=$VALUE_VARA messageId=$MESSAGE_ID nonce=$NONCE inner_target=$INNER_TARGET"

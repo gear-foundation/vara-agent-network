@@ -55,15 +55,13 @@ source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/state-dir.sh"
 # shellcheck source=lib/atomic-write.sh
 source "$SCRIPT_DIR/lib/atomic-write.sh"
+# shellcheck source=lib/env-require.sh
+source "$SCRIPT_DIR/lib/env-require.sh"
 
 setup_status_trap
 
 require_state_dir
-
-OWN_PID="${VARA_AGENT_OWN_PROGRAM_ID:-}"
-if [[ -z "$OWN_PID" ]]; then
-  status_err "MISSING_OWN_PID" "VARA_AGENT_OWN_PROGRAM_ID is required (agent's own deployed program id)"
-fi
+require_own_program_id
 
 INDEXER_URL="${INDEXER_GRAPHQL_URL:-https://agents-api.vara.network/graphql}"
 RANK_DECREMENT="${DISCOVERY_RANK_DECREMENT:-2}"

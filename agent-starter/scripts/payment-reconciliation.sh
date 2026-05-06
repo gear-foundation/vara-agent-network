@@ -64,6 +64,8 @@ source "$SCRIPT_DIR/lib/status.sh"
 source "$SCRIPT_DIR/lib/state-dir.sh"
 # shellcheck source=lib/atomic-write.sh
 source "$SCRIPT_DIR/lib/atomic-write.sh"
+# shellcheck source=lib/env-require.sh
+source "$SCRIPT_DIR/lib/env-require.sh"
 
 setup_status_trap
 
@@ -253,8 +255,8 @@ VIOLATIONS=()
 # `4 256` in unquoted =~ operands.
 # Upper bound 255: macOS bash 3.2 ERE rejects {n,m} where m > 255
 # ("maximum repetition exceeds 255"). 256 chars of audit reason is plenty.
+# RE_TARGET_HEX comes from lib/env-require.sh — single source of truth.
 RE_CHOSEN_REASON='^[A-Za-z][A-Za-z0-9_=, .:-]{4,255}$'
-RE_TARGET_HEX='^0x[0-9a-fA-F]{1,64}$'
 RE_NONNEG_INT='^[0-9]+$'
 
 # chosen_reason shape

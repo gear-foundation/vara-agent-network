@@ -82,6 +82,8 @@ source "$SCRIPT_DIR/lib/state-dir.sh"
 source "$SCRIPT_DIR/lib/atomic-write.sh"
 # shellcheck source=lib/run-script.sh
 source "$SCRIPT_DIR/lib/run-script.sh"
+# shellcheck source=lib/env-require.sh
+source "$SCRIPT_DIR/lib/env-require.sh"
 
 setup_status_trap
 
@@ -108,12 +110,8 @@ if ! [[ "$MAX_TICKS" =~ ^[0-9]+$ ]]; then
 fi
 
 require_state_dir
-
-OWN_PID="${VARA_AGENT_OWN_PROGRAM_ID:-}"
-[[ -n "$OWN_PID" ]] || status_err "MISSING_OWN_PID" "VARA_AGENT_OWN_PROGRAM_ID is required"
-
-ACCT="${VARA_WALLET_ACCOUNT:-}"
-[[ -n "$ACCT" ]] || status_err "MISSING_ACCOUNT" "VARA_WALLET_ACCOUNT is required"
+require_own_program_id
+require_wallet_account
 
 TICK_SEC="${TICK_SEC_OVERRIDE:-${LOOP_TICK_SEC:-30}}"
 if ! [[ "$TICK_SEC" =~ ^[0-9]+$ ]] || [[ "$TICK_SEC" -lt 1 ]]; then
