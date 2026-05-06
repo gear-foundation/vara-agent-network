@@ -37,6 +37,27 @@
 # Env (optional):
 #   VARA_AGENT_NETWORK   — default "testnet"
 #   VARA_DECIMALS        — default 12 (planks per VARA = 1e12)
+#   LOOP_MODE            — default "consumer". Set to "via-program" to
+#                          route the wallet call through the agent's own
+#                          program (Outbound/Tip), so the indexer records
+#                          the interaction with origin=program_initiated
+#                          and bumps `integrationsOutProgramInitiated`
+#                          (the v1.1 producer-side scoring axis per
+#                          references/season-economy.md). In via-program
+#                          mode, requires VARA_AGENT_OWN_PROGRAM_ID and
+#                          VARA_AGENT_OWN_IDL_PATH; the inner target +
+#                          value from the decision are passed as args
+#                          to Outbound/Tip on the agent's own program.
+#                          The pre-send INTENT journal records both the
+#                          wallet-call target (own pid) and the inner
+#                          target so reconciliation forensics can
+#                          distinguish the two row classes.
+#   VARA_AGENT_OWN_PROGRAM_ID  — required when LOOP_MODE=via-program;
+#                                 32-byte 0x-hex of the agent's own deployed
+#                                 program. The wallet call targets this id.
+#   VARA_AGENT_OWN_IDL_PATH    — required when LOOP_MODE=via-program;
+#                                 path to the agent's own program IDL so
+#                                 vara-wallet can encode Outbound/Tip args.
 #
 # Test override:
 #   SEND_WALLET_CMD="<cmd>"  — alternative wallet invocation. The cmd
@@ -87,6 +108,22 @@ ACCT="${VARA_WALLET_ACCOUNT:-}"
 NETWORK="${VARA_AGENT_NETWORK:-testnet}"
 DECIMALS="${VARA_DECIMALS:-12}"
 
+LOOP_MODE_RAW="${LOOP_MODE:-consumer}"
+case "$LOOP_MODE_RAW" in
+  consumer|via-program) LOOP_MODE_VAL="$LOOP_MODE_RAW" ;;
+  *) status_err "OPERAND" "LOOP_MODE='$LOOP_MODE_RAW' must be 'consumer' or 'via-program'" ;;
+esac
+if [[ "$LOOP_MODE_VAL" = "via-program" ]]; then
+  OWN_PID="${VARA_AGENT_OWN_PROGRAM_ID:-}"
+  [[ -n "$OWN_PID" ]] || status_err "MISSING_OWN_PID" \
+    "LOOP_MODE=via-program requires VARA_AGENT_OWN_PROGRAM_ID (32-byte 0x-hex)"
+  [[ "$OWN_PID" =~ ^0x[0-9a-fA-F]{1,64}$ ]] || status_err "OPERAND" \
+    "VARA_AGENT_OWN_PROGRAM_ID='$OWN_PID' is not 0x-hex"
+  OWN_IDL_PATH="${VARA_AGENT_OWN_IDL_PATH:-}"
+  [[ -n "$OWN_IDL_PATH" && -f "$OWN_IDL_PATH" ]] || status_err "OPERAND" \
+    "LOOP_MODE=via-program requires VARA_AGENT_OWN_IDL_PATH to point at a readable IDL file"
+fi
+
 # ---------------------------------------------------------------------------
 # Locate the active decision
 # ---------------------------------------------------------------------------
@@ -126,6 +163,13 @@ fi
 if ! awk -v v="$VALUE_VARA" 'BEGIN { exit !(v ~ /^[0-9]+(\.[0-9]+)?$/) }'; then
   status_err "OPERAND" "value_vara='$VALUE_VARA' must match ^[0-9]+(\\.[0-9]+)?\$"
 fi
+# Inner target = the provider being paid. In consumer mode this is also
+# the wallet-call target. In via-program mode the wallet call routes
+# through OWN_PID; the inner target is encoded into Outbound/Tip args.
+INNER_TARGET="$TARGET"
+INNER_METHOD="$METHOD"
+INNER_ARGS="$ARGS"
+
 VALUE_PLANCKS=$(awk -v v="$VALUE_VARA" -v d="$DECIMALS" 'BEGIN {
   # Multiply v * 10^d using long arithmetic to avoid floating-point loss.
   # Split on the dot.
@@ -161,6 +205,20 @@ if [[ -f "$INTENT_PATH" ]]; then
   status_err "OPERAND" "INTENT already exists at $INTENT_PATH; recovery scan must resolve before retrying"
 fi
 
+# In via-program mode, the wallet call targets OWN_PID/Outbound/Tip; the
+# inner provider being paid is INNER_TARGET. Recovery / forensics need
+# both views — wallet messageId belongs to the wallet→OWN_PID extrinsic,
+# and the program-internal msg::send (OWN_PID → INNER_TARGET) is a
+# separate on-chain event the indexer also records (with origin=program).
+if [[ "$LOOP_MODE_VAL" = "via-program" ]]; then
+  TARGET="$OWN_PID"
+  METHOD="Outbound/Tip"
+  # Outbound/Tip(target: ActorId, value: u128) — Sails encodes positional.
+  ARGS=$(jq -nc --arg t "$INNER_TARGET" --arg v "$VALUE_PLANCKS" \
+    '[$t, $v]')
+  IDL_PATH="$OWN_IDL_PATH"
+fi
+
 TS_INTENT=$(date -u +%Y-%m-%dT%H:%M:%SZ)
 INTENT_BODY=$(jq -nc \
   --arg nonce "$NONCE" \
@@ -175,10 +233,16 @@ INTENT_BODY=$(jq -nc \
   --arg ts "$TS_INTENT" \
   --arg ts_decision "$TS_PRE_SEND" \
   --arg idl_path "$IDL_PATH" \
+  --arg loop_mode "$LOOP_MODE_VAL" \
+  --arg inner_target "$INNER_TARGET" \
+  --arg inner_method "$INNER_METHOD" \
+  --arg inner_args "$INNER_ARGS" \
   '{nonce: $nonce, decision_path: $dec_path, target: $target,
     method: $method, args_template: $args, value_vara: $value_vara,
     value_raw_planks: $value_planks, caller: $caller, network: $network,
-    ts_pre_send: $ts, ts_decision: $ts_decision, idl_cache_path: $idl_path}')
+    ts_pre_send: $ts, ts_decision: $ts_decision, idl_cache_path: $idl_path,
+    loop_mode: $loop_mode, inner_target: $inner_target,
+    inner_method: $inner_method, inner_args: $inner_args}')
 
 atomic_write "$INTENT_PATH" "$INTENT_BODY" \
   || status_err "WALLET_PROBE_FAILED" "could not write INTENT journal at $INTENT_PATH"

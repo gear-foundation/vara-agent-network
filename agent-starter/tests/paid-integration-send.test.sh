@@ -236,6 +236,102 @@ fi
 
 wait "$SEND_PID" 2>/dev/null || true
 
+# ---------------------------------------------------------------------------
+# Test 11: LOOP_MODE=via-program — wallet call routes through OWN_PID, INTENT
+#          records both wallet-call target (OWN_PID) and inner_target. Args
+#          to Outbound/Tip = ["INNER_TARGET", "VALUE_PLANCKS"].
+# ---------------------------------------------------------------------------
+_setup_active
+OWN_PID="0xfeedcafefeedcafefeedcafefeedcafefeedcafefeedcafefeedcafefeedcafe"
+OWN_IDL="$WORK/own.idl"
+echo "stub idl" > "$OWN_IDL"
+# Stub captures the wallet-call args via env so we can assert routing.
+WALLET_CMD="echo \"target=\$TARGET method=\$METHOD args=\$ARGS value=\$VALUE_PLANCKS idl=\$IDL_PATH\" > \"$WORK/wallet-args\"; echo '{\"messageId\":\"${GOOD_MSGID}\"}'"
+set +e
+LOOP_MODE="via-program" \
+VARA_AGENT_OWN_PROGRAM_ID="$OWN_PID" \
+VARA_AGENT_OWN_IDL_PATH="$OWN_IDL" \
+VARA_AGENT_STATE_DIR="$WORK/state" \
+VARA_WALLET_ACCOUNT="test-acct" \
+SEND_WALLET_CMD="$WALLET_CMD" \
+  bash "$SEND" >"$WORK/_send.out" 2>/dev/null
+RC=$?
+set -e 2>/dev/null || true
+RESULT=$(tail -1 "$WORK/_send.out")
+
+if [ "$RC" -eq 0 ] && printf '%s' "$RESULT" | jq -e '.code=="SEND_OK"' >/dev/null 2>&1; then
+  ok "via-program mode → SEND_OK"
+else
+  err "via-program SEND_OK: rc=$RC result=$RESULT"
+fi
+
+# Wallet-call target was OWN_PID, not INNER_TARGET (= TGT_PID).
+WARGS=$(cat "$WORK/wallet-args" 2>/dev/null || echo "")
+if printf '%s' "$WARGS" | grep -q "target=$OWN_PID" \
+   && printf '%s' "$WARGS" | grep -q "method=Outbound/Tip" \
+   && printf '%s' "$WARGS" | grep -q "idl=$OWN_IDL"; then
+  ok "via-program: wallet call routes target=OWN_PID method=Outbound/Tip idl=OWN_IDL"
+else
+  err "via-program routing: $WARGS"
+fi
+
+# Outbound/Tip args = [INNER_TARGET, VALUE_PLANCKS]. We use a 0.5 VARA
+# decision so VALUE_PLANCKS=500000000000.
+EXPECTED_ARGS=$(jq -nc --arg t "$TGT_PID" '[$t, "500000000000"]')
+if printf '%s' "$WARGS" | grep -qF "args=$EXPECTED_ARGS"; then
+  ok "via-program: Outbound/Tip args = [INNER_TARGET, VALUE_PLANCKS]"
+else
+  err "via-program args: got '$WARGS' expected to contain '$EXPECTED_ARGS'"
+fi
+
+# INTENT body must record both views.
+POST_FILE="$WORK/state/pending-call-${GOOD_MSGID}.json"
+if jq -e --arg op "$OWN_PID" --arg it "$TGT_PID" \
+     '.target==$op and .inner_target==$it and .loop_mode=="via-program" and .method=="Outbound/Tip" and .inner_method=="Action/run"' \
+     "$POST_FILE" >/dev/null 2>&1; then
+  ok "via-program: INTENT body records target=OWN_PID + inner_target=TGT_PID + loop_mode + inner_method"
+else
+  err "via-program INTENT body: $(jq -c . "$POST_FILE" 2>&1)"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 12: via-program rejects missing OWN_PID
+# ---------------------------------------------------------------------------
+_setup_active
+set +e
+LOOP_MODE="via-program" \
+VARA_AGENT_STATE_DIR="$WORK/state" \
+VARA_WALLET_ACCOUNT="test-acct" \
+SEND_WALLET_CMD="echo '{}'" \
+  bash "$SEND" >"$WORK/_send.out" 2>/dev/null
+RC=$?
+set -e 2>/dev/null || true
+RESULT=$(tail -1 "$WORK/_send.out")
+if [ "$RC" -eq 1 ] && printf '%s' "$RESULT" | jq -e '.code=="MISSING_OWN_PID"' >/dev/null 2>&1; then
+  ok "via-program without VARA_AGENT_OWN_PROGRAM_ID → MISSING_OWN_PID"
+else
+  err "missing-own-pid: rc=$RC result=$RESULT"
+fi
+
+# ---------------------------------------------------------------------------
+# Test 13: invalid LOOP_MODE rejected
+# ---------------------------------------------------------------------------
+_setup_active
+set +e
+LOOP_MODE="bogus" \
+VARA_AGENT_STATE_DIR="$WORK/state" \
+VARA_WALLET_ACCOUNT="test-acct" \
+SEND_WALLET_CMD="echo '{}'" \
+  bash "$SEND" >"$WORK/_send.out" 2>/dev/null
+RC=$?
+set -e 2>/dev/null || true
+RESULT=$(tail -1 "$WORK/_send.out")
+if [ "$RC" -eq 1 ] && printf '%s' "$RESULT" | jq -e '.code=="OPERAND" and (.message | contains("LOOP_MODE"))' >/dev/null 2>&1; then
+  ok "invalid LOOP_MODE → OPERAND"
+else
+  err "bad-loop-mode: rc=$RC result=$RESULT"
+fi
+
 echo ""
 echo "paid-integration-send.test.sh: $PASS passed, $FAIL failed"
 [ $FAIL -eq 0 ] || exit 1
