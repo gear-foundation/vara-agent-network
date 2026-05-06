@@ -100,17 +100,27 @@ If `reconciliation.jsonl` already has a row with this messageId, the script skip
 
 ## Reading reconciliation.jsonl
 
-```bash
-# Last 5 outcomes:
-tail -5 "$VARA_AGENT_STATE_DIR/reconciliation.jsonl" | jq -c '{ts,outcome,target,messageId}'
+The journal contains two row classes: **paid-call rows** (written by reconciliation, audit-gated, carry `messageId`) and **info rows** (written by preflight on `TARGET_DEREGISTERED`, identifiable by `info_row: true`). Forensics queries that count real spends or audit-gate verdicts must filter info rows out — see [`references/runtime-architecture.md`](references/runtime-architecture.md) §"Info rows (TARGET_DEREGISTERED)" for the schema.
 
-# Calls with audit failures:
-jq -c 'select(.audit_status=="incomplete")' "$VARA_AGENT_STATE_DIR/reconciliation.jsonl"
+```bash
+# Last 5 paid-call outcomes (excludes info rows):
+jq -c 'select(.info_row != true) | {ts,outcome,target,messageId}' \
+     "$VARA_AGENT_STATE_DIR/reconciliation.jsonl" | tail -5
+
+# Calls with audit failures (audit gate is paid-call-only):
+jq -c 'select(.info_row != true and .audit_status=="incomplete")' \
+     "$VARA_AGENT_STATE_DIR/reconciliation.jsonl"
 
 # Spend by target (testnet planks, 1 VARA = 1e12):
 jq -r 'select(.outcome=="ok") | "\(.target) \(.value_raw_planks)"' \
      "$VARA_AGENT_STATE_DIR/reconciliation.jsonl" \
   | awk '{s[$1]+=$2} END {for (k in s) printf "%s %.4f VARA\n", k, s[k]/1e12}'
+
+# Targets that deregistered mid-flight (info rows only):
+jq -c 'select(.info_row==true and .info=="TARGET_DEREGISTERED") | {ts,target,detail}' \
+     "$VARA_AGENT_STATE_DIR/reconciliation.jsonl"
 ```
+
+`outcome=="ok"` already excludes info rows (info rows are `outcome="unknown"`), so the spend query is correct without an explicit `info_row` filter. Use the explicit filter when you want unambiguous semantics regardless of future schema additions.
 
 The journal is append-only and persists for the season; rotation is deferred per [`TODO.md`](TODO.md).

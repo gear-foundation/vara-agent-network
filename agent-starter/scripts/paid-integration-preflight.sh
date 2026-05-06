@@ -218,12 +218,23 @@ _log_target_deregistered() {
   # decrement counts this target's deregistration. NOT a bad-actor mark
   # (the provider may have legitimately deregistered) — runtime-arch
   # §"Failure codes" calls this an info row.
+  #
+  # Schema notes:
+  #   info_row=true        — discriminator. Forensics queries that count
+  #                          real spends MUST filter `info_row != true`.
+  #   outcome="unknown"    — no call was attempted; no on-chain trace
+  #                          either way. NOT "abandoned" (reserved for
+  #                          INTENT-recovery spends that may have landed)
+  #                          and NOT "ok"/"err" (no call → no result).
+  #   audit_status="n/a"   — the audit gate is for paid-call rows; info
+  #                          rows are out of scope. Distinct from
+  #                          "complete"/"incomplete" used by recon.
   local recon="$STATE_DIR/reconciliation.jsonl"
   local row
   row=$(jq -nc --arg ts "$(date -u +%Y-%m-%dT%H:%M:%SZ)" \
     --arg target "$SEL_TARGET" \
-    '{ts: $ts, target: $target, outcome: "abandoned",
-      audit_status: "complete", audit_violations: [],
+    '{ts: $ts, target: $target, outcome: "unknown",
+      audit_status: "n/a", info_row: true,
       info: "TARGET_DEREGISTERED",
       detail: "target not in applications at preflight time",
       messageId: ""}' 2>/dev/null) || return 0

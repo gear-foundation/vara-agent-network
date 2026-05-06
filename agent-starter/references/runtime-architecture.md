@@ -324,6 +324,23 @@ If any check fails, the row is still written but with `audit_status: "incomplete
 
 The schema lives in `references/event-shapes.md` so the audit gate, `rational-discovery.sh`, and `payment-reconciliation.sh` validate against the same source. Smoke tests cover both the happy path and each violation class.
 
+### Info rows (TARGET_DEREGISTERED)
+
+`paid-integration-preflight.sh` writes one additional row class to the same journal: an **info row** when a discovery-selected target turns out to be deregistered between discovery and preflight. No call is attempted, so there is no audit-gate row to write — but the loop still wants to surface the event so discovery's rank-decrement deprioritises that target on the next cycle.
+
+Info row schema:
+
+```jsonl
+{"ts":"...","target":"0x...","outcome":"unknown","audit_status":"n/a","info_row":true,"info":"TARGET_DEREGISTERED","detail":"target not in applications at preflight time","messageId":""}
+```
+
+- `info_row: true` is the **discriminator**. Forensics queries that count real spends (or audit-gate violations) MUST filter `select(.info_row != true)`.
+- `outcome: "unknown"` — no call was attempted, so no on-chain trace either way. Distinct from `abandoned`/`ambiguous` (those mean "call was sent, status unprovable") and from `ok`/`err` (those require a decoded reply).
+- `audit_status: "n/a"` — info rows are out of scope for the audit gate. Not `complete` (which would imply structural validation passed), not `incomplete` (which would imply the gate ran and failed).
+- `messageId: ""` — empty string, not absent, so filters using `.messageId == ""` and `.messageId | length == 0` both work.
+
+Discovery's rank-decrement filter `outcome != null && != "ok" && != "ambiguous"` matches `outcome="unknown"`, so info rows correctly count toward the target's recent-error tally. This is intentional: a target that deregistered while being probed should be deprioritised on the next cycle, even though no spend occurred.
+
 ## Halt-flag contract (D5)
 
 D5 is preserved: clearing `halt-payments` is operator-only. The doc adds a tiered trigger so a single transient reading cannot halt the loop on its own.
