@@ -30,6 +30,8 @@ Rate limits:
 cd services/voucher-backend
 cp .env.example .env
 npm install
+npm run build
+npm run migrate
 npm run seed
 npm run start:dev
 ```
@@ -43,6 +45,21 @@ npm run start:dev
 
 Update `src/seed.ts` when the coordination program is redeployed or when this
 service should cover additional companion programs.
+
+## Database Migrations
+
+Production runs with TypeORM `synchronize: false`, so apply migrations before
+starting or seeding the service:
+
+```bash
+npm run build
+npm run migrate
+npm run seed
+```
+
+The migration creates only voucher-backend tables plus
+`voucher_schema_migrations`. In Docker Compose, the `migrate` service runs
+after Postgres is healthy and before `seed`/`voucher-backend`.
 
 ## API
 

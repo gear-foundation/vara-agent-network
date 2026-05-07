@@ -31,8 +31,8 @@ if (!globalThis.crypto) {
         password: config.get('database.password'),
         database: config.get('database.name'),
         entities: [GaslessProgram, Voucher, IpTrancheUsage],
-        // synchronize:true is safe for initial dev/deploy. Disable for production
-        // once the schema is stable and switch to explicit migrations.
+        // Local dev can still self-sync; production schema is managed by
+        // `npm run migrate` and services/voucher-backend/migrations.
         synchronize: process.env.NODE_ENV !== 'production',
       }),
       inject: [ConfigService],

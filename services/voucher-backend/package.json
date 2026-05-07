@@ -5,6 +5,7 @@
   "private": true,
   "scripts": {
     "build": "nest build",
+    "migrate": "node dist/src/migrate.js",
     "start": "node dist/src/main.js",
     "start:dev": "nest start --watch",
     "start:prod": "node dist/src/main.js",

@@ -17,6 +17,25 @@ services:
       timeout: 5s
       retries: 20
 
+  migrate:
+    build:
+      context: .
+    image: vara-agent-network-voucher-backend:latest
+    restart: "no"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: voucher
+      DB_PASSWORD: voucher
+      DB_NAME: voucher
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "migrate"]
+
   seed:
     build:
       context: .
@@ -34,6 +53,8 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
     command: ["npm", "run", "seed"]
 
   voucher-backend:

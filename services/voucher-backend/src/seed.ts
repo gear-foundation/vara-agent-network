@@ -42,7 +42,7 @@ async function seed() {
     password: process.env.DB_PASSWORD,
     database: process.env.DB_NAME,
     entities: [GaslessProgram, Voucher],
-    synchronize: true,
+    synchronize: false,
   });
 
   await ds.initialize();
