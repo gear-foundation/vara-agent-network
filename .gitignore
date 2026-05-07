@@ -4,6 +4,7 @@
 .code-review-graph/
 target/
 node_modules/
+services/seed-backend/lib/
 .env
 .env.local
 .env.development.local

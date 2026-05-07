@@ -1366,7 +1366,7 @@
 }
 
 .ann-strip__rows[data-scrollable="true"] {
-  max-height: 245px;
+  max-height: 360px;
   overflow-y: auto;
   overscroll-behavior: contain;
   scrollbar-gutter: stable;
@@ -1394,13 +1394,14 @@
 
 .ann-strip__row {
   display: grid;
-  grid-template-columns: 72px auto minmax(0, 1fr);
-  align-items: center;
+  grid-template-columns: 72px 300px minmax(0, 1fr);
+  align-items: start;
   gap: 14px;
   border-bottom: 1px dashed oklch(0.245 0 0 / 0.58);
-  padding: 12px 20px;
+  padding: 14px 20px;
   color: var(--foreground);
   font-size: 14px;
+  line-height: 1.55;
   opacity: 0;
   transform: translateY(12px) scale(0.992);
   animation: board-ann-pop 0.34s cubic-bezier(0.21, 0.78, 0.32, 1) forwards;
@@ -1416,20 +1417,26 @@
 }
 
 .ann-strip__row time {
+  padding-top: 4px;
   color: var(--muted-foreground);
   font-family: var(--font-mono);
   white-space: nowrap;
 }
 
 .ann-strip__handle {
+  width: 100%;
+  min-width: 0;
   margin-left: 0;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .ann-strip__body {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .ann-strip__empty {
@@ -1543,7 +1550,6 @@
 }
 
 .board-tile__bio {
-  min-height: 45px;
   color: color-mix(in oklch, var(--muted-foreground) 84%, var(--foreground));
   font-size: 14.5px;
   line-height: 1.55;
@@ -1551,14 +1557,12 @@
 
 .board-tile__bio p {
   margin: 0;
-  min-height: 45px;
-  max-height: 45px;
+  max-height: calc(1.55em * 3);
   overflow: hidden;
   transition: max-height 0.24s ease;
 }
 
 .board-tile__bio[data-open="true"] p {
-  min-height: 45px;
   max-height: 720px;
   overflow: visible;
 }
@@ -2173,11 +2177,12 @@
   --tone: var(--primary);
   display: grid;
   grid-template-columns: 70px 150px minmax(0, 1fr);
-  align-items: center;
+  align-items: start;
   gap: 14px;
   border-bottom: 1px solid oklch(0.245 0 0 / 0.64);
   padding: 13px 18px;
   font-size: 13px;
+  line-height: 1.5;
   animation: insights-row-in 0.28s cubic-bezier(0.21, 0.78, 0.32, 1) both;
   animation-delay: calc(min(var(--row-index, 0), 8) * 28ms);
 }
@@ -2214,17 +2219,20 @@
 }
 
 .insights-event-feed__time {
+  padding-top: 2px;
   color: var(--muted-foreground);
 }
 
 .insights-event-feed__type {
+  padding-top: 2px;
   color: var(--tone);
   font-weight: 700;
 }
 
 .insights-event-feed__detail {
   display: flex;
-  align-items: center;
+  align-items: baseline;
+  flex-wrap: wrap;
   gap: 9px;
   min-width: 0;
   color: var(--muted-foreground);
@@ -2237,9 +2245,9 @@
 }
 
 .insights-event-feed__detail span:last-child {
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
 }
 
 .insights-bar-chart {

@@ -82,8 +82,6 @@ function toneStyle(tone: ChatTone) {
   } as CSSProperties
 }
 
-const CHAT_SCROLL_KEY = 'vara-a2a-chat-scroll-top'
-
 function messageTime(ts: string) {
   const value = Number(ts)
   if (!Number.isFinite(value) || value <= 0) return 'now'
@@ -113,7 +111,7 @@ export default function ChatPage() {
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
-  const restoreScrollTop = useRef<number | null>(null)
+  const initialScrollDone = useRef(false)
   const suppressNextAutoScroll = useRef(false)
   const stickToBottom = useRef(true)
   const lastScrollTop = useRef(0)
@@ -188,30 +186,20 @@ export default function ChatPage() {
   const applicationSuggestions = mentionSuggestions.filter((target) => target.ownerKind === 'Application')
   const showMentionPicker = inputFocused && Boolean(mentionMatch)
 
-  useEffect(() => {
-    const saved = window.sessionStorage.getItem(CHAT_SCROLL_KEY)
-    restoreScrollTop.current = saved === null ? null : Number(saved)
-    if (restoreScrollTop.current !== null) lastScrollTop.current = restoreScrollTop.current
+  const scrollFeedToBottom = () => {
+    const feed = feedRef.current
+    if (!feed) return
 
-    return () => {
-      const feed = feedRef.current
-      if (feed) {
-        window.sessionStorage.setItem(CHAT_SCROLL_KEY, String(feed.scrollTop))
-      }
-    }
-  }, [])
+    const previousBehavior = feed.style.scrollBehavior
+    feed.style.scrollBehavior = 'auto'
+    feed.scrollTop = feed.scrollHeight
+    feed.style.scrollBehavior = previousBehavior
+    lastScrollTop.current = feed.scrollTop
+  }
 
   useLayoutEffect(() => {
     const feed = feedRef.current
     const previousCount = previousMessageCount.current
-
-    if (feed && restoreScrollTop.current !== null && displayMessages.length > 0) {
-      feed.scrollTop = restoreScrollTop.current
-      lastScrollTop.current = feed.scrollTop
-      restoreScrollTop.current = null
-      previousMessageCount.current = displayMessages.length
-      return
-    }
 
     if (suppressNextAutoScroll.current) {
       suppressNextAutoScroll.current = false
@@ -220,11 +208,18 @@ export default function ChatPage() {
       return
     }
 
-    if (previousCount === 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'auto' })
-      if (feed) lastScrollTop.current = feed.scrollTop
+    if (previousCount === 0 && displayMessages.length > 0 && !initialScrollDone.current) {
+      initialScrollDone.current = true
+      stickToBottom.current = true
+      scrollFeedToBottom()
+      window.requestAnimationFrame(() => {
+        scrollFeedToBottom()
+        window.requestAnimationFrame(scrollFeedToBottom)
+      })
+      window.setTimeout(scrollFeedToBottom, 80)
+      window.setTimeout(scrollFeedToBottom, 240)
     } else if (stickToBottom.current) {
-      bottomRef.current?.scrollIntoView({ behavior: previousCount === 0 ? 'auto' : 'smooth' })
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
       if (feed) {
         window.requestAnimationFrame(() => {
           lastScrollTop.current = feed.scrollTop
@@ -364,7 +359,6 @@ export default function ChatPage() {
     if (!feed) return
     stickToBottom.current = feed.scrollHeight - feed.scrollTop - feed.clientHeight < 180
     lastScrollTop.current = feed.scrollTop
-    window.sessionStorage.setItem(CHAT_SCROLL_KEY, String(feed.scrollTop))
     if (feed.scrollTop > 90 || !hasMore || loadingOlder) return
     requestOlderMessages()
   }

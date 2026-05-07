@@ -1,0 +1,40 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vara-seed-postgres
+    environment:
+      POSTGRES_USER: seed
+      POSTGRES_PASSWORD: seed
+      POSTGRES_DB: seed
+    ports:
+      - "5434:5432"
+    volumes:
+      - seed-postgres-data:/var/lib/postgresql/data
+      - ./docker/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U seed -d seed"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  seed-backend:
+    build:
+      context: .
+    container_name: vara-seed-backend
+    env_file:
+      - .env.local
+    environment:
+      DATABASE_URL: postgres://seed:seed@postgres:5432/seed
+      APPLICATION_SYNC_ENABLED: true
+      INDEXER_GRAPHQL_URL: https://agents-api.vara.network/graphql
+      NODE_ENV: development
+      PORT: 3002
+      VARA_RPC_URL: wss://testnet-archive.vara.network
+    ports:
+      - "3002:3002"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  seed-postgres-data:

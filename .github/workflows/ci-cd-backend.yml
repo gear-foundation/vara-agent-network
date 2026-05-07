@@ -12,141 +12,48 @@ concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
-env:
-  ENVIRONMENT: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && 'prod' || 'stg' }}
-  REGISTRY: ghcr.io/$(echo ${{ github.repository }} | tr '[:upper:]' '[:lower:]')
-  AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-  AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-  AWS_REGION: ${{ secrets.AWS_REGION }}
-  KUBECTL_VERSION: ${{ vars.KUBECTL_VERSION }}
-  KUBE_CONFIG_DATA: ${{ secrets.KUBE_CONFIG_DATA }}
-  KUBE_NAMESPACE: vara-agent-network
-  KUBE_DEPLOY_PREFIX: backend
-  KUBE_DEPLOY_TYPE: deployment
-  KUBE_COMPONENTS: indexer api
-
 jobs:
-  prepare:
-    runs-on: ubuntu-latest
-    outputs:
-      image_name: ${{ steps.image.outputs.image_name }}
-      matrix: ${{ steps.matrix.outputs.components }}
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
+  indexer:
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/build-and-deploy-k8s.yml@main
+    with:
+      name: backend
+      component: indexer
+      dockerfile: services/indexer/Dockerfile
+      context: .
+      kube_namespace: vara-agent-network
+      aws: true
+    secrets:
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION:            ${{ secrets.AWS_REGION }}
+      KUBE_CONFIG_DATA:      ${{ secrets.KUBE_CONFIG_DATA }}
 
-      - name: Get branch
-        id: branch
-        run: |
-          branch_name=${GITHUB_REF#refs/heads/}
-          echo "branch_name=$branch_name" >> $GITHUB_ENV
+  api:
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/build-and-deploy-k8s.yml@main
+    with:
+      name: backend
+      component: api
+      dockerfile: services/indexer/Dockerfile
+      context: .
+      kube_namespace: vara-agent-network
+      aws: true
+    secrets:
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION:            ${{ secrets.AWS_REGION }}
+      KUBE_CONFIG_DATA:      ${{ secrets.KUBE_CONFIG_DATA }}
 
-      - name: Get short SHA
-        id: sha
-        run: |
-          sha_short=$(git rev-parse --short HEAD)
-          echo "sha_short=$sha_short" >> $GITHUB_ENV
-
-      - name: Set IMAGE_NAME
-        id: image
-        run: |
-          image_name=${{ env.REGISTRY }}-${{ env.KUBE_DEPLOY_PREFIX }}:${{ env.branch_name }}-${{ env.sha_short }}
-          echo "image_name=$image_name" >> $GITHUB_OUTPUT
-
-      - name: Generate matrix
-        id: matrix
-        run: |
-          components='${{ env.KUBE_COMPONENTS }}'
-          if [ -z "$components" ]; then
-            array='[""]'
-          else
-            array=$(jq -nc --arg c "$components" '$c | split(" ") | map(select(length > 0))')
-          fi
-          echo "components=$array" >> $GITHUB_OUTPUT
-
-  build-and-push-image:
-    needs: [prepare]
-    runs-on: ubuntu-latest
-    environment: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && 'prod' || 'stg' }}
-    permissions:
-      contents: read
-      packages: write
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v6
-
-      - name: Log in to the github container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Build and push image
-        uses: docker/build-push-action@v6
-        with:
-          context: .
-          file: services/indexer/Dockerfile
-          push: true
-          tags: ${{ needs.prepare.outputs.image_name }}
-
-  deploy-to-k8s:
-    needs: [prepare, build-and-push-image]
-    runs-on: ubuntu-latest
-    environment: ${{ (github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main') && 'prod' || 'stg' }}
-    strategy:
-      matrix:
-        component: ${{ fromJson(needs.prepare.outputs.matrix) }}
-      fail-fast: false
-    steps:
-      - name: Setup kubectl
-        run: |
-          curl -LO "https://dl.k8s.io/release/${{ env.KUBECTL_VERSION }}/bin/linux/amd64/kubectl"
-          chmod +x kubectl
-          sudo mv kubectl /usr/local/bin/
-          mkdir -p $HOME/.kube/
-          echo "${{ env.KUBE_CONFIG_DATA }}" | base64 -d > $HOME/.kube/config
-
-      - name: Configure AWS credentials
-        uses: aws-actions/configure-aws-credentials@v5
-        with:
-          aws-access-key-id: ${{ env.AWS_ACCESS_KEY_ID }}
-          aws-secret-access-key: ${{ env.AWS_SECRET_ACCESS_KEY }}
-          aws-region: ${{ env.AWS_REGION }}
-
-      - name: Set deploy name
-        id: deploy_name
-        run: |
-          if [ "${{ matrix.component }}" = "${{ env.KUBE_DEPLOY_PREFIX }}" ] || [ -z "${{ matrix.component }}" ]; then
-            deploy_name="${{ env.KUBE_DEPLOY_PREFIX }}-${{ env.ENVIRONMENT }}"
-          else
-            deploy_name="${{ env.KUBE_DEPLOY_PREFIX }}-${{ matrix.component }}-${{ env.ENVIRONMENT }}"
-          fi
-          echo "name=$deploy_name" >> $GITHUB_OUTPUT
-
-      - name: Update
-        env:
-          DEPLOY_NAME: ${{ steps.deploy_name.outputs.name }}
-          NAMESPACE: ${{ env.KUBE_NAMESPACE }}
-          DEPLOY_TYPE: ${{ env.KUBE_DEPLOY_TYPE }}
-          IMAGE_NAME: ${{ needs.prepare.outputs.image_name }}
-        run: |
-          echo "Updating: $DEPLOY_NAME"
-
-          containers=$(kubectl get "$DEPLOY_TYPE/$DEPLOY_NAME" -n "$NAMESPACE" \
-            -o jsonpath="{.spec.template.spec.containers[*].name}")
-          init_containers=$(kubectl get "$DEPLOY_TYPE/$DEPLOY_NAME" -n "$NAMESPACE" \
-            -o jsonpath="{.spec.template.spec.initContainers[*].name}")
-
-          for container in $containers $init_containers; do
-            echo "Setting image for container: $container"
-            kubectl set image "$DEPLOY_TYPE/$DEPLOY_NAME" \
-              "$container=$IMAGE_NAME" -n "$NAMESPACE"
-          done
-
-          kubectl rollout restart "$DEPLOY_TYPE/$DEPLOY_NAME" -n "$NAMESPACE"
-
-      - name: Check
-        run: |
-          echo "Checking: ${{ steps.deploy_name.outputs.name }}"
-          kubectl rollout status ${{ env.KUBE_DEPLOY_TYPE }}/${{ steps.deploy_name.outputs.name }} --timeout=300s -n ${{ env.KUBE_NAMESPACE }}
+  seed:
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/build-and-deploy-k8s.yml@main
+    with:
+      name: backend
+      component: seed
+      dockerfile: services/seed-backend/Dockerfile
+      context: services/seed-backend
+      kube_namespace: vara-agent-network
+      aws: true
+    secrets:
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION:            ${{ secrets.AWS_REGION }}
+      KUBE_CONFIG_DATA:      ${{ secrets.KUBE_CONFIG_DATA }}
