@@ -181,22 +181,34 @@ async function main() {
         });
       }
 
+      // Built once and reused across Pass 3 (P2P overcount filter) and Pass 4
+      // (Strategy C). Pass 2's `MessageQueued` events define the wallet axis
+      // for this block; both downstream passes need the set to avoid
+      // double-counting wallet-originated messages on the P2P axes.
+      const knownMessageIdsThisBlock = buildKnownMessageIds(ctx.events);
+
       // Pass 3: ProgramMessage events synthesized by the storage-diff detector.
       // Captures program → program edges that pallet-gear does not emit as
       // events. Tagged `detected_via` ∈ {dispatches_storage, waitlist_storage}
       // and bumps `app_metrics.p2p_*` columns (kept separate from the
-      // wallet-driven `integrations_*` columns).
+      // wallet-driven `integrations_*` columns). Wallet→program messages
+      // that briefly appear in dispatches/waitlist this block are filtered
+      // by `knownMessageIdsThisBlock` inside the handler.
       let programMessageCount = 0;
       for (const event of ctx.events) {
         if (!isProgramMessage(event)) continue;
         programMessageCount++;
-        await handleProgramMessage(db, {
-          block: ctx,
-          event,
-          extrinsicIdx: event.indexInBlock,
-          eventIdx: event.indexInBlock,
-          programId: processorConfig.programId,
-        });
+        await handleProgramMessage(
+          db,
+          {
+            block: ctx,
+            event,
+            extrinsicIdx: event.indexInBlock,
+            eventIdx: event.indexInBlock,
+            programId: processorConfig.programId,
+          },
+          knownMessageIdsThisBlock,
+        );
       }
 
       // Pass 4: event-only inference for intra-block P2P participation.
@@ -214,7 +226,6 @@ async function main() {
       let backtrackCount = 0;
       if (ctx.inLiveWindow !== false) {
         const knownMQDestinations = buildKnownMQDestinations(ctx.events);
-        const knownMessageIdsThisBlock = buildKnownMessageIds(ctx.events);
         const programsWithCrossBlockEdge = buildProgramsWithCrossBlockEdge(ctx.events);
         for (const event of ctx.events) {
           if (isMessagesDispatched(event)) {

@@ -180,8 +180,9 @@ export class P2PDetector {
 
     let dispBefore: Map<Hex, StoredMessageJSON>;
     let waitBefore: Map<Hex, StoredMessageJSON>;
+    const cacheHit = this.lastBlockHash === parentHash;
 
-    if (this.lastBlockHash === parentHash) {
+    if (cacheHit) {
       // Fast path: previous block's snapshot is reusable.
       dispBefore = this.lastDispatches;
       waitBefore = this.lastWaitlist;
@@ -255,7 +256,7 @@ export class P2PDetector {
       log.debug("p2p detector: edges", {
         block: blockHash,
         count: out.size,
-        cacheHit: this.lastBlockHash === blockHash,
+        cacheHit,
       });
     }
     return Array.from(out.values());

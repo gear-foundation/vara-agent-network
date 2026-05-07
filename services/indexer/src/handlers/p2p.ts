@@ -17,7 +17,7 @@
 import { config, requireProcessorConfig } from "../config.js";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
-import type { ProgramMessageEvent } from "../helpers/types.js";
+import type { Hex, ProgramMessageEvent } from "../helpers/types.js";
 import {
   bumpMetric,
   CALLER_KIND,
@@ -31,9 +31,17 @@ import {
 export async function handleProgramMessage(
   db: Db,
   ctx: HandlerContext<ProgramMessageEvent>,
+  knownMessageIdsThisBlock: Set<Hex>,
 ): Promise<void> {
   const processorConfig = requireProcessorConfig();
   const { source, destination, messageId, detectedVia } = ctx.event;
+
+  // Wallet→program messages parked in waitlist (e.g. app calls `wait()`
+  // mid-handler) appear in the storage diff at the same block they were
+  // queued, so the detector flags them as P2P. They're already counted on
+  // the wallet axis (`integrations_*`) by Pass 2 — bumping `p2p_calls_in`
+  // here would double-count. Filter on the block's MessageQueued ids.
+  if (knownMessageIdsThisBlock.has(messageId)) return;
 
   // Self-calls aren't cross-program edges.
   if (source === destination) return;
