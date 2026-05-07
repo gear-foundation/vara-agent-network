@@ -1,7 +1,7 @@
 import { createHash } from 'crypto';
 
 /**
- * Deterministic pair of int32 keys for `pg_advisory_lock(k1, k2)` —
+ * Deterministic pair of int32 keys for `pg_try_advisory_xact_lock(k1, k2)` —
  * 64 bits of key space from SHA-256(account). Serializes concurrent
  * work for a single wallet (request handler + cron revoke) so DB-state
  * checks are race-free. Two-key form avoids the birthday-collision DoS

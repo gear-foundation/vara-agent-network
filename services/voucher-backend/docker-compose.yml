@@ -1,0 +1,65 @@
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: vara-voucher-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: voucher
+      POSTGRES_USER: voucher
+      POSTGRES_PASSWORD: voucher
+    ports:
+      - "5435:5432"
+    volumes:
+      - voucher-postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U voucher -d voucher"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  seed:
+    build:
+      context: .
+    image: vara-agent-network-voucher-backend:latest
+    restart: "no"
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: voucher
+      DB_PASSWORD: voucher
+      DB_NAME: voucher
+    depends_on:
+      postgres:
+        condition: service_healthy
+    command: ["npm", "run", "seed"]
+
+  voucher-backend:
+    build:
+      context: .
+    image: vara-agent-network-voucher-backend:latest
+    container_name: vara-voucher-backend
+    restart: unless-stopped
+    env_file:
+      - path: .env
+        required: false
+    environment:
+      NODE_ENV: production
+      PORT: 3001
+      DB_HOST: postgres
+      DB_PORT: 5432
+      DB_USER: voucher
+      DB_PASSWORD: voucher
+      DB_NAME: voucher
+    ports:
+      - "3001:3001"
+    depends_on:
+      postgres:
+        condition: service_healthy
+      seed:
+        condition: service_completed_successfully
+
+volumes:
+  voucher-postgres-data:

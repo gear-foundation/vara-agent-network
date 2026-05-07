@@ -82,6 +82,9 @@ describe('GaslessService (hourly-tranche model)', () => {
   let ds: { createQueryRunner: jest.Mock };
   let qrQuery: jest.Mock;
   let qrRelease: jest.Mock;
+  let qrStartTransaction: jest.Mock;
+  let qrCommitTransaction: jest.Mock;
+  let qrRollbackTransaction: jest.Mock;
   let cfg: { get: jest.Mock };
   let cfgOverrides: Partial<Record<string, number | string>>;
   // In-memory simulation of the ip_tranche_usage table for tests. Mirrors the
@@ -122,15 +125,21 @@ describe('GaslessService (hourly-tranche model)', () => {
     };
     voucherRepo = {};
     qrQuery = jest.fn().mockImplementation(async (sql: string) => {
-      if (sql === 'SELECT pg_try_advisory_lock($1, $2) AS acquired') {
+      if (sql === 'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired') {
         return [{ acquired: true }];
       }
       return [];
     });
     qrRelease = jest.fn().mockResolvedValue(undefined);
+    qrStartTransaction = jest.fn().mockResolvedValue(undefined);
+    qrCommitTransaction = jest.fn().mockResolvedValue(undefined);
+    qrRollbackTransaction = jest.fn().mockResolvedValue(undefined);
     ds = {
       createQueryRunner: jest.fn().mockReturnValue({
         connect: jest.fn().mockResolvedValue(undefined),
+        startTransaction: qrStartTransaction,
+        commitTransaction: qrCommitTransaction,
+        rollbackTransaction: qrRollbackTransaction,
         query: qrQuery,
         release: qrRelease,
       }),
@@ -282,13 +291,17 @@ describe('GaslessService (hourly-tranche model)', () => {
 
   // ── Advisory lock ──────────────────────────────────────────────────────────
 
-  it('acquires + releases pg advisory lock on success', async () => {
+  it('acquires transaction-level pg advisory lock on success', async () => {
     voucherSvc.getVoucher.mockResolvedValue(null);
     await service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A] }, IP);
     const calls = qrQuery.mock.calls.map((c) => c[0]);
-    expect(calls).toContain('SELECT pg_try_advisory_lock($1, $2) AS acquired');
+    expect(calls).toContain('SELECT set_config($1, $2, true)');
+    expect(calls).toContain('SELECT pg_try_advisory_xact_lock($1, $2) AS acquired');
+    expect(calls).not.toContain('SELECT pg_try_advisory_lock($1, $2) AS acquired');
     expect(calls).not.toContain('SELECT pg_advisory_lock($1, $2)');
-    expect(calls).toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(calls).not.toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(qrStartTransaction).toHaveBeenCalled();
+    expect(qrCommitTransaction).toHaveBeenCalled();
     expect(qrRelease).toHaveBeenCalled();
   });
 
@@ -298,7 +311,7 @@ describe('GaslessService (hourly-tranche model)', () => {
     jest.setSystemTime(new Date('2026-04-22T23:59:58Z').getTime());
     await service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A] }, IP);
     const firstKeyPair = qrQuery.mock.calls.filter((c) =>
-      c[0] === 'SELECT pg_try_advisory_lock($1, $2) AS acquired',
+      c[0] === 'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired',
     )[0][1];
     qrQuery.mockClear();
     voucherSvc.getVoucher.mockResolvedValue(
@@ -307,7 +320,7 @@ describe('GaslessService (hourly-tranche model)', () => {
     jest.setSystemTime(new Date('2026-04-23T00:00:05Z').getTime());
     await service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A] }, IP);
     const secondKeyPair = qrQuery.mock.calls.filter((c) =>
-      c[0] === 'SELECT pg_try_advisory_lock($1, $2) AS acquired',
+      c[0] === 'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired',
     )[0][1];
     expect(firstKeyPair).toEqual(secondKeyPair);
     jest.useRealTimers();
@@ -320,7 +333,8 @@ describe('GaslessService (hourly-tranche model)', () => {
       service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A] }, IP),
     ).rejects.toThrow(InternalServerErrorException);
     const calls = qrQuery.mock.calls.map((c) => c[0]);
-    expect(calls).toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(calls).not.toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(qrRollbackTransaction).toHaveBeenCalled();
     expect(qrRelease).toHaveBeenCalled();
   });
 

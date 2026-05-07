@@ -34,8 +34,8 @@ import { ConfigService } from '@nestjs/config';
  *
  * Abuse gates:
  *   1. Per-IP UTC-day tranche ceiling stored in Postgres.
- *   2. TOCTOU-safe per-account pg_advisory_lock — serializes concurrent
- *      requests from the same wallet so the DB-state check is race-free.
+ *   2. TOCTOU-safe per-account pg_try_advisory_xact_lock — serializes
+ *      concurrent requests from the same wallet so the DB-state check is race-free.
  *   3. DB state is authoritative (survives restarts + multi-pod).
  */
 export interface VoucherResult {
@@ -274,8 +274,8 @@ export class GaslessService implements OnModuleInit {
    * `Retry-After` header.
    *
    * Rate-limit architecture (defense layers, innermost is authoritative):
-   *   1. PG advisory lock on account hash — serializes concurrent same-wallet
-   *      requests across pods (cluster-wide, not per-process).
+   *   1. PG transaction-level advisory lock on account hash — serializes
+   *      concurrent same-wallet requests across pods (cluster-wide, not per-process).
    *   2. DB state `existing.lastRenewedAt < now - trancheIntervalSec` — the
    *      ONLY authoritative per-wallet gate. Survives restarts + multi-pod.
    *   3. Per-IP tranche-count ceiling in Postgres — survives restarts and

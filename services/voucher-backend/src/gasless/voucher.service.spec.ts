@@ -114,7 +114,7 @@ describe('VoucherService', () => {
       }),
     };
     qrQuery = jest.fn().mockImplementation(async (sql: string) => {
-      if (sql === 'SELECT pg_try_advisory_lock($1, $2) AS acquired') {
+      if (sql === 'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired') {
         return [{ acquired: true }];
       }
       return [];
@@ -123,6 +123,9 @@ describe('VoucherService', () => {
     ds = {
       createQueryRunner: jest.fn().mockReturnValue({
         connect: jest.fn().mockResolvedValue(undefined),
+        startTransaction: jest.fn().mockResolvedValue(undefined),
+        commitTransaction: jest.fn().mockResolvedValue(undefined),
+        rollbackTransaction: jest.fn().mockResolvedValue(undefined),
         query: qrQuery,
         release: qrRelease,
       }),

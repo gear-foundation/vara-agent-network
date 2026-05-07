@@ -27,6 +27,9 @@ describe('VoucherTask', () => {
   let qrQuery: jest.Mock;
   let qrRelease: jest.Mock;
   let ds: { createQueryRunner: jest.Mock };
+  let qrStartTransaction: jest.Mock;
+  let qrCommitTransaction: jest.Mock;
+  let qrRollbackTransaction: jest.Mock;
 
   beforeEach(async () => {
     repo = {
@@ -38,11 +41,22 @@ describe('VoucherTask', () => {
       }),
     };
     voucherSvc = { revoke: jest.fn().mockResolvedValue('revoked') };
-    qrQuery = jest.fn().mockResolvedValue([]);
+    qrQuery = jest.fn().mockImplementation(async (sql: string) => {
+      if (sql === 'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired') {
+        return [{ acquired: true }];
+      }
+      return [];
+    });
     qrRelease = jest.fn().mockResolvedValue(undefined);
+    qrStartTransaction = jest.fn().mockResolvedValue(undefined);
+    qrCommitTransaction = jest.fn().mockResolvedValue(undefined);
+    qrRollbackTransaction = jest.fn().mockResolvedValue(undefined);
     ds = {
       createQueryRunner: jest.fn().mockReturnValue({
         connect: jest.fn().mockResolvedValue(undefined),
+        startTransaction: qrStartTransaction,
+        commitTransaction: qrCommitTransaction,
+        rollbackTransaction: qrRollbackTransaction,
         query: qrQuery,
         release: qrRelease,
       }),
@@ -124,14 +138,17 @@ describe('VoucherTask', () => {
   // The fix: re-read under the per-wallet advisory lock and skip if the
   // fresh row is no longer expired.
 
-  it('acquires per-wallet advisory lock before revoking', async () => {
+  it('acquires per-wallet transaction-level advisory lock before revoking', async () => {
     const v = makeVoucher('aaa');
     repo.find.mockResolvedValue([v]);
     repo.findOne.mockResolvedValue(v);
     await task.revokeExpiredVouchers();
     const calls = qrQuery.mock.calls.map((c) => c[0]);
-    expect(calls).toContain('SELECT pg_advisory_lock($1, $2)');
-    expect(calls).toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(calls).toContain('SELECT set_config($1, $2, true)');
+    expect(calls).toContain('SELECT pg_try_advisory_xact_lock($1, $2) AS acquired');
+    expect(calls).not.toContain('SELECT pg_advisory_lock($1, $2)');
+    expect(calls).not.toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(qrCommitTransaction).toHaveBeenCalled();
     expect(qrRelease).toHaveBeenCalled();
   });
 
@@ -147,8 +164,10 @@ describe('VoucherTask', () => {
     expect(voucherSvc.revoke).not.toHaveBeenCalled();
     // Lock was still acquired and released — we didn't bail before the race check.
     const calls = qrQuery.mock.calls.map((c) => c[0]);
-    expect(calls).toContain('SELECT pg_advisory_lock($1, $2)');
-    expect(calls).toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(calls).toContain('SELECT pg_try_advisory_xact_lock($1, $2) AS acquired');
+    expect(calls).not.toContain('SELECT pg_advisory_lock($1, $2)');
+    expect(calls).not.toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(qrCommitTransaction).toHaveBeenCalled();
   });
 
   it('skips revoke when the voucher was already revoked by another path', async () => {
@@ -159,14 +178,15 @@ describe('VoucherTask', () => {
     expect(voucherSvc.revoke).not.toHaveBeenCalled();
   });
 
-  it('releases the advisory lock even when revoke() throws', async () => {
+  it('rolls back the advisory lock transaction even when revoke() throws', async () => {
     const v = makeVoucher('aaa');
     repo.find.mockResolvedValue([v]);
     repo.findOne.mockResolvedValue(v);
     voucherSvc.revoke.mockRejectedValue(new Error('chain down'));
     await task.revokeExpiredVouchers();
     const calls = qrQuery.mock.calls.map((c) => c[0]);
-    expect(calls).toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(calls).not.toContain('SELECT pg_advisory_unlock($1, $2)');
+    expect(qrRollbackTransaction).toHaveBeenCalled();
     expect(qrRelease).toHaveBeenCalled();
   });
 });

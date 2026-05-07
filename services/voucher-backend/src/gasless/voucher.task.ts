@@ -4,6 +4,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { DataSource, LessThan, Repository } from 'typeorm';
 import { Voucher } from '../entities/voucher.entity';
 import { VoucherService } from './voucher.service';
+import { withAdvisoryLock } from './advisory-lock';
 import { getWalletLockKey } from './wallet-lock';
 
 const MAX_PER_ITERATION = 100;
@@ -70,8 +71,8 @@ export class VoucherTask {
    * must NOT blindly revoke the fresh tranche the user just paid for.
    *
    * Steps:
-   *   1. Acquire pg_advisory_lock on the wallet — blocks until the concurrent
-   *      request (if any) finishes its update and releases the lock.
+   *   1. Try to acquire a transaction-level advisory lock on the wallet
+   *      without blocking a pooled DB connection behind a long voucher request.
    *   2. Re-read the voucher state from DB.
    *   3. If the row still has `revoked=false` AND `validUpTo < now`, revoke.
    *      Otherwise skip — the concurrent request already renewed or revoked it.
@@ -86,24 +87,19 @@ export class VoucherTask {
     voucher: Voucher,
   ): Promise<'revoked' | 'db_only' | 'still_valid' | 'skipped'> {
     const [k1, k2] = getWalletLockKey(voucher.account);
-    const qr = this.dataSource.createQueryRunner();
-    let lockAcquired = false;
-    try {
-      await qr.connect();
-      await qr.query('SELECT pg_advisory_lock($1, $2)', [k1, k2]);
-      lockAcquired = true;
+    return withAdvisoryLock(
+      this.dataSource,
+      [k1, k2],
+      `revoke expired voucher ${voucher.voucherId}`,
+      async () => {
+        const fresh = await this.vouchersRepo.findOne({ where: { id: voucher.id } });
+        if (!fresh) return 'skipped'; // row deleted
+        if (fresh.revoked) return 'skipped'; // already revoked by another path
+        if (fresh.validUpTo.getTime() >= Date.now()) return 'skipped'; // renewed mid-cron
 
-      const fresh = await this.vouchersRepo.findOne({ where: { id: voucher.id } });
-      if (!fresh) return 'skipped'; // row deleted
-      if (fresh.revoked) return 'skipped'; // already revoked by another path
-      if (fresh.validUpTo.getTime() >= Date.now()) return 'skipped'; // renewed mid-cron
-
-      return this.voucherService.revoke(fresh);
-    } finally {
-      if (lockAcquired) {
-        await qr.query('SELECT pg_advisory_unlock($1, $2)', [k1, k2]);
-      }
-      await qr.release();
-    }
+        return this.voucherService.revoke(fresh);
+      },
+      { timeoutMs: 1_000, retryMs: 100 },
+    );
   }
 }

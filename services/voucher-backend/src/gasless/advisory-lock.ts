@@ -1,9 +1,20 @@
-import { DataSource } from 'typeorm';
+import { DataSource, QueryRunner } from 'typeorm';
 
 const DEFAULT_LOCK_TIMEOUT_MS = 30_000;
 const DEFAULT_LOCK_RETRY_MS = 250;
+const DEFAULT_IDLE_TRANSACTION_TIMEOUT_MS = 240_000;
 
 const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+async function rollbackIfActive(qr: QueryRunner) {
+  try {
+    await qr.rollbackTransaction();
+  } catch {
+    // The connection may already have been killed by
+    // idle_in_transaction_session_timeout; in that case Postgres has already
+    // released the transaction-level advisory lock.
+  }
+}
 
 export class AdvisoryLockTimeoutError extends Error {
   constructor(operation: string, timeoutMs: number) {
@@ -13,41 +24,63 @@ export class AdvisoryLockTimeoutError extends Error {
 }
 
 /**
- * Acquire a session-level Postgres advisory lock without letting waiters occupy
- * pooled DB connections. Blocking `pg_advisory_lock()` keeps one connection per
- * queued request; under slow on-chain sends that can exhaust the pool and make
- * unrelated voucher reads hang. `pg_try_advisory_lock()` lets waiters release
- * the connection between attempts.
+ * Acquire a transaction-level Postgres advisory lock without letting waiters
+ * occupy pooled DB connections. The transaction-level lock is released by
+ * Postgres on commit, rollback, connection death, or idle-in-transaction
+ * timeout, so a stuck RPC/on-chain operation cannot leave a stale session lock
+ * pinned to a pooled DB connection for hours.
  */
 export async function withAdvisoryLock<T>(
   dataSource: DataSource,
   [key1, key2]: [number, number],
   operation: string,
   fn: () => Promise<T>,
-  options: { timeoutMs?: number; retryMs?: number } = {},
+  options: { timeoutMs?: number; retryMs?: number; idleTransactionTimeoutMs?: number } = {},
 ): Promise<T> {
   const timeoutMs = options.timeoutMs ?? DEFAULT_LOCK_TIMEOUT_MS;
   const retryMs = options.retryMs ?? DEFAULT_LOCK_RETRY_MS;
+  const idleTransactionTimeoutMs =
+    options.idleTransactionTimeoutMs ?? DEFAULT_IDLE_TRANSACTION_TIMEOUT_MS;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
     const qr = dataSource.createQueryRunner();
+    let transactionStarted = false;
 
     try {
       await qr.connect();
+      await qr.startTransaction();
+      transactionStarted = true;
+      await qr.query('SELECT set_config($1, $2, true)', [
+        'idle_in_transaction_session_timeout',
+        `${idleTransactionTimeoutMs}ms`,
+      ]);
       const rows: Array<{ acquired: boolean }> = await qr.query(
-        'SELECT pg_try_advisory_lock($1, $2) AS acquired',
+        'SELECT pg_try_advisory_xact_lock($1, $2) AS acquired',
         [key1, key2],
       );
 
       if (rows[0]?.acquired) {
         try {
-          return await fn();
-        } finally {
-          await qr.query('SELECT pg_advisory_unlock($1, $2)', [key1, key2]);
+          const result = await fn();
+          await qr.commitTransaction();
+          transactionStarted = false;
+          return result;
+        } catch (error) {
+          if (transactionStarted) {
+            await rollbackIfActive(qr);
+            transactionStarted = false;
+          }
+          throw error;
         }
       }
+
+      await rollbackIfActive(qr);
+      transactionStarted = false;
     } finally {
+      if (transactionStarted) {
+        await rollbackIfActive(qr);
+      }
       await qr.release();
     }
 
