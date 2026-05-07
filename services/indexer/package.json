@@ -26,7 +26,9 @@
     "start:processor": "npm run processor",
     "start:api": "npm run serve",
     "start:rollup": "node lib/rollup-main.js",
-    "typecheck": "tsc --noEmit -p tsconfig.json"
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "test": "vitest run",
+    "test:watch": "vitest"
   },
   "dependencies": {
     "@gear-js/api": "^0.44.1",
@@ -53,6 +55,7 @@
     "@types/pg": "^8.11.0",
     "drizzle-kit": "^0.30.0",
     "tsx": "^4.19.0",
-    "typescript": "^5.7.0"
+    "typescript": "^5.7.0",
+    "vitest": "^4.1.5"
   }
 }

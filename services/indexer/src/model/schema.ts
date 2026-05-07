@@ -263,6 +263,17 @@ export const appMetrics = pgTable(
     p2pCallsOut: integer("p2p_calls_out").notNull().default(0),
     p2pCallsIn: integer("p2p_calls_in").notNull().default(0),
     p2pUniquePartners: integer("p2p_unique_partners").notNull().default(0),
+    // Strategy A (intra-block participation inference). Bumped once per
+    // (program, season, block) when the program is in MessagesDispatched
+    // .state_changes AND no wallet MessageQueued targeted it AND no cross-
+    // block ProgramMessage accounted for it. Strictly intra-block-only
+    // participation, orthogonal to p2pCallsIn.
+    p2pActiveBlocks: integer("p2p_active_blocks").notNull().default(0),
+    // Strategy C (UserMessageSent backtrack). Bumped once per replying
+    // message id when an indexed app's reply targets a message id that
+    // wasn't seen as a MessageQueued in the same block — signals a hidden
+    // P2P intermediate.
+    p2pRepliesOrigin: integer("p2p_replies_origin").notNull().default(0),
     // Product-growth (CP1)
     dauWalletCallers7d: integer("dau_wallet_callers_7d").notNull().default(0),
     retention7d: doublePrecision("retention_7d").notNull().default(0),

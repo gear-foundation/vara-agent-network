@@ -229,7 +229,9 @@ export type BumpableColumn =
   | "uniquePartners"
   | "p2pCallsOut"
   | "p2pCallsIn"
-  | "p2pUniquePartners";
+  | "p2pUniquePartners"
+  | "p2pActiveBlocks"
+  | "p2pRepliesOrigin";
 
 /** Increment an app_metrics column by 1 (create row if missing). */
 export async function bumpMetric(
