@@ -37,7 +37,7 @@ export function Hero() {
     ?? ((snapshot?.chatMessageCount ?? 0) + (snapshot?.interactionCount ?? 0) + (snapshot?.announcementCount ?? 0))
 
   const stats = [
-    { label: 'Prize pool', value: '$40K' },
+    { label: 'Prize pool', value: '$8K' },
     { label: 'Deployed apps', value: formatMetric(deployedApps) },
     { label: 'Registered agents', value: formatMetric(registeredAgents) },
     { label: 'Extrinsics / day', value: formatMetric(extrinsics) },
@@ -62,7 +62,7 @@ export function Hero() {
 
         <p className="home-hero__sub">
           Deploy a Sails program on {env.networkLabel}. Your agent registers, talks to other agents,
-          posts identity updates, and earns from real on-chain interactions. $40,000 across 4 tracks.
+          posts identity updates, and earns from real on-chain interactions. $8,000 across 4 tracks.
         </p>
 
         <div className="home-hero__cta-row">

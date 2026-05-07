@@ -26,38 +26,6 @@ type Tone = 'services' | 'social' | 'markets' | 'open'
 const LEADERBOARD_PAGE_SIZE = 8
 const EVENT_FEED_PAGE_SIZE = 8
 
-const SCORE_AUTOMATED = [
-  {
-    label: 'Incoming messages (unique addresses)',
-    value: 30,
-    source: 'On-chain · RegistryService',
-  },
-  {
-    label: 'Outgoing messages to hackathon apps',
-    value: 25,
-    source: 'On-chain · filtered by Registry',
-  },
-  {
-    label: 'Chat + Board activity',
-    value: 20,
-    source: 'ChatService + BoardService extrinsics',
-  },
-  {
-    label: 'Social proof (X + Farcaster)',
-    value: 25,
-    source: 'Hashtag + @VaraNetwork mentions, OAuth',
-  },
-]
-
-const SCORE_MANUAL = [
-  { label: 'Network utility — real on-chain usage', value: 35 },
-  { label: 'AI-native usefulness — AI is essential', value: 15 },
-  { label: 'VARA-native leverage — vouchers, gasless', value: 15 },
-  { label: 'Originality + post-season utility', value: 15 },
-  { label: 'Quality of integrations', value: 10 },
-  { label: 'Demo + social proof readiness', value: 10 },
-]
-
 const TYPE_LABEL: Record<FeedEvent['type'], string> = {
   DEPLOY: 'RegisterApp',
   CALL: 'CallProgram',
@@ -170,29 +138,6 @@ function eventTone(type: FeedEvent['type']) {
   if (type === 'POST') return 'markets'
   if (type === 'DEPLOY') return 'open'
   return 'services'
-}
-
-function ScoreBar({
-  label,
-  value,
-  source,
-}: {
-  label: string
-  value: number
-  source?: string
-}) {
-  return (
-    <div className="insights-score-bar">
-      <div className="insights-score-bar__hdr">
-        <span>{label}</span>
-        <strong>{value}%</strong>
-      </div>
-      <div className="insights-score-bar__track">
-        <span style={{ width: `${value}%` }} />
-      </div>
-      {source && <div className="insights-score-bar__src">{source}</div>}
-    </div>
-  )
 }
 
 function MetricNumber({
@@ -512,30 +457,6 @@ export default function DashboardPage() {
           </div>
         </section>
 
-        <section className="insights-score-grid">
-          <article className="insights-score-card">
-            <h3>80% Automated · on-chain</h3>
-            {SCORE_AUTOMATED.map((item) => (
-              <ScoreBar
-                key={item.label}
-                label={item.label}
-                source={item.source}
-                value={item.value}
-              />
-            ))}
-          </article>
-
-          <article className="insights-score-card">
-            <h3>20% Manual · top 10 per track</h3>
-            {SCORE_MANUAL.map((item) => (
-              <ScoreBar key={item.label} label={item.label} value={item.value} />
-            ))}
-            <p className="insights-score-card__note">
-              +10% bonus to manual score if Investor Pitch is filled.
-            </p>
-          </article>
-        </section>
-
         <section className="section">
           <div className="section__kicker">Event Feed</div>
           <h2 className="section__title">live extrinsics</h2>
@@ -581,26 +502,6 @@ export default function DashboardPage() {
             {!eventsLoading && events.length === 0 && (
               <div className="empty">No recent indexed extrinsics for the current network window.</div>
             )}
-          </div>
-
-          <div className="insights-info-grid">
-            <article className="insights-info-card">
-              <h3>North star</h3>
-              <strong>Vara extrinsics / day</strong>
-              <p>Measured during Season 1 and again 30 days after Demo Day.</p>
-            </article>
-
-            <article className="insights-info-card">
-              <h3>Post-season goal</h3>
-              <strong>Active deployed apps at Day 30</strong>
-              <p>Programs still posting extrinsics 30 days after the freeze. The substrate test.</p>
-            </article>
-
-            <article className="insights-info-card">
-              <h3>Anti-cheat</h3>
-              <strong>Spam-discounted</strong>
-              <p>No-op extrinsics, near-identical clones, and self-loops are detected and discounted in the leaderboard.</p>
-            </article>
           </div>
         </section>
       </main>

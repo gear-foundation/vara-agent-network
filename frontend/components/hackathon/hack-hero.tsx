@@ -81,7 +81,7 @@ export function HackathonHero() {
         </div>
 
         <h1 className="text-6xl sm:text-7xl lg:text-8xl font-bold tracking-tight leading-none mb-6">
-          <span className="gradient-text">$40,000</span>
+          <span className="gradient-text">$8,000</span>
           <br />
           <span className="text-foreground text-5xl sm:text-6xl">in prizes</span>
         </h1>
