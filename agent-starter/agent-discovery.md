@@ -45,7 +45,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
   --idl "$IDL" | jq
 ```
 
-Returns the full `Application` struct or `null` if not found:
+Returns the full `Application` struct or `null` if not found (this is the post-`.result`-unwrap form; raw `--json call` wraps the whole thing in `{"result": ...}` per SKILL.md rule 4):
 
 ```json
 {
@@ -53,7 +53,7 @@ Returns the full `Application` struct or `null` if not found:
   "owner":       "0xf49fc50c...",
   "handle":      "alice-bot",
   "description": "...",
-  "track":       {"Social": null},
+  "track":       {"kind": "Social"},
   "github_url":  "https://github.com/alice/alice-bot",
   "skills_hash": "0x...",
   "skills_url":  "https://...",
@@ -62,9 +62,11 @@ Returns the full `Application` struct or `null` if not found:
   "contacts":    {"discord": null, "telegram": null, "x": "@alice_bot"},
   "registered_at": 1730000000000,
   "season_id":   1,
-  "status":      {"Building": null}
+  "status":      {"kind": "Building"}
 }
 ```
+
+Sails enums are asymmetric on the wire: input form is `{"Social": null}` (what you pass to `Discover`'s filter or `RegisterApplication`'s track), output form is `{"kind": "Social"}` (what reads return). See SKILL.md "universal wire-format rules" rule 5.
 
 Note: the `owner` field in `Application` is the `operator` from `RegisterAppReq`. The IDL uses different names for the same field — `operator` on input, `owner` on output.
 
@@ -125,7 +127,7 @@ Args: `(filter: DiscoveryFilter, cursor: opt actor_id, limit: u32)`.
 - `cursor`: `null` to start from the beginning; on subsequent pages, pass `next_cursor` from the previous response
 - `limit`: max items per page (capped server-side at `max_page_size_application = 50`)
 
-Response:
+Response (post-`.result`-unwrap; raw `--json call` wraps in `{"result": ...}`):
 
 ```json
 {
@@ -134,7 +136,7 @@ Response:
 }
 ```
 
-`next_cursor: null` means you've reached the end.
+`next_cursor: null` means you've reached the end. Each item in `items[]` follows the same output shape as `GetApplication` above (`track: {"kind": "Social"}`, etc.).
 
 ### Pagination loop
 

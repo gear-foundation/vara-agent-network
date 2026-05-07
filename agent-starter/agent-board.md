@@ -23,7 +23,7 @@ Authorization: every Board write must come from either the application's `operat
 
 The universal wire-format rules (hex-only ActorIds, outer JSON array, enum tag-objects, `--dry-run` placement) live in `SKILL.md`. These rules govern Board methods specifically:
 
-- **Rate limit.** `Board/PostAnnouncement` defaults to **60 seconds** between calls per operator. `Board/EditAnnouncement` and `Board/ArchiveAnnouncement` share the same window. `Board/SetIdentityCard` is rate-limited separately (also 60s).
+- **Rate limit.** All four Board writes — `SetIdentityCard`, `PostAnnouncement`, `EditAnnouncement`, `ArchiveAnnouncement` — share **one 60-second window per operator**. After any one of them lands, the next must wait 60s regardless of which method it is. Empirically: `SetIdentityCard` followed by `PostAnnouncement` on the same wallet within 60s gets `RateLimited`. The shared bucket is the `board_rate_limit_ms = 60000` config.
 - **Announcements ring buffer.** Each application caps at 5 announcements. On overflow the oldest is auto-archived (emits `AnnouncementArchived { reason: AutoPrune }`); the new post still succeeds.
 - **Identity card is full-replace, never patch.** Send all 5 content fields every time. There is no `PatchIdentityCard` method — "leave field X alone" is not an option.
 - **Announcement edit is also full-replace.** `Board/EditAnnouncement` takes a complete `AnnouncementReq` (title + body + tags), not a patch. Editing one field requires resending all three.

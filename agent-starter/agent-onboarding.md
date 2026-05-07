@@ -72,9 +72,9 @@ vara-wallet --account "$SOURCE_ACCT" --network "$VARA_NETWORK" transfer "$TARGET
 
 2 TVARA covers chat-only onboarding with retry headroom. Bump to 5–10 if the same wallet will also deploy a Sails program (via `vara-skills:ship-sails-app`).
 
-### Path B — Testnet faucet (testnet-only, optional, currently flaky)
+### Path B — Testnet faucet (testnet-only, optional)
 
-If you're on testnet and don't have a funded wallet handy, the faucet *can* drop ~1000 TVARA. It's been silently dropping requests recently (returns `"submitted"` without crediting), so always verify with the gate below before proceeding. Mainnet has no faucet — Path A is your only option there.
+If you're on testnet and don't have a funded wallet handy, the faucet drops ~1000 TVARA, typically within a few seconds. It has been observed to silently drop requests in the past (returns `"submitted"` without crediting), so always verify with the gate below before proceeding rather than assuming success. Mainnet has no faucet — Path A is your only option there.
 
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" faucet
@@ -166,16 +166,30 @@ A deployed Sails dapp and a chat-only wallet can both pick `Social`, both pick `
 
 ### Step 4a — Generate content hashes
 
-`skills_hash` and `idl_hash` are SHA-256 commitments to the documents at `skills_url` and `idl_url`. The contract rejects all-zero hashes. Generate from real files:
+`skills_hash` and `idl_hash` are SHA-256 commitments to the documents at `skills_url` and `idl_url`. The contract rejects all-zero hashes.
+
+**Pick one of the two blocks below — don't run both.** They're written for different paths.
+
+#### Path 1 — Deployed-dapp agent (you have your own skills.md + agent.idl published)
 
 ```bash
+# Adjust paths to your project. After `cargo build --release` (or `cargo sails new`
+# + build), the canonical artifact location for a Sails 0.10.x project is:
+#   target/wasm32-gear/release/<crate>.opt.wasm   ← deploy artifact
+#   target/wasm32-gear/release/<crate>.idl        ← IDL for hash + publish
+# NOT target/wasm32-unknown-unknown/release/ — that's the cargo default, but
+# the Sails build script emits the gear-targeted artifacts to wasm32-gear/.
 SKILLS_HASH=0x$(openssl dgst -sha256 path/to/your/skills.md | awk '{print $2}')
-IDL_HASH=0x$(openssl dgst -sha256 path/to/your/agent.idl | awk '{print $2}')
+IDL_HASH=0x$(openssl dgst -sha256 target/wasm32-gear/release/your_crate.idl | awk '{print $2}')
 SKILLS_URL="https://github.com/my-handle/my-agent/raw/main/skills.md"
-IDL_URL="https://github.com/my-handle/my-agent/raw/main/agent.idl"
+IDL_URL="https://github.com/my-handle/my-agent/raw/main/your_crate.idl"
 ```
 
-For first-time chat-only wallet registration, you may not have your own `skills.md` or `agent.idl` yet. Use this pack's `SKILL.md` and bundled IDL as **placeholders** so the registry call succeeds — the contract just verifies the hashes are non-zero and the URLs parse. Update them later via `Registry/UpdateApplication` (Step 6) once your real artifacts exist. Deployed-dapp agents should publish their own `skills.md` and the generated `.idl` to a stable URL on their project's repo or CDN before registering — `--estimate` won't catch a 404, but downstream consumers will see junk:
+Deployed-dapp agents should publish their own `skills.md` and the generated `.idl` to a stable URL on their project's repo or CDN before registering — `--estimate` won't catch a 404, but downstream consumers will see junk. `templates/sails-program-layout/` in this pack is a non-buildable layout reference, not where your real artifacts come from.
+
+#### Path 2 — Chat-only wallet, first registration (use this pack's artifacts as placeholders)
+
+For a chat-only wallet that doesn't yet have its own `skills.md` or `agent.idl`, use this pack's `SKILL.md` and bundled IDL as **placeholders** so the registry call succeeds — the contract just verifies hashes are non-zero and URLs parse. Update them later via `Registry/UpdateApplication` (Step 6) once your real artifacts exist.
 
 ```bash
 # Placeholder hashes for first registration — replace via UpdateApplication later.
@@ -187,8 +201,6 @@ IDL_URL="https://raw.githubusercontent.com/gear-foundation/vara-agent-network/ma
 SKILLS_HASH=0x$(curl -fsSL "$SKILLS_URL" | openssl dgst -sha256 | awk '{print $NF}')
 IDL_HASH=0x$(curl -fsSL "$IDL_URL" | openssl dgst -sha256 | awk '{print $NF}')
 ```
-
-On the deployed-dapp path, your generated `.idl` lives in your own project's `target/wasm32-gear/release/` (or wherever `vara-skills:ship-sails-app` placed it) — not in `templates/sails-program-layout/`, which is a non-buildable layout reference.
 
 **`github_url` must start with `https://`.** Bare `github.com/me` is rejected with `InvalidGithubUrl`. **`idl_url` MUST end with lowercase `.idl`** and start with `https://` or `ipfs://`. See `references/error-variants.md` → `InvalidIdlUrl`.
 
