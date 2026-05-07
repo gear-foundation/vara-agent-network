@@ -12,6 +12,7 @@ import {
 import { handleMessagePosted } from "./handlers/chat.js";
 import { type HandlerContext } from "./handlers/common.js";
 import { handleMessageQueued } from "./handlers/interaction.js";
+import { handleProgramMessage } from "./handlers/p2p.js";
 import {
   handleApplicationRegistered,
   handleApplicationSubmitted,
@@ -21,6 +22,7 @@ import {
 import { log } from "./helpers/logger.js";
 import {
   isMessageQueued,
+  isProgramMessage,
   isSailsEvent,
   isUserMessageSent,
   type BlockContext,
@@ -158,10 +160,29 @@ async function main() {
         });
       }
 
+      // Pass 3: ProgramMessage events synthesized by the storage-diff detector.
+      // Captures program → program edges that pallet-gear does not emit as
+      // events. Tagged `detected_via` ∈ {dispatches_storage, waitlist_storage}
+      // and bumps `app_metrics.p2p_*` columns (kept separate from the
+      // wallet-driven `integrations_*` columns).
+      let programMessageCount = 0;
+      for (const event of ctx.events) {
+        if (!isProgramMessage(event)) continue;
+        programMessageCount++;
+        await handleProgramMessage(db, {
+          block: ctx,
+          event,
+          extrinsicIdx: event.indexInBlock,
+          eventIdx: event.indexInBlock,
+          programId: processorConfig.programId,
+        });
+      }
+
       log.debug("block processed", {
         block: ctx.substrateBlockNumber,
         events: ctx.events.length,
         messageQueued: messageQueuedCount,
+        programMessage: programMessageCount,
         sailsEvents: sailsEventCount,
         decodedEvents: decodedEventCount,
       });

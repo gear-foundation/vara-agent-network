@@ -25,7 +25,27 @@ export interface MessageQueuedEvent {
   indexInBlock: number;
 }
 
-export type GearEvent = UserMessageSentEvent | MessageQueuedEvent;
+/**
+ * Synthetic event emitted by the P2P detector for program → program edges
+ * that are invisible at the event layer (pallet-gear does not deposit
+ * `MessageQueued` for `gr_send` / `gr_create_program` from WASM). Built by
+ * snapshot-diffing `gearMessenger.dispatches` and `gearMessenger.waitlist`
+ * between consecutive finalized blocks. See `processor/p2p-detector.ts`.
+ */
+export interface ProgramMessageEvent {
+  kind: "ProgramMessage";
+  messageId: Hex;
+  source: Hex;
+  destination: Hex;
+  /** Originating user message id when known, else null. */
+  parent: Hex | null;
+  /** When this message is a reply, the message it answers. */
+  replyTo: Hex | null;
+  detectedVia: "dispatches_storage" | "waitlist_storage";
+  indexInBlock: number;
+}
+
+export type GearEvent = UserMessageSentEvent | MessageQueuedEvent | ProgramMessageEvent;
 
 /** Context for a single block processed end-to-end. */
 export interface BlockContext {
@@ -41,6 +61,10 @@ export function isUserMessageSent(e: GearEvent): e is UserMessageSentEvent {
 
 export function isMessageQueued(e: GearEvent): e is MessageQueuedEvent {
   return e.kind === "MessageQueued";
+}
+
+export function isProgramMessage(e: GearEvent): e is ProgramMessageEvent {
+  return e.kind === "ProgramMessage";
 }
 
 /** Only UserMessageSent events with no reply details are Sails service events. */

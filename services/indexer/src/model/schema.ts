@@ -209,11 +209,20 @@ export const interactions = pgTable(
     substrateBlockNumber: integer("substrate_block_number").notNull(),
     substrateBlockTs: bigint("substrate_block_ts", { mode: "bigint" }).notNull(),
     seasonId: integer("season_id").notNull(),
+    // How this edge was observed:
+    //   "event"               — Gear.MessageQueued (wallet → program path; the only
+    //                           edge type the runtime emits as a chain event today)
+    //   "dispatches_storage"  — diff of gearMessenger.dispatches between block N-1
+    //                           and N (program → program send still queued at the
+    //                           block boundary)
+    //   "waitlist_storage"    — diff of gearMessenger.waitlist (parked async dispatch)
+    detectedVia: text("detected_via").notNull().default("event"),
   },
   (t) => ({
     callerSeasonIdx: index("interactions_caller_season_idx").on(t.caller, t.seasonId),
     calleeSeasonIdx: index("interactions_callee_season_idx").on(t.callee, t.seasonId),
     originSeasonIdx: index("interactions_origin_season_idx").on(t.origin, t.seasonId),
+    detectedViaIdx: index("interactions_detected_via_idx").on(t.detectedVia),
   }),
 );
 
@@ -245,6 +254,15 @@ export const appMetrics = pgTable(
     integrationsIn: integer("integrations_in").notNull().default(0),
     uniquePartners: integer("unique_partners").notNull().default(0),
     totalValuePaidRaw: text("total_value_paid_raw").notNull().default("0"),
+    // Program → program edges captured by storage diff (gearMessenger.dispatches
+    // / waitlist between block boundaries). Distinct from `integrations_*`,
+    // which counts wallet-driven calls projected from `Gear.MessageQueued`
+    // events. P2P metrics are observable only on edges that cross at least one
+    // block boundary; tight in-block-completed chains are not seen on a public
+    // RPC (would require state_traceBlock against an archive).
+    p2pCallsOut: integer("p2p_calls_out").notNull().default(0),
+    p2pCallsIn: integer("p2p_calls_in").notNull().default(0),
+    p2pUniquePartners: integer("p2p_unique_partners").notNull().default(0),
     // Product-growth (CP1)
     dauWalletCallers7d: integer("dau_wallet_callers_7d").notNull().default(0),
     retention7d: doublePrecision("retention_7d").notNull().default(0),
@@ -304,6 +322,22 @@ export const mentionSenderDedup = pgTable(
 // AppMetrics.uniquePartners.
 export const partnerDedup = pgTable(
   "partner_dedup",
+  {
+    caller: text("caller").notNull(),
+    callee: text("callee").notNull(),
+    seasonId: integer("season_id").notNull(),
+    firstSeenBlock: integer("first_seen_block").notNull(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.caller, t.callee, t.seasonId] }),
+  }),
+);
+
+// Dedup for `app_metrics.p2pUniquePartners`. Kept separate from
+// `partner_dedup` (which counts wallet-driven outbound) so the two
+// integration surfaces stay independent in the leaderboard.
+export const p2pPartnerDedup = pgTable(
+  "p2p_partner_dedup",
   {
     caller: text("caller").notNull(),
     callee: text("callee").notNull(),

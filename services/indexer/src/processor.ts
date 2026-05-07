@@ -22,6 +22,7 @@ import {
   type Hex,
 } from "./helpers/types.js";
 import { db, schema } from "./model/db.js";
+import { P2PDetector } from "./processor/p2p-detector.js";
 
 export interface ProcessorHooks {
   onBlock: (ctx: BlockContext) => Promise<void>;
@@ -35,6 +36,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
   log.info("connected", { chain, endpoint: config.varaRpcUrl });
 
   const targetProgramIdLower = config.programId.toLowerCase();
+  const p2pDetector = new P2PDetector();
 
   // Normalize ActorId strings to lowercase hex. Gear events surface addresses
   // in mixed formats:
@@ -51,7 +53,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
     }
   }
 
-  async function processBlock(blockNumber: number): Promise<void> {
+  async function processBlock(blockNumber: number, opts?: { runP2PDetector?: boolean }): Promise<void> {
     const blockHash = (await api.rpc.chain.getBlockHash(blockNumber)).toHex() as Hex;
     const apiAt = await api.at(blockHash);
     const rawEvents = await apiAt.query.system.events();
@@ -138,6 +140,44 @@ export async function createProcessor(hooks: ProcessorHooks) {
       idx++;
     }
 
+    // P2P detector: snapshot-diff the messenger storage between parent and
+    // current block to surface program → program edges that pallet-gear does
+    // not emit as events. Public RPCs prune state ≈250 blocks back, so this
+    // only runs in live mode (the catch-up loop opts in). During backfill
+    // the parent-state read would fail with `State already discarded`.
+    //
+    // Failure policy: best-effort overlay. Any detector error logs and
+    // returns no edges; the wallet-driven `MessageQueued` projection still
+    // runs and the cursor still advances. Halting the cursor on a P2P
+    // overlay failure would block the entire indexer over a secondary
+    // metric, which trades a transient gap in `p2p_*` columns for a hard
+    // outage on the public dashboard. Detector reset on hard error to
+    // invalidate the cached parent snapshot.
+    if (opts?.runP2PDetector) {
+      try {
+        const parentHash = (await api.rpc.chain.getBlockHash(blockNumber - 1)).toHex() as Hex;
+        const p2pEvents = await p2pDetector.detect({
+          api,
+          blockHash,
+          parentHash,
+          baseIndex: events.length,
+        });
+        events.push(...p2pEvents);
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
+          log.warn("p2p detector: parent state pruned, skipping", { block: blockNumber });
+        } else {
+          log.warn("p2p detector failed (continuing)", { block: blockNumber, error: msg });
+        }
+        p2pDetector.reset();
+      }
+    } else {
+      // Skipped this block — cached snapshot is no longer adjacent to the
+      // next block we'll see, so invalidate it.
+      p2pDetector.reset();
+    }
+
     const ctx: BlockContext = {
       substrateBlockNumber: blockNumber,
       substrateBlockHash: blockHash,
@@ -221,7 +261,11 @@ export async function createProcessor(hooks: ProcessorHooks) {
     const resume = await clampedResumePoint(height);
     for (let n = resume; n <= height; n++) {
       try {
-        await processBlock(n);
+        // Only run P2P detector when we're close enough to the head that
+        // (n - 1) state is still served by the RPC. Older catch-up blocks
+        // skip detection — backfill gap is documented in the README.
+        const inLiveWindow = height - n < PRUNED_RPC_BACKFILL_DEPTH;
+        await processBlock(n, { runP2PDetector: inLiveWindow });
       } catch (err) {
         const msg = String(err);
         if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {

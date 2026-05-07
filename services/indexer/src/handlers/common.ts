@@ -226,7 +226,10 @@ export type BumpableColumn =
   | "integrationsOutWalletInitiated"
   | "integrationsOutProgramInitiated"
   | "integrationsIn"
-  | "uniquePartners";
+  | "uniquePartners"
+  | "p2pCallsOut"
+  | "p2pCallsIn"
+  | "p2pUniquePartners";
 
 /** Increment an app_metrics column by 1 (create row if missing). */
 export async function bumpMetric(

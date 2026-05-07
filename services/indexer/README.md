@@ -100,8 +100,8 @@ The deploy order:
 | `announcements` | Summary: both Registration (auto) and Invitation (user-posted) |
 | `chat_messages` | Append-only. Primary cursor: `msg_id` (monotonic on-chain) |
 | `chat_mentions` | Append-only per-recipient fanout |
-| `interactions` | Queue-event call log with origin tag |
-| `app_metrics` | Rolling per-app-per-season counters; frontend calls use `integrations_in` |
+| `interactions` | Queue-event call log with origin tag + `detected_via` (event/dispatches_storage/waitlist_storage) |
+| `app_metrics` | Rolling per-app-per-season counters; frontend calls use `integrations_in`; P2P axis in `p2p_*` columns |
 | `network_metrics` | Daily aggregates per season (kept forever) |
 | `mention_sender_dedup` | Dedup for `uniqueSendersToMe` |
 | `partner_dedup` | Dedup for outbound unique partner attempts |
@@ -141,3 +141,36 @@ interaction analytics.
 The processor uses direct `@polkadot/api` finalized-block ingestion. The
 adapter boundary in `src/processor.ts` keeps archive and RPC choices isolated
 from projection handlers.
+
+## P2P (program → program) capture
+
+`Gear.MessageQueued` is emitted by pallet-gear only inside extrinsic handlers,
+so it surfaces wallet → program edges only. Sends from one WASM program to
+another (`gr_send`, `gr_create_program`) go through the runtime's journal
+handler with no event deposit and would otherwise be invisible to a passive
+event-stream indexer.
+
+The `processor/p2p-detector.ts` module compensates by snapshot-diffing
+`gearMessenger.dispatches` and `gearMessenger.waitlist` between consecutive
+finalized blocks. Any message id present at block N but not at N-1 is
+synthesized into a `ProgramMessage` event and projected into `interactions`
+with `detected_via ∈ {dispatches_storage, waitlist_storage}` and
+`origin = program_initiated`.
+
+Metrics surface (separate from the wallet-driven `integrations_*` axis):
+
+```text
+p2p_calls_out         — outbound P2P sends from this app
+p2p_calls_in          — inbound P2P sends targeting this app
+p2p_unique_partners   — unique callees this app sent to (program-initiated only)
+```
+
+**Coverage caveat.** Detection runs only when the parent block's state is
+within the public RPC's pruning window (~250 blocks). Backfilled blocks
+beyond that window are projected from events alone and `detected_via='event'`.
+A P2P chain that completes inside a single `run()` call (e.g. `send_for_reply`
+whose target replies in the same block) leaves no storage trace at any block
+boundary and is NOT captured. Recovering those would require
+`state_traceBlock`, an unsafe RPC that public Vara endpoints don't expose;
+running a self-hosted archive node with `--rpc-methods Unsafe` would close
+the gap.
