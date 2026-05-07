@@ -14,6 +14,13 @@ import { type HandlerContext } from "./handlers/common.js";
 import { handleMessageQueued } from "./handlers/interaction.js";
 import { handleProgramMessage } from "./handlers/p2p.js";
 import {
+  buildKnownMessageIds,
+  buildKnownMQDestinations,
+  buildProgramsWithCrossBlockEdge,
+  handleParticipationInference,
+  handleUserMessageSentBacktrack,
+} from "./handlers/p2p_inference.js";
+import {
   handleApplicationRegistered,
   handleApplicationSubmitted,
   handleApplicationUpdated,
@@ -22,6 +29,7 @@ import {
 import { log } from "./helpers/logger.js";
 import {
   isMessageQueued,
+  isMessagesDispatched,
   isProgramMessage,
   isSailsEvent,
   isUserMessageSent,
@@ -53,9 +61,22 @@ async function main() {
       // Track per-block extrinsic position heuristically — we don't have a
       // direct extrinsic index from polkadot raw events without a deeper
       // join. Use indexInBlock as a proxy for deterministic row id purposes.
+      const networkProgramIdLower = processorConfig.programId.toLowerCase();
       let eventIdx = 0;
       for (const event of ctx.events) {
         if (!isUserMessageSent(event)) {
+          eventIdx++;
+          continue;
+        }
+        // Replaces the old `source !== networkProgram` filter that lived in
+        // processor.ts. The processor now passes UserMessageSent from every
+        // program (so Strategy C in p2p_inference.ts can read replies from
+        // registered apps), but the Sails decoder still only knows the
+        // network program's IDL — gating here keeps log output clean. If
+        // you remove this gate, restore the filter at the matching site in
+        // processor.ts (look for the `replyToMessageId` extraction). Co-
+        // landed change.
+        if (event.source !== networkProgramIdLower) {
           eventIdx++;
           continue;
         }
@@ -178,11 +199,47 @@ async function main() {
         });
       }
 
+      // Pass 4: event-only inference for intra-block P2P participation.
+      // Strategy A reads MessagesDispatched.state_changes minus this block's
+      // wallet MQ destinations and minus this block's cross-block edges to
+      // bump `p2p_active_blocks`. Strategy C reads UserMessageSent replies
+      // whose details.to is unknown to this block's MessageQueued set to
+      // bump `p2p_replies_origin`.
+      //
+      // Gated by ctx.inLiveWindow because Strategy A's exclusion set
+      // (programs touched by ProgramMessage events from the storage-diff
+      // detector) is empty during backfill, which would cause spurious
+      // bumps. New counters intentionally start clean from live cutover.
+      let participationCount = 0;
+      let backtrackCount = 0;
+      if (ctx.inLiveWindow !== false) {
+        const knownMQDestinations = buildKnownMQDestinations(ctx.events);
+        const knownMessageIdsThisBlock = buildKnownMessageIds(ctx.events);
+        const programsWithCrossBlockEdge = buildProgramsWithCrossBlockEdge(ctx.events);
+        for (const event of ctx.events) {
+          if (isMessagesDispatched(event)) {
+            participationCount++;
+            await handleParticipationInference(
+              db,
+              ctx,
+              event,
+              knownMQDestinations,
+              programsWithCrossBlockEdge,
+            );
+          } else if (isUserMessageSent(event) && event.hasReplyDetails) {
+            backtrackCount++;
+            await handleUserMessageSentBacktrack(db, ctx, event, knownMessageIdsThisBlock);
+          }
+        }
+      }
+
       log.debug("block processed", {
         block: ctx.substrateBlockNumber,
         events: ctx.events.length,
         messageQueued: messageQueuedCount,
         programMessage: programMessageCount,
+        participation: participationCount,
+        backtrack: backtrackCount,
         sailsEvents: sailsEventCount,
         decodedEvents: decodedEventCount,
       });

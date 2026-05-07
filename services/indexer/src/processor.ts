@@ -35,7 +35,6 @@ export async function createProcessor(hooks: ProcessorHooks) {
   const chain = (await api.rpc.system.chain()).toString();
   log.info("connected", { chain, endpoint: config.varaRpcUrl });
 
-  const targetProgramIdLower = config.programId.toLowerCase();
   const p2pDetector = new P2PDetector();
 
   // Normalize ActorId strings to lowercase hex. Gear events surface addresses
@@ -82,17 +81,27 @@ export async function createProcessor(hooks: ProcessorHooks) {
           destination?: string;
           payload?: string;
           value?: string | number | bigint;
-          details?: unknown | null;
+          details?: { to?: string; code?: unknown } | null;
         } | undefined;
         if (!stored || typeof stored.source !== "string") {
           idx++;
           continue;
         }
         const source = normalizeActorId(stored.source);
-        if (source !== targetProgramIdLower) {
-          idx++;
-          continue;
-        }
+        // NOTE: we used to early-continue when `source !== targetProgramIdLower`,
+        // dropping every reply that didn't come from the network program. That
+        // hid replies from registered applications — needed by Strategy C
+        // (`handleUserMessageSentBacktrack` in `handlers/p2p_inference.ts`)
+        // to detect hidden P2P intermediates. The `source !== networkProgram`
+        // gate now lives at the top of Pass 1 in `main.ts`, where the Sails
+        // decoder still skips non-network replies. If you remove that gate
+        // without restoring this filter, the Sails decoder will warn about
+        // every app reply ("undecodable sails event"). Co-landed change.
+        const detailsObj = stored.details ?? null;
+        const replyToMessageId =
+          detailsObj && typeof detailsObj.to === "string"
+            ? normalizeActorId(detailsObj.to)
+            : null;
         events.push({
           kind: "UserMessageSent",
           messageId: normalizeActorId(stored.id ?? "0x"),
@@ -100,7 +109,37 @@ export async function createProcessor(hooks: ProcessorHooks) {
           destination: normalizeActorId(stored.destination ?? "0x"),
           payload: (stored.payload ?? "0x") as Hex,
           value: String(stored.value ?? "0"),
-          hasReplyDetails: stored.details != null,
+          hasReplyDetails: detailsObj != null,
+          replyToMessageId,
+          indexInBlock: idx,
+        });
+      } else if (method === "MessagesDispatched") {
+        // JSON shape: [total, statuses, stateChanges] from polkadot-js raw
+        // events on Vara dev / testnet. Some metadata variants surface this as
+        // a struct-shape object — handle both. statuses is a BTreeMap rendered
+        // as { msgId: status }; we don't consume it here, only total + state
+        // changes feed Strategy A. stateChanges is a BTreeSet<ActorId>
+        // serialised as an array of hex strings.
+        const obj = Array.isArray(json)
+          ? { total: json[0], statuses: json[1], stateChanges: json[2] }
+          : (json as { total?: unknown; stateChanges?: unknown });
+        const totalRaw = obj?.total;
+        const total =
+          typeof totalRaw === "number"
+            ? totalRaw
+            : typeof totalRaw === "string"
+              ? Number.parseInt(totalRaw, 10)
+              : 0;
+        const rawStateChanges = obj?.stateChanges;
+        const stateChanges: Hex[] = Array.isArray(rawStateChanges)
+          ? rawStateChanges
+              .filter((s): s is string => typeof s === "string")
+              .map((s) => normalizeActorId(s))
+          : [];
+        events.push({
+          kind: "MessagesDispatched",
+          total,
+          stateChanges,
           indexInBlock: idx,
         });
       } else if (method === "MessageQueued") {
@@ -183,6 +222,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
       substrateBlockHash: blockHash,
       substrateBlockTs: timestamp,
       events,
+      inLiveWindow: opts?.runP2PDetector === true,
     };
     await hooks.onBlock(ctx);
 

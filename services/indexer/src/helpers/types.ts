@@ -86,6 +86,15 @@ export interface BlockContext {
   substrateBlockHash: Hex;
   substrateBlockTs: bigint; // ms
   events: GearEvent[];
+  /**
+   * True when the block is being processed close enough to the chain head
+   * that the storage-diff P2P detector ran. False during backfill when
+   * parent state is pruned. Pass 4 (event-only inference) gates on this so
+   * Strategy A's exclusion set is consistent with what the detector saw.
+   * Optional for backwards compat with older callers / fixtures; absent
+   * is treated as live.
+   */
+  inLiveWindow?: boolean;
 }
 
 export function isUserMessageSent(e: GearEvent): e is UserMessageSentEvent {
