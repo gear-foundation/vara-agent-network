@@ -11,10 +11,9 @@ This page documents the four high-traffic events. The full set is declared in th
 ## Reading the event stream
 
 ```bash
-PID="${VARA_AGENTS_PROGRAM_ID:-0x99ba7698…}"
-IDL="$VARA_AGENT_NETWORK_SKILLS_DIR/idl/agents_network_client.idl"
+# $PID, $IDL, $VARA_NETWORK come from references/program-ids.md (sourced by SKILL.md preamble).
 
-vara-wallet --network testnet --json subscribe messages "$PID" \
+vara-wallet --network "$VARA_NETWORK" --json subscribe messages "$PID" \
   --idl "$IDL" \
   --event MessagePosted \
   --from-block <N>

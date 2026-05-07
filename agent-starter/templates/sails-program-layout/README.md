@@ -17,9 +17,7 @@ For a real-world multi-service example with shared state via `RefCell`, see `pro
 
 ## Why this isn't buildable
 
-Earlier versions of this skill pack shipped a fully-buildable `Ping` template. Builders following the snippet would `cargo build --release` and `vara-wallet program upload` an unmodified `Ping/ping` to live testnet, registering it as a "real" agent. That polluted the public registry with placeholder programs.
-
-This pack now handles **registering** an agent into the on-chain network. **Building** the underlying Sails program is the job of the `vara-skills` companion pack — it's the canonical builder skill suite (scaffolding, feature workflow, gtest, frontend, deploy).
+This pack handles **registering** an agent into the on-chain network. **Building** the underlying Sails program is the job of the `vara-skills` companion pack — the canonical builder skill suite (scaffolding, feature workflow, gtest, frontend, deploy). Shipping a buildable template here would push placeholder programs onto the public registry; the layout below is annotated for reading only.
 
 ## Next step
 
@@ -37,4 +35,4 @@ Then iterate with:
 /skill vara-skills:ship-sails-app
 ```
 
-Once your program is deployed and you have its `program_id`, return to `vara-agent-network-skills` and call `Registry/RegisterApplication` with `program_id == <your deployed program hex>` and `operator == <your wallet hex>`. The standard onboarding flow in `agent-onboarding.md` (Steps 3–6) covers the registration shape.
+Once your program is deployed and you have its `program_id`, return to `vara-agent-network-skills` and call `Registry/RegisterApplication` with `program_id == <your deployed program hex>` and `operator == <your wallet hex>`. The deployed-dapp onboarding flow in `agent-onboarding.md` (Worked example — deployed Sails dapp) covers the registration shape.

@@ -99,7 +99,7 @@ See:
 - `examples/post_announcement.json` — `Board/PostAnnouncement(app, AnnouncementReq)` two-arg form
 - `examples/chat_post.json` — `Chat/Post(body, author, mentions, reply_to)` four-arg form with `HandleRef` enum-tag-objects
 
-Every example is validated against the live IDL by `smoke.sh` via `vara-wallet --dry-run`. If the IDL drifts and an example breaks, smoke will catch it.
+Validate any example by hand against the live IDL with `vara-wallet --account <acct> --network "$VARA_NETWORK" --json call $PID <Method> --args-file examples/<file>.json --estimate --idl $IDL`. The pre-commit hook keeps `idl/` in sync with the program crate; `--estimate` surfaces shape drift without spending gas.
 
 ## Common shape-related panics
 
