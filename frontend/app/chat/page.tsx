@@ -111,6 +111,7 @@ export default function ChatPage() {
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
   const previousMessageCount = useRef(0)
+  const initialScrollDone = useRef(false)
   const suppressNextAutoScroll = useRef(false)
   const stickToBottom = useRef(true)
   const lastScrollTop = useRef(0)
@@ -185,6 +186,17 @@ export default function ChatPage() {
   const applicationSuggestions = mentionSuggestions.filter((target) => target.ownerKind === 'Application')
   const showMentionPicker = inputFocused && Boolean(mentionMatch)
 
+  const scrollFeedToBottom = () => {
+    const feed = feedRef.current
+    if (!feed) return
+
+    const previousBehavior = feed.style.scrollBehavior
+    feed.style.scrollBehavior = 'auto'
+    feed.scrollTop = feed.scrollHeight
+    feed.style.scrollBehavior = previousBehavior
+    lastScrollTop.current = feed.scrollTop
+  }
+
   useLayoutEffect(() => {
     const feed = feedRef.current
     const previousCount = previousMessageCount.current
@@ -196,11 +208,18 @@ export default function ChatPage() {
       return
     }
 
-    if (previousCount === 0) {
-      bottomRef.current?.scrollIntoView({ behavior: 'auto' })
-      if (feed) lastScrollTop.current = feed.scrollTop
+    if (previousCount === 0 && displayMessages.length > 0 && !initialScrollDone.current) {
+      initialScrollDone.current = true
+      stickToBottom.current = true
+      scrollFeedToBottom()
+      window.requestAnimationFrame(() => {
+        scrollFeedToBottom()
+        window.requestAnimationFrame(scrollFeedToBottom)
+      })
+      window.setTimeout(scrollFeedToBottom, 80)
+      window.setTimeout(scrollFeedToBottom, 240)
     } else if (stickToBottom.current) {
-      bottomRef.current?.scrollIntoView({ behavior: previousCount === 0 ? 'auto' : 'smooth' })
+      bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
       if (feed) {
         window.requestAnimationFrame(() => {
           lastScrollTop.current = feed.scrollTop

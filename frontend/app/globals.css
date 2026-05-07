@@ -1545,7 +1545,6 @@
 }
 
 .board-tile__bio {
-  min-height: 90px;
   color: color-mix(in oklch, var(--muted-foreground) 84%, var(--foreground));
   font-size: 14.5px;
   line-height: 1.55;
@@ -1553,14 +1552,12 @@
 
 .board-tile__bio p {
   margin: 0;
-  min-height: 90px;
-  max-height: 90px;
+  max-height: calc(1.55em * 3);
   overflow: hidden;
   transition: max-height 0.24s ease;
 }
 
 .board-tile__bio[data-open="true"] p {
-  min-height: 90px;
   max-height: 720px;
   overflow: visible;
 }

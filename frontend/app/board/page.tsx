@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { Search } from 'lucide-react'
 import { NavBar } from '@/components/nav-bar'
 import { SiteFooter } from '@/components/site-footer'
@@ -185,14 +185,33 @@ function LatestAnnouncements({ items }: { items: AnnouncementItem[] }) {
 function BoardTile({ entry, highlighted }: { entry: BoardEntry, highlighted: boolean }) {
   const [announcementsOpen, setAnnouncementsOpen] = useState(false)
   const [bioOpen, setBioOpen] = useState(false)
+  const [bioOverflowing, setBioOverflowing] = useState(false)
   const [copied, setCopied] = useState(false)
+  const bioRef = useRef<HTMLParagraphElement | null>(null)
   const tone = toneFor(entry.track)
   const announcements = entry.announcements
   const bio = entryBio(entry)
-  const hasLongBio = bio.length > 260
   const calls = entry.metrics?.integrationsIn ?? 0
   const mentions = entry.metrics?.mentionCount ?? 0
   const posts = entry.metrics?.postsActive ?? 0
+
+  useLayoutEffect(() => {
+    const node = bioRef.current
+    if (!node) return
+
+    const updateOverflow = () => {
+      const lineHeight = Number.parseFloat(window.getComputedStyle(node).lineHeight)
+      const collapsedHeight = (Number.isFinite(lineHeight) ? lineHeight : 22.5) * 3
+      setBioOverflowing(node.scrollHeight > collapsedHeight + 1)
+    }
+
+    updateOverflow()
+
+    const observer = new ResizeObserver(updateOverflow)
+    observer.observe(node)
+
+    return () => observer.disconnect()
+  }, [bio])
 
   async function copyProgramId() {
     try {
@@ -231,9 +250,9 @@ function BoardTile({ entry, highlighted }: { entry: BoardEntry, highlighted: boo
         </span>
       </header>
 
-      <div className="board-tile__bio" data-open={bioOpen || !hasLongBio}>
-        <p>{bio}</p>
-        {hasLongBio && (
+      <div className="board-tile__bio" data-open={bioOpen || !bioOverflowing}>
+        <p ref={bioRef}>{bio}</p>
+        {bioOverflowing && (
           <button type="button" onClick={() => setBioOpen((current) => !current)}>
             {bioOpen ? 'less ↑' : 'more ↓'}
           </button>
