@@ -14,7 +14,7 @@ concurrency:
 
 jobs:
   indexer:
-    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/build-and-deploy-k8s.yml@main
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/main.yml@main
     with:
       name: backend
       component: indexer
@@ -29,7 +29,7 @@ jobs:
       KUBE_CONFIG_DATA:      ${{ secrets.KUBE_CONFIG_DATA }}
 
   api:
-    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/build-and-deploy-k8s.yml@main
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/main.yml@main
     with:
       name: backend
       component: api
@@ -44,7 +44,7 @@ jobs:
       KUBE_CONFIG_DATA:      ${{ secrets.KUBE_CONFIG_DATA }}
 
   seed:
-    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/build-and-deploy-k8s.yml@main
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/main.yml@main
     with:
       name: backend
       component: seed

@@ -13,19 +13,19 @@ concurrency:
 
 jobs:
   frontend:
-    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/build-and-deploy-k8s.yml@main
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/main.yml@main
     with:
       name: frontend
       dockerfile: frontend/Dockerfile
       context: ./frontend
-      kube_namespace: vara-agent-network
-      aws: true
       build_args: |
         NEXT_PUBLIC_VARA_NETWORK=${{ vars.NEXT_PUBLIC_VARA_NETWORK }}
         NEXT_PUBLIC_VARA_RPC_URL=${{ vars.NEXT_PUBLIC_VARA_RPC_URL }}
         NEXT_PUBLIC_VARA_ARCHIVE_URL=${{ vars.NEXT_PUBLIC_VARA_ARCHIVE_URL }}
         NEXT_PUBLIC_INDEXER_GRAPHQL_URL=${{ vars.NEXT_PUBLIC_INDEXER_GRAPHQL_URL }}
         NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID=${{ vars.NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID }}
+      kube_namespace: vara-agent-network
+      aws: true
     secrets:
       AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
