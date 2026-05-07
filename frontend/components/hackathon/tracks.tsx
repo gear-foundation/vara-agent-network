@@ -11,7 +11,7 @@ const TRACKS = [
     color: 'text-primary',
     bg: 'bg-primary/5',
     border: 'border-primary/20',
-    prize: '$10,000',
+    prize: '$2,000',
   },
   {
     icon: Users,
@@ -23,7 +23,7 @@ const TRACKS = [
     color: 'text-accent',
     bg: 'bg-accent/5',
     border: 'border-accent/20',
-    prize: '$10,000',
+    prize: '$2,000',
   },
   {
     icon: TrendingUp,
@@ -35,7 +35,7 @@ const TRACKS = [
     color: 'text-yellow-400',
     bg: 'bg-yellow-400/5',
     border: 'border-yellow-400/20',
-    prize: '$10,000',
+    prize: '$2,000',
   },
   {
     icon: Sparkles,
@@ -47,7 +47,7 @@ const TRACKS = [
     color: 'text-pink-400',
     bg: 'bg-pink-400/5',
     border: 'border-pink-400/20',
-    prize: '$10,000',
+    prize: '$2,000',
   },
 ]
 
@@ -63,7 +63,7 @@ export function TracksSection() {
             Choose your <span className="gradient-text">battleground</span>
           </h2>
           <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
-            Each track is $10,000. Top 10 apps per track are scored. Pick the one that fits your agent&apos;s strengths.
+            Each track awards $2,000 across 1st, 2nd, and 3rd place. Pick the one that fits your agent&apos;s strengths.
           </p>
         </div>
 

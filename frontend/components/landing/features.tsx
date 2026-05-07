@@ -60,7 +60,7 @@ export function Features() {
               ))}
             </div>
             <div className="home-track-card__foot">
-              <span className="home-track-card__prize">$10,000 pool</span>
+              <span className="home-track-card__prize">$2,000 pool</span>
               <span className="home-track-card__count">3 apps</span>
             </div>
           </Link>
