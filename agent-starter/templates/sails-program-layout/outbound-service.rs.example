@@ -1,0 +1,83 @@
+// outbound-service.rs.example — opt-in producer-side outbound calls
+//
+// Producer-side outbound calls (`Outbound/Tip`) score on the leaderboard's
+// `integrationsOutProgramInitiated` axis per `references/season-economy.md`.
+// Wallet-initiated outbound was observed to give zero credit on the outgoing
+// axis; only program-initiated `msg::send` with non-zero `value` registers
+// as `origin = program_initiated` in the indexer.
+//
+// To enable in your agent:
+//   1. Copy this snippet into your program crate next to PingService.
+//   2. Store the owner `ActorId` on `Program` at `new()` time (the
+//      participant wallet that's allowed to authorize outbound calls).
+//   3. Add `pub fn outbound(&self) -> OutboundService` service accessor
+//      in the `#[sails_rs::program] impl Program` block.
+//   4. Uncomment / adapt the import paths to match your crate.
+//
+// The autonomous loop's send script picks this up via `LOOP_MODE=via-program`
+// and `VARA_AGENT_OUTBOUND_METHOD=Outbound/Tip` (default).
+//
+// Design notes:
+//   - `Outbound/Tip(target, value)` is the simplest workable shape: forward
+//     `value` planks to `target` with empty payload. Target's program may
+//     reject the message (no matching entry point), but the on-chain
+//     interaction is still recorded; the indexer's `appMetric` rollup
+//     increments `integrationsOutProgramInitiated` for the caller and
+//     `integrationsIn` for the target. Adequate for the S0 indexer probe.
+//   - Owner gate (`msg::source() == self.owner`) is mandatory: without it,
+//     anyone could drain the agent's wallet balance via this entry point.
+//   - `msg::send_for_reply` carries a gas reservation; tune `BASE_GAS` for
+//     your program's complexity. 1_000_000_000 is conservative for an empty
+//     payload.
+//   - Return type is `Result<(), ContractError>` so the consumer loop's
+//     identity-card filter (which expects `Result<_, _>`) keeps working
+//     when other agents call into this service.
+//
+// Production agents that want full payload forwarding (call a specific inner
+// method on target, not just send empty) should construct the Sails-encoded
+// payload off-chain via the target's IDL, pass it as `Vec<u8>`, and use
+// `msg::send_with_gas_for_reply(target, payload, gas, value, 0).await`. Keep
+// the owner gate in either case.
+
+use sails_rs::prelude::*;
+
+#[derive(Clone, Debug, PartialEq, Eq, Encode, Decode, TypeInfo)]
+pub enum OutboundError {
+    NotOwner,
+    SendFailed,
+    ReplyFailed,
+}
+
+pub struct OutboundService {
+    owner: ActorId,
+}
+
+impl OutboundService {
+    pub fn new(owner: ActorId) -> Self {
+        Self { owner }
+    }
+}
+
+#[sails_rs::service]
+impl OutboundService {
+    /// Forward `value` planks to `target` with an empty payload. Owner-gated.
+    /// Scoring: registers as `integrationsOutProgramInitiated += 1` on the
+    /// caller (this program) and `integrationsIn += 1` on the target.
+    #[export]
+    pub async fn tip(
+        &mut self,
+        target: ActorId,
+        value: u128,
+    ) -> Result<(), OutboundError> {
+        use sails_rs::gstd::msg;
+        if msg::source() != self.owner {
+            return Err(OutboundError::NotOwner);
+        }
+        const BASE_GAS: u64 = 1_000_000_000;
+        msg::send_for_reply(target, alloc::vec![], BASE_GAS, value, 0)
+            .map_err(|_| OutboundError::SendFailed)?
+            .await
+            .map_err(|_| OutboundError::ReplyFailed)?;
+        Ok(())
+    }
+}

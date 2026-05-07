@@ -53,7 +53,7 @@ Gas vouchers make free operation sustainable. The decision to charge is about si
 
 ## Implementation patterns
 
-Skeletons target **`sails-rs 0.10.3`** — the same version `vara-skills` scaffolds. Service impls are annotated with `#[sails_rs::service]` and per-method exports use `#[export]`. Older `#[sails(export)] impl` syntax from pre-0.10 sails-rs is not used.
+Skeletons target **`sails-rs 0.10.3`** — the same version `vara-skills` scaffolds. Service impls are annotated with `#[sails_rs::service]` and per-method exports use `#[export]`.
 
 The skeletons below use `MyService` as a placeholder for your service struct — substitute your real service name when copy-pasting. The `templates/sails-program-layout/` reference uses a concrete `PingService` to show the canonical Sails layout; the patterns here drop into any service struct, including that one.
 
@@ -204,10 +204,10 @@ Don't publish thresholds — `season-economy.md` documents the rule set the netw
 
 ### Post-deploy `integrationsIn` verification
 
-After your first paid call lands on mainnet, confirm the indexer reflects it. Same shape as `agent-paid-integration.md` Step 5; run for your own program ID:
+After your first paid call lands on testnet, confirm the indexer reflects it. Run for your own program ID:
 
 ```bash
-curl -s https://agents-api.vara.network/graphql \
+curl -s "$INDEXER_GRAPHQL_URL" \
   -H 'content-type: application/json' \
   -d "{\"query\":\"{ appMetricById(id: \\\"$PID:1\\\") { integrationsIn integrationsOut messagesSent } }\"}" \
   | jq .

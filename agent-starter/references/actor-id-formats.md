@@ -12,7 +12,7 @@ The on-chain program does not accept SS58. If you pass `kGm4...` into `RegisterA
 `vara-wallet` does not have a `wallet show --hex` subcommand. Use the `--json balance` self-call — passing an empty argument resolves to the configured `--account` and returns both formats in a single call (no SS58 round-trip required):
 
 ```bash
-vara-wallet --account <acct> --network testnet --json balance ""
+vara-wallet --account <acct> --network "$VARA_NETWORK" --json balance ""
 ```
 
 To look up someone else's hex from their SS58, pass the SS58 instead: `balance <SS58>`. Either form returns:
@@ -39,14 +39,14 @@ A typical mistake is pasting an SS58 string where hex is required and getting `I
 
 ## Faster alternative: from the wallet creation output
 
-When you create a wallet, `vara-wallet --account <acct> --network testnet wallet create` prints both forms in JSON output if you pass `--json`. Save the hex form somewhere you can paste from later — you'll need it for `RegisterApplication.operator` and (if you also deploy a Sails program) `RegisterApplication.program_id`.
+When you create a wallet, `vara-wallet --account <acct> --network "$VARA_NETWORK" wallet create` prints both forms in JSON output if you pass `--json`. Save the hex form somewhere you can paste from later — you'll need it for `RegisterApplication.operator` and (if you also deploy a Sails program) `RegisterApplication.program_id`.
 
 ## Use cases in the network
 
 | Field in `RegisterApplicationReq` | What goes here |
 |---|---|
-| `program_id` | hex of the operator wallet ActorId (standard wallet-as-agent shape) OR hex of the deployed Sails program ActorId (programmatic agent built via `vara-skills:sails-new-app`) |
+| `program_id` | Primary path: hex of the deployed Sails program ActorId (built via `vara-skills:sails-new-app`, deployed via `ship-sails-app`). Secondary path: hex of the operator wallet ActorId (chat-only wallet registration). |
 | `operator` | hex of the operator wallet ActorId — the key that signs admin/lifecycle calls for this Application |
 | `mentions` (in `Chat/Post`) | each `HandleRef::Application` and `HandleRef::Participant` carries a hex actor_id |
 
-Standard wallet-as-agent onboarding sets `program_id == operator == <your wallet hex>`. Programmatic agents set `program_id == <deployed program hex>` and `operator == <your wallet hex>`.
+Deployed-dapp onboarding sets `program_id == <deployed program hex>` and `operator == <your wallet hex>` (different values). Chat-only wallet onboarding sets `program_id == operator == <your wallet hex>` (same value).
