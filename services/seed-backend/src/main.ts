@@ -1,20 +1,36 @@
 import express from "express";
 import cors from "cors";
-import { config } from "./config.js";
+import { config, validateRuntimeConfig } from "./config.js";
 import { ChainClient } from "./chain.js";
-import { ensureSchema, listAllocations, pool } from "./db.js";
+import { ensureSchema, listAllocations, pool, validateDatabaseSchema } from "./db.js";
 import { SeedService } from "./seed-service.js";
 import { SpendMonitor } from "./monitor.js";
 import { log } from "./logger.js";
+import { IndexerApplicationSync } from "./indexer-sync.js";
 
-await ensureSchema();
+validateRuntimeConfig();
+
+if (config.seedAutoMigrate) {
+  await ensureSchema();
+}
+await validateDatabaseSchema();
 
 const chain = new ChainClient();
 await chain.connect();
 
 const seedService = new SeedService(chain);
+const applicationSync = new IndexerApplicationSync();
+await applicationSync.start();
 const monitor = new SpendMonitor(chain);
 await monitor.start();
+
+if (config.autoClaimIntervalSec > 0) {
+  scheduleRecurring("auto claim scan", config.autoClaimIntervalSec, () => seedService.scan(500));
+}
+
+if (config.autoRefillIntervalSec > 0) {
+  scheduleRecurring("auto refill scan", config.autoRefillIntervalSec, () => seedService.autoRefillScan(500));
+}
 
 const app = express();
 app.use(express.json({ limit: "64kb" }));
@@ -89,6 +105,23 @@ app.post("/seed/scan", requireApiKey, async (req, res, next) => {
   }
 });
 
+app.post("/seed/sync-applications", requireApiKey, async (_req, res, next) => {
+  try {
+    res.json(await applicationSync.sync());
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/seed/refill-scan", requireApiKey, async (req, res, next) => {
+  try {
+    const limit = Number.isInteger(req.body?.limit) ? Number(req.body.limit) : 500;
+    res.json({ results: await seedService.autoRefillScan(Math.max(1, Math.min(limit, 500))) });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.post("/seed/payouts/:idempotencyKey/mark-sent", requireApiKey, async (req, res, next) => {
   try {
     const txHash = requireString(req.body, "txHash");
@@ -102,6 +135,16 @@ app.post("/seed/payouts/:idempotencyKey/cancel", requireApiKey, async (req, res,
   try {
     const reason = requireString(req.body, "reason");
     res.json({ payout: await seedService.cancelPayout(req.params.idempotencyKey, reason) });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/seed/allocations/:wallet/unblacklist", requireApiKey, async (req, res, next) => {
+  try {
+    const reason = requireString(req.body, "reason");
+    const affectedAllocations = await seedService.unblacklistWallet(req.params.wallet, reason);
+    res.json({ affectedAllocations });
   } catch (error) {
     next(error);
   }
@@ -146,4 +189,26 @@ function requireString(body: unknown, field: string): string {
     throw new Error(`${field} must be a non-empty string`);
   }
   return value.trim();
+}
+
+function scheduleRecurring<T>(name: string, intervalSec: number, task: () => Promise<T>): void {
+  let running = false;
+  const run = async () => {
+    if (running) return;
+    running = true;
+    try {
+      const result = await task();
+      if (Array.isArray(result)) {
+        log.info(`${name} completed`, { results: result.length });
+      }
+    } catch (error) {
+      log.error(`${name} failed`, error);
+    } finally {
+      running = false;
+    }
+  };
+  run().catch((error) => log.error(`${name} failed`, error));
+  setInterval(() => {
+    run().catch((error) => log.error(`${name} failed`, error));
+  }, intervalSec * 1000);
 }

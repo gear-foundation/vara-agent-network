@@ -16,5 +16,6 @@ ENV NODE_ENV=production
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev
 COPY --from=build /app/lib ./lib
+COPY migrations ./migrations
 EXPOSE 3002
 CMD ["node", "lib/main.js"]

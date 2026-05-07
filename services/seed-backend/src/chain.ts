@@ -8,12 +8,15 @@ import { log } from "./logger.js";
 
 type Api = ApiPromise;
 
+const GEAR_BANK_ADDRESS = "0x6d6f646c70792f6762616e6b0000000000000000000000000000000000000000";
+
 export interface SpendEvent {
   id: string;
   wallet: string;
   recipient: string;
   amountRaw: bigint;
-  kind: "balances_transfer" | "gear_value";
+  kind: "balances_transfer" | "gear_value" | "tainted_program_value";
+  sourceProgram?: string;
   substrateBlockNumber: number;
   substrateBlockTs: Date;
   extrinsicIdx: number | null;
@@ -103,8 +106,12 @@ export class ChainClient {
     });
   }
 
-  async readSpendEvents(blockNumber: number, fundedWallets: Set<string>): Promise<SpendEvent[]> {
-    if (fundedWallets.size === 0) return [];
+  async readSpendEvents(
+    blockNumber: number,
+    fundedWallets: Set<string>,
+    taintedPrograms: Set<string> = new Set(),
+  ): Promise<SpendEvent[]> {
+    if (fundedWallets.size === 0 && taintedPrograms.size === 0) return [];
     const api = await this.connect();
     const blockHash = await api.rpc.chain.getBlockHash(blockNumber);
     const apiAt = await api.at(blockHash);
@@ -127,11 +134,35 @@ export class ChainClient {
     }>;
 
     records.forEach((record, eventIdx) => {
+      if (record.event.section === "gear" && record.event.method.toLowerCase() === "usermessagesent") {
+        const message = codecObject(record.event.data[0]);
+        const source = normalizeAddress(String(messageField(message, "source") ?? ""));
+        const destination = normalizeAddress(String(messageField(message, "destination") ?? ""));
+        const valueRaw = messageField(message, "value");
+        const amountRaw = valueRaw === undefined ? 0n : BigInt(toBigIntString(valueRaw));
+        if (!source || !destination || amountRaw <= 0n || !taintedPrograms.has(source)) return;
+        const extrinsicIdx = record.phase.isApplyExtrinsic ? record.phase.asApplyExtrinsic?.toNumber() ?? null : null;
+        events.push({
+          id: `tainted-program-value:${blockNumber}:${eventIdx}`,
+          wallet: source,
+          recipient: destination,
+          amountRaw,
+          kind: "tainted_program_value",
+          sourceProgram: source,
+          substrateBlockNumber: blockNumber,
+          substrateBlockTs: timestamp,
+          extrinsicIdx,
+          eventIdx,
+        });
+        return;
+      }
+
       if (record.event.section !== "balances" || record.event.method !== "Transfer") return;
       const data = record.event.data;
       const from = normalizeAddress(String(data[0]));
       const to = normalizeAddress(String(data[1]));
       const amountRaw = BigInt(toBigIntString(data[2]));
+      if (to === GEAR_BANK_ADDRESS) return;
       if (!from || !to || amountRaw <= 0n || !fundedWallets.has(from)) return;
       const extrinsicIdx = record.phase.isApplyExtrinsic ? record.phase.asApplyExtrinsic?.toNumber() ?? null : null;
       events.push({
@@ -192,4 +223,28 @@ export class ChainClient {
 
     return events;
   }
+}
+
+function codecObject(input: unknown): Record<string, unknown> {
+  if (input && typeof input === "object") {
+    const maybeJson = input as { toJSON?: () => unknown };
+    if (typeof maybeJson.toJSON === "function") {
+      const json = maybeJson.toJSON();
+      if (json && typeof json === "object") return json as Record<string, unknown>;
+    }
+    return input as Record<string, unknown>;
+  }
+  return {};
+}
+
+function messageField(message: Record<string, unknown>, field: string): unknown {
+  const direct = message[field];
+  if (direct !== undefined) return direct;
+
+  const nested = message.message;
+  if (nested && typeof nested === "object") {
+    return (nested as Record<string, unknown>)[field];
+  }
+
+  return undefined;
 }

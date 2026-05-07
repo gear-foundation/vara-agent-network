@@ -1,5 +1,6 @@
 import pg from "pg";
 import { config } from "./config.js";
+import { mostRestrictiveAllocationState, type AllocationState } from "./decision.js";
 
 export const pool = new pg.Pool({
   connectionString: config.databaseUrl,
@@ -13,6 +14,7 @@ export interface ApplicationRow {
   github_url: string;
   status: string;
   season_id: number;
+  registered_at: bigint;
 }
 
 export interface AllocationRow {
@@ -141,6 +143,24 @@ export async function ensureSchema(): Promise<void> {
     CREATE INDEX IF NOT EXISTS seed_spend_events_wallet_idx ON seed_spend_events(wallet);
     CREATE INDEX IF NOT EXISTS seed_spend_events_allowed_idx ON seed_spend_events(allowed);
 
+    CREATE TABLE IF NOT EXISTS seed_taint_targets (
+      id bigserial PRIMARY KEY,
+      source_wallet text NOT NULL,
+      source_application_id text NOT NULL,
+      program_id text NOT NULL,
+      amount_raw numeric(78,0) NOT NULL DEFAULT 0,
+      first_seen_block int NOT NULL,
+      last_seen_block int NOT NULL,
+      last_event_id text NOT NULL,
+      state text NOT NULL DEFAULT 'active',
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      UNIQUE (source_wallet, source_application_id, program_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS seed_taint_targets_program_idx ON seed_taint_targets(program_id);
+    CREATE INDEX IF NOT EXISTS seed_taint_targets_source_wallet_idx ON seed_taint_targets(source_wallet);
+
     CREATE TABLE IF NOT EXISTS seed_monitor_cursor (
       id text PRIMARY KEY,
       last_processed_block int NOT NULL,
@@ -159,10 +179,63 @@ export async function ensureSchema(): Promise<void> {
   `);
 }
 
+export async function validateDatabaseSchema(): Promise<void> {
+  await requireColumns("applications", [
+    "id",
+    "handle",
+    "owner",
+    "github_url",
+    "status",
+    "season_id",
+    "registered_at",
+  ]);
+
+  for (const table of [
+    "seed_allocations",
+    "seed_payouts",
+    "seed_funding_events",
+    "seed_spend_events",
+    "seed_taint_targets",
+    "seed_monitor_cursor",
+    "seed_audit_events",
+  ]) {
+    await requireTable(table);
+  }
+}
+
+async function requireTable(tableName: string): Promise<void> {
+  const rows = await pool.query<{ exists: boolean }>(
+    `SELECT to_regclass($1) IS NOT NULL AS exists`,
+    [`public.${tableName}`],
+  );
+  if (!rows.rows[0]?.exists) {
+    throw new Error(`required database table "${tableName}" is missing; run seed-backend migrations first`);
+  }
+}
+
+async function requireColumns(tableName: string, columnNames: string[]): Promise<void> {
+  await requireTable(tableName);
+  const rows = await pool.query<{ column_name: string }>(
+    `
+      SELECT column_name
+      FROM information_schema.columns
+      WHERE table_schema = current_schema()
+        AND table_name = $1
+        AND column_name = ANY($2::text[])
+    `,
+    [tableName, columnNames],
+  );
+  const found = new Set(rows.rows.map((row) => row.column_name));
+  const missing = columnNames.filter((columnName) => !found.has(columnName));
+  if (missing.length > 0) {
+    throw new Error(`required database table "${tableName}" is missing columns: ${missing.join(", ")}`);
+  }
+}
+
 export async function getEligibleApplication(applicationId: string): Promise<ApplicationRow | null> {
   const rows = await pool.query<ApplicationRow>(
     `
-      SELECT id, handle, owner, github_url, status, season_id
+      SELECT id, handle, owner, github_url, status, season_id, registered_at
       FROM applications
       WHERE lower(id) = lower($1)
       LIMIT 1
@@ -172,12 +245,71 @@ export async function getEligibleApplication(applicationId: string): Promise<App
   return rows.rows[0] ?? null;
 }
 
+export async function upsertApplicationsFromIndexer(applications: ApplicationRow[]): Promise<number> {
+  if (applications.length === 0) return 0;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const app of applications) {
+      await client.query(
+        `
+          INSERT INTO applications (id, handle, owner, github_url, status, season_id, registered_at)
+          VALUES (lower($1), $2, lower($3), $4, $5, $6, $7)
+          ON CONFLICT (id) DO UPDATE SET
+            handle = EXCLUDED.handle,
+            owner = EXCLUDED.owner,
+            github_url = EXCLUDED.github_url,
+            status = EXCLUDED.status,
+            season_id = EXCLUDED.season_id,
+            registered_at = EXCLUDED.registered_at
+        `,
+        [
+          app.id,
+          app.handle,
+          app.owner,
+          app.github_url,
+          app.status,
+          app.season_id,
+          app.registered_at,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+    return applications.length;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
 export async function listEligibleApplications(limit = 100): Promise<ApplicationRow[]> {
   const rows = await pool.query<ApplicationRow>(
     `
-      SELECT id, handle, owner, github_url, status, season_id
+      SELECT id, handle, owner, github_url, status, season_id, registered_at
       FROM applications
       ORDER BY registered_at ASC
+      LIMIT $1
+    `,
+    [limit],
+  );
+  return rows.rows;
+}
+
+export async function listUnfundedApplications(limit = 100): Promise<ApplicationRow[]> {
+  const rows = await pool.query<ApplicationRow>(
+    `
+      SELECT a.id, a.handle, a.owner, a.github_url, a.status, a.season_id, a.registered_at
+      FROM applications a
+      WHERE NOT EXISTS (
+        SELECT 1
+        FROM seed_allocations sa
+        WHERE sa.application_id = lower(a.id)
+          AND sa.wallet = lower(a.owner)
+          AND sa.total_funded_raw > 0
+      )
+      ORDER BY a.registered_at ASC
       LIMIT $1
     `,
     [limit],
@@ -244,6 +376,55 @@ export async function getAllocationForUpdate(
       FOR UPDATE
     `,
     [wallet, applicationId],
+  );
+  return rows.rows[0] ?? null;
+}
+
+export async function inheritWalletBlockForUpdate(
+  client: pg.PoolClient,
+  wallet: string,
+  applicationId: string,
+): Promise<AllocationRow | null> {
+  const inheritedRows = await client.query<{
+    state: AllocationState;
+    suspicious_count: number;
+    risk_score: number;
+    last_reason: string | null;
+  }>(
+    `
+      SELECT state, suspicious_count, risk_score, last_reason
+      FROM seed_allocations
+      WHERE wallet = lower($1)
+      ORDER BY updated_at DESC
+      FOR UPDATE
+    `,
+    [wallet],
+  );
+  if (inheritedRows.rows.length === 0) return null;
+
+  const inheritedState = mostRestrictiveAllocationState(inheritedRows.rows.map((row) => row.state));
+  if (inheritedState === "active") {
+    return getAllocationForUpdate(client, wallet, applicationId);
+  }
+
+  const inheritedSuspiciousCount = Math.max(...inheritedRows.rows.map((row) => row.suspicious_count));
+  const inheritedRiskScore = Math.max(...inheritedRows.rows.map((row) => row.risk_score));
+  const inheritedReason =
+    inheritedRows.rows.find((row) => row.state === inheritedState && row.last_reason)?.last_reason ??
+    `wallet has existing ${inheritedState} seed allocation`;
+
+  const rows = await client.query<AllocationRow>(
+    `
+      UPDATE seed_allocations
+      SET state = $3,
+          suspicious_count = GREATEST(suspicious_count, $4),
+          risk_score = GREATEST(risk_score, $5),
+          last_reason = COALESCE(last_reason, $6),
+          updated_at = now()
+      WHERE wallet = lower($1) AND application_id = lower($2)
+      RETURNING *
+    `,
+    [wallet, applicationId, inheritedState, inheritedSuspiciousCount, inheritedRiskScore, inheritedReason],
   );
   return rows.rows[0] ?? null;
 }

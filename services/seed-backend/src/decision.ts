@@ -4,6 +4,7 @@ export type FundingMode = "initial" | "refill";
 export interface PayoutPolicy {
   initialTarget: bigint;
   refillTarget: bigint;
+  refillTriggerBalance: bigint;
   walletDailyCap: bigint;
   globalDailyCap: bigint;
   lifetimeCapApp: bigint;
@@ -49,6 +50,18 @@ export function planPayout(input: PayoutInputs, policy: PayoutPolicy): PayoutPla
         reason: `refill interval has not elapsed; next eligible at ${new Date(nextEligible).toISOString()}`,
       };
     }
+  }
+
+  if (
+    input.mode === "refill" &&
+    policy.refillTriggerBalance > 0n &&
+    input.currentBalance >= policy.refillTriggerBalance
+  ) {
+    return {
+      status: "skip",
+      amount: 0n,
+      reason: "wallet balance is above refill trigger",
+    };
   }
 
   const target = input.totalFunded === 0n || input.mode === "initial"
@@ -106,6 +119,12 @@ export interface SpendRiskDecision {
   suspicious: boolean;
   state: AllocationState;
   suspiciousCount: number;
+}
+
+export function mostRestrictiveAllocationState(states: AllocationState[]): AllocationState {
+  if (states.includes("blacklisted")) return "blacklisted";
+  if (states.includes("paused")) return "paused";
+  return "active";
 }
 
 export function applySpendRisk(input: SpendRiskInput, policy: RiskPolicy): SpendRiskDecision {

@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import {
   applySpendRisk,
   isAllowedRecipient,
+  mostRestrictiveAllocationState,
   planPayout,
   type PayoutInputs,
   type PayoutPolicy,
@@ -14,6 +15,7 @@ const VARA = 1_000_000_000_000n;
 const policy: PayoutPolicy = {
   initialTarget: 10n * VARA,
   refillTarget: 10n * VARA,
+  refillTriggerBalance: 0n,
   walletDailyCap: 100n * VARA,
   globalDailyCap: 1_000n * VARA,
   lifetimeCapApp: 100n * VARA,
@@ -65,6 +67,42 @@ test("refill cooldown blocks payout before the interval elapses", () => {
   assert.match(result.reason, /refill interval has not elapsed/);
 });
 
+test("refill trigger skips payout until wallet balance drops below threshold", () => {
+  const result = planPayout(
+    {
+      ...baseInput,
+      mode: "refill",
+      currentBalance: 2n * VARA,
+      totalFunded: 10n * VARA,
+      lastFundedAtMs: baseInput.nowMs - 90_000_000,
+    },
+    {
+      ...policy,
+      refillTriggerBalance: 2n * VARA,
+    },
+  );
+  assert.equal(result.status, "skip");
+  assert.equal(result.reason, "wallet balance is above refill trigger");
+});
+
+test("refill trigger allows top-up to refill target when below threshold", () => {
+  const result = planPayout(
+    {
+      ...baseInput,
+      mode: "refill",
+      currentBalance: 1n * VARA,
+      totalFunded: 10n * VARA,
+      lastFundedAtMs: baseInput.nowMs - 90_000_000,
+    },
+    {
+      ...policy,
+      refillTriggerBalance: 2n * VARA,
+    },
+  );
+  assert.equal(result.status, "pay");
+  assert.equal(result.amount, 9n * VARA);
+});
+
 test("daily wallet cap limits payout amount", () => {
   const result = planPayout(
     {
@@ -98,6 +136,12 @@ test("paused and blacklisted allocations cannot receive payout", () => {
   const blacklisted = planPayout({ ...baseInput, state: "blacklisted" }, policy);
   assert.equal(blacklisted.status, "blacklisted");
   assert.equal(blacklisted.amount, 0n);
+});
+
+test("wallet block inheritance keeps the most restrictive allocation state", () => {
+  assert.equal(mostRestrictiveAllocationState(["active", "paused"]), "paused");
+  assert.equal(mostRestrictiveAllocationState(["active", "paused", "blacklisted"]), "blacklisted");
+  assert.equal(mostRestrictiveAllocationState(["active", "active"]), "active");
 });
 
 test("GitHub URL validation accepts github.com owner/repo", () => {

@@ -15,7 +15,7 @@ export class SpendMonitor {
   async start(): Promise<void> {
     if (this.running) return;
     this.running = true;
-    await this.guardedTick().catch((error) => log.error("seed monitor initial tick failed", error));
+    this.guardedTick().catch((error) => log.error("seed monitor initial tick failed", error));
     setInterval(() => {
       this.guardedTick().catch((error) => log.error("seed monitor tick failed", error));
     }, config.monitorPollIntervalMs);
@@ -36,13 +36,19 @@ export class SpendMonitor {
     const from = await this.resumePoint(head);
     if (from > head) return;
 
-    const fundedWallets = await this.fundedWallets();
     const allowedRecipients = await listAllowedRecipients();
 
     for (let block = from; block <= head; block++) {
-      const events = await this.chain.readSpendEvents(block, fundedWallets);
+      const fundedWallets = await this.fundedWallets();
+      const taintedPrograms = await this.taintedPrograms();
+      const events = await this.chain.readSpendEvents(block, fundedWallets, taintedPrograms);
       for (const event of events) {
-        await this.recordSpend(event, isAllowedRecipient(event.recipient, allowedRecipients));
+        const allowed = isAllowedRecipient(event.recipient, allowedRecipients);
+        if (event.kind === "tainted_program_value") {
+          await this.recordTaintedProgramSpend(event, allowed);
+        } else {
+          await this.recordSpend(event, allowed);
+        }
       }
       await this.advanceCursor(block);
     }
@@ -92,6 +98,17 @@ export class SpendMonitor {
     return new Set(rows.rows.map((r) => r.wallet.toLowerCase()));
   }
 
+  private async taintedPrograms(): Promise<Set<string>> {
+    const rows = await pool.query<{ program_id: string }>(
+      `
+        SELECT DISTINCT program_id
+        FROM seed_taint_targets
+        WHERE state = 'active'
+      `,
+    );
+    return new Set(rows.rows.map((r) => r.program_id.toLowerCase()));
+  }
+
   private async recordSpend(event: SpendEvent, allowed: boolean): Promise<void> {
     const inserted = await pool.query<{ id: string }>(
       `
@@ -118,13 +135,104 @@ export class SpendMonitor {
     );
     if (inserted.rows.length === 0) return;
 
-    if (allowed) return;
+    if (allowed) {
+      if (event.kind === "gear_value") await this.recordFundedWalletTaint(event);
+      return;
+    }
 
     await this.applySuspicion(event);
   }
 
+  private async recordTaintedProgramSpend(event: SpendEvent, allowed: boolean): Promise<void> {
+    const sourceProgram = event.sourceProgram?.toLowerCase() ?? event.wallet.toLowerCase();
+    const links = await pool.query<{ source_wallet: string; source_application_id: string }>(
+      `
+        SELECT source_wallet, source_application_id
+        FROM seed_taint_targets
+        WHERE program_id = $1 AND state = 'active'
+      `,
+      [sourceProgram],
+    );
+
+    for (const link of links.rows) {
+      const attributed: SpendEvent = {
+        ...event,
+        id: `${event.id}:${link.source_wallet}:${link.source_application_id}`,
+        wallet: link.source_wallet,
+        sourceProgram,
+      };
+      await this.recordSpend(attributed, allowed);
+      if (allowed) {
+        await this.recordTaintTarget({
+          sourceWallet: link.source_wallet,
+          sourceApplicationId: link.source_application_id,
+          programId: event.recipient,
+          amountRaw: event.amountRaw,
+          event,
+        });
+      }
+    }
+  }
+
+  private async recordFundedWalletTaint(event: SpendEvent): Promise<void> {
+    const rows = await pool.query<{ application_id: string }>(
+      `
+        SELECT application_id
+        FROM seed_allocations
+        WHERE wallet = $1
+          AND total_funded_raw > 0
+          AND state <> 'blacklisted'
+      `,
+      [event.wallet],
+    );
+
+    for (const row of rows.rows) {
+      await this.recordTaintTarget({
+        sourceWallet: event.wallet,
+        sourceApplicationId: row.application_id,
+        programId: event.recipient,
+        amountRaw: event.amountRaw,
+        event,
+      });
+    }
+  }
+
+  private async recordTaintTarget(input: {
+    sourceWallet: string;
+    sourceApplicationId: string;
+    programId: string;
+    amountRaw: bigint;
+    event: SpendEvent;
+  }): Promise<void> {
+    await pool.query(
+      `
+        INSERT INTO seed_taint_targets (
+          source_wallet, source_application_id, program_id, amount_raw,
+          first_seen_block, last_seen_block, last_event_id
+        )
+        VALUES ($1, $2, $3, $4, $5, $5, $6)
+        ON CONFLICT (source_wallet, source_application_id, program_id) DO UPDATE SET
+          amount_raw = seed_taint_targets.amount_raw + EXCLUDED.amount_raw,
+          last_seen_block = EXCLUDED.last_seen_block,
+          last_event_id = EXCLUDED.last_event_id,
+          state = 'active',
+          updated_at = now()
+      `,
+      [
+        input.sourceWallet.toLowerCase(),
+        input.sourceApplicationId.toLowerCase(),
+        input.programId.toLowerCase(),
+        input.amountRaw.toString(),
+        input.event.substrateBlockNumber,
+        input.event.id,
+      ],
+    );
+  }
+
   private async applySuspicion(event: SpendEvent): Promise<void> {
-    const reason = `${event.kind} to non-hackathon recipient ${event.recipient}`;
+    const reason = event.kind === "tainted_program_value" && event.sourceProgram
+      ? `${event.kind} from tainted program ${event.sourceProgram} to non-hackathon recipient ${event.recipient}`
+      : `${event.kind} to non-hackathon recipient ${event.recipient}`;
 
     const rows = await pool.query<{ wallet: string; application_id: string; suspicious_count: number; state: string }>(
       `

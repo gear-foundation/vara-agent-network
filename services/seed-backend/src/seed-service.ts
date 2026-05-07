@@ -9,9 +9,10 @@ import {
   getAllocationForUpdate,
   getEligibleApplication,
   getPayoutByKey,
+  inheritWalletBlockForUpdate,
   listAllocations,
-  listEligibleApplications,
   listPayouts,
+  listUnfundedApplications,
   recordAudit,
   upsertAllocation,
 } from "./db.js";
@@ -24,6 +25,7 @@ import { payoutAttemptKey, payoutBaseKey, payoutBaseKeyLike } from "./payout-key
 
 const INITIAL_TARGET = varaToPlanck(config.initialTargetVara);
 const REFILL_TARGET = varaToPlanck(config.refillTargetVara);
+const REFILL_TRIGGER_BALANCE = varaToPlanck(config.refillTriggerBalanceVara);
 const DAILY_CAP = varaToPlanck(config.maxDailyRefillVara);
 const GLOBAL_DAILY_CAP = varaToPlanck(config.globalDailyPayoutLimitVara);
 const LIFETIME_CAP_APP = varaToPlanck(config.lifetimeCapAppVara);
@@ -33,6 +35,7 @@ const LIFETIME_CAP_REPO = varaToPlanck(config.lifetimeCapRepoVara);
 const PAYOUT_POLICY: PayoutPolicy = {
   initialTarget: INITIAL_TARGET,
   refillTarget: REFILL_TARGET,
+  refillTriggerBalance: REFILL_TRIGGER_BALANCE,
   walletDailyCap: DAILY_CAP,
   globalDailyCap: GLOBAL_DAILY_CAP,
   lifetimeCapApp: LIFETIME_CAP_APP,
@@ -54,17 +57,31 @@ export class SeedService {
   }
 
   async scan(limit = 100): Promise<FundingDecision[]> {
-    const apps = await listEligibleApplications(limit);
+    const apps = await listUnfundedApplications(limit);
     const results: FundingDecision[] = [];
     for (const app of apps) {
       try {
-        const allocation = (await listAllocations(app.owner)).find(
-          (row) => row.application_id === app.id.toLowerCase(),
-        );
-        if (allocation && BigInt(allocation.total_funded_raw) > 0n) continue;
         results.push(await this.fundApplication(app, "initial"));
       } catch (error) {
         log.warn("seed scan failed for app", { app: app.id, error: String(error) });
+      }
+    }
+    return results;
+  }
+
+  async autoRefillScan(limit = 500): Promise<FundingDecision[]> {
+    const allocations = await listAllocations();
+    const results: FundingDecision[] = [];
+    for (const allocation of allocations.slice(0, limit)) {
+      if (allocation.state !== "active" || BigInt(allocation.total_funded_raw) <= 0n) continue;
+      try {
+        results.push(await this.refill(allocation.application_id));
+      } catch (error) {
+        log.warn("auto refill failed", {
+          wallet: allocation.wallet,
+          applicationId: allocation.application_id,
+          error: String(error),
+        });
       }
     }
     return results;
@@ -122,6 +139,31 @@ export class SeedService {
     return updated;
   }
 
+  async unblacklistWallet(walletInput: string, reason: string): Promise<number> {
+    const wallet = requireAddress(walletInput, "wallet");
+    const rows = await pool.query<{ application_id: string }>(
+      `
+        UPDATE seed_allocations
+        SET state = 'active',
+            suspicious_count = 0,
+            risk_score = 0,
+            last_reason = $2,
+            updated_at = now()
+        WHERE wallet = $1 AND state IN ('paused', 'blacklisted')
+        RETURNING application_id
+      `,
+      [wallet, `manual unblock: ${reason}`],
+    );
+
+    await recordAudit(
+      "warn",
+      "seed wallet manually unblocked",
+      { reason, affectedAllocations: rows.rows.length },
+      wallet,
+    );
+    return rows.rows.length;
+  }
+
   private async fund(applicationId: string, mode: "initial" | "refill"): Promise<FundingDecision> {
     const app = await getEligibleApplication(applicationId);
     if (!app) {
@@ -171,6 +213,7 @@ export class SeedService {
       if (!allocation) throw new Error("allocation row disappeared after upsert");
 
       await resetDailyWindowIfNeeded(client, wallet);
+      await inheritWalletBlockForUpdate(client, wallet, applicationId);
       const fresh = await getAllocationForUpdate(client, wallet, applicationId);
       if (!fresh) throw new Error("allocation row disappeared after daily reset");
 
@@ -230,7 +273,7 @@ export class SeedService {
       }
 
       const baseKey = payoutBaseKey(mode, wallet, applicationId);
-      const blockingPayout = await getBlockingPayout(client, baseKey);
+      const blockingPayout = await getBlockingPayout(client, baseKey, mode);
       if (blockingPayout) {
         await client.query("COMMIT");
         return {
@@ -356,24 +399,40 @@ async function refillActivityCount(
   applicationId: string,
   since: Date,
 ): Promise<number> {
-  const rows = await client.query<{ count: string }>(
-    `
-      SELECT (
-        SELECT count(*)::int
+  let interactionsCount = 0;
+  const hasInteractions = await relationExists(client, "interactions");
+  if (hasInteractions) {
+    const rows = await client.query<{ count: string }>(
+      `
+        SELECT count(*)::text AS count
         FROM interactions
         WHERE substrate_block_ts >= $3
           AND (caller = $1 OR caller = $2 OR callee = $2)
-      ) + (
-        SELECT count(*)::int
-        FROM seed_spend_events
-        WHERE substrate_block_ts >= $4
-          AND wallet = $1
-          AND allowed = true
-      ) AS count
+      `,
+      [wallet, applicationId, since.getTime().toString()],
+    );
+    interactionsCount = Number(rows.rows[0]?.count ?? 0);
+  }
+
+  const spendRows = await client.query<{ count: string }>(
+    `
+      SELECT count(*)::text AS count
+      FROM seed_spend_events
+      WHERE substrate_block_ts >= $2
+        AND wallet = $1
+        AND allowed = true
     `,
-    [wallet, applicationId, since.getTime().toString(), since],
+    [wallet, since],
   );
-  return Number(rows.rows[0]?.count ?? 0);
+  return interactionsCount + Number(spendRows.rows[0]?.count ?? 0);
+}
+
+async function relationExists(client: pg.PoolClient, tableName: string): Promise<boolean> {
+  const rows = await client.query<{ exists: boolean }>(
+    `SELECT to_regclass($1) IS NOT NULL AS exists`,
+    [`public.${tableName}`],
+  );
+  return rows.rows[0]?.exists ?? false;
 }
 
 type PayoutSumScope =
@@ -423,18 +482,23 @@ interface PayoutRow {
   tx_hash: string | null;
 }
 
-async function getBlockingPayout(client: pg.PoolClient, baseKey: string): Promise<PayoutRow | null> {
+async function getBlockingPayout(
+  client: pg.PoolClient,
+  baseKey: string,
+  mode: "initial" | "refill",
+): Promise<PayoutRow | null> {
+  const statuses = mode === "initial" ? ["PENDING", "SENT"] : ["PENDING"];
   const rows = await client.query<PayoutRow>(
     `
       SELECT status, amount_raw::text, tx_hash
       FROM seed_payouts
       WHERE (idempotency_key = $1 OR idempotency_key LIKE $2)
-        AND status IN ('PENDING', 'SENT')
+        AND status = ANY($3::text[])
       ORDER BY created_at DESC
       LIMIT 1
       FOR UPDATE
     `,
-    [baseKey, payoutBaseKeyLike(baseKey)],
+    [baseKey, payoutBaseKeyLike(baseKey), statuses],
   );
   return rows.rows[0] ?? null;
 }

@@ -72,6 +72,24 @@ CREATE TABLE IF NOT EXISTS seed_spend_events (
 CREATE INDEX IF NOT EXISTS seed_spend_events_wallet_idx ON seed_spend_events(wallet);
 CREATE INDEX IF NOT EXISTS seed_spend_events_allowed_idx ON seed_spend_events(allowed);
 
+CREATE TABLE IF NOT EXISTS seed_taint_targets (
+  id bigserial PRIMARY KEY,
+  source_wallet text NOT NULL,
+  source_application_id text NOT NULL,
+  program_id text NOT NULL,
+  amount_raw numeric(78,0) NOT NULL DEFAULT 0,
+  first_seen_block int NOT NULL,
+  last_seen_block int NOT NULL,
+  last_event_id text NOT NULL,
+  state text NOT NULL DEFAULT 'active',
+  created_at timestamptz NOT NULL DEFAULT now(),
+  updated_at timestamptz NOT NULL DEFAULT now(),
+  UNIQUE (source_wallet, source_application_id, program_id)
+);
+
+CREATE INDEX IF NOT EXISTS seed_taint_targets_program_idx ON seed_taint_targets(program_id);
+CREATE INDEX IF NOT EXISTS seed_taint_targets_source_wallet_idx ON seed_taint_targets(source_wallet);
+
 CREATE TABLE IF NOT EXISTS seed_monitor_cursor (
   id text PRIMARY KEY,
   last_processed_block int NOT NULL,
