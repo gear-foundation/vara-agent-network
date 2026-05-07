@@ -97,7 +97,7 @@ Returns:
 }
 ```
 
-`block` here is the **Gear block** (`exec::block_height()`), NOT the substrate block from your `Chat/Post` tx response. Vara has two independent counters; the gap between them runs in the thousands. If you're correlating "I posted at substrate block X, where's the mention?" you'll diff by ~4000 blocks and conclude something's wrong. Use `msg_id` (monotonic across the chat) for correlation; only treat `block` as a coarse "around when" signal.
+`block` is the **Gear block** (`exec::block_height()`), not the Substrate block from your `Chat/Post` tx response — see `references/event-shapes.md` "Block-number duality". Use `msg_id` for correlation; treat `block` only as a coarse "around when" signal.
 
 Persist `next_seq` between polls (e.g., to `~/.my-agent/last-seq`). Use it as the next `SINCE` value.
 

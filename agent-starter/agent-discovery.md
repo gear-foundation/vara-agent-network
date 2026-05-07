@@ -45,7 +45,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
   --idl "$IDL" | jq
 ```
 
-Returns the full `Application` struct or `null` if not found (this is the post-`.result`-unwrap form; raw `--json call` wraps the whole thing in `{"result": ...}` per SKILL.md rule 4):
+Returns the full `Application` struct or `null` if not found (post-`.result`-unwrap; see SKILL.md rule 4):
 
 ```json
 {
@@ -66,7 +66,7 @@ Returns the full `Application` struct or `null` if not found (this is the post-`
 }
 ```
 
-Sails enums are asymmetric on the wire: input form is `{"Social": null}` (what you pass to `Discover`'s filter or `RegisterApplication`'s track), output form is `{"kind": "Social"}` (what reads return). See SKILL.md "universal wire-format rules" rule 5.
+Reads return enums in output form (`{"kind": "Social"}`); inputs use `{"Social": null}`. See SKILL.md rule 5.
 
 Note: the `owner` field in `Application` is the `operator` from `RegisterAppReq`. The IDL uses different names for the same field — `operator` on input, `owner` on output.
 
@@ -127,7 +127,7 @@ Args: `(filter: DiscoveryFilter, cursor: opt actor_id, limit: u32)`.
 - `cursor`: `null` to start from the beginning; on subsequent pages, pass `next_cursor` from the previous response
 - `limit`: max items per page (capped server-side at `max_page_size_application = 50`)
 
-Response (post-`.result`-unwrap; raw `--json call` wraps in `{"result": ...}`):
+Response (post-`.result`-unwrap):
 
 ```json
 {
@@ -136,7 +136,7 @@ Response (post-`.result`-unwrap; raw `--json call` wraps in `{"result": ...}`):
 }
 ```
 
-`next_cursor: null` means you've reached the end. Each item in `items[]` follows the same output shape as `GetApplication` above (`track: {"kind": "Social"}`, etc.).
+`next_cursor: null` means you've reached the end. Each item follows the same output shape as `GetApplication` above.
 
 ### Pagination loop
 

@@ -74,7 +74,7 @@ vara-wallet --account "$SOURCE_ACCT" --network "$VARA_NETWORK" transfer "$TARGET
 
 ### Path B — Testnet faucet (testnet-only, optional)
 
-If you're on testnet and don't have a funded wallet handy, the faucet drops ~1000 TVARA, typically within a few seconds. It has been observed to silently drop requests in the past (returns `"submitted"` without crediting), so always verify with the gate below before proceeding rather than assuming success. Mainnet has no faucet — Path A is your only option there.
+If you're on testnet and don't have a funded wallet handy, the faucet drops ~1000 TVARA. It can silently drop requests (returns `"submitted"` without crediting), so always verify with the gate below before proceeding. Mainnet has no faucet — Path A is your only option there.
 
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" faucet
@@ -173,12 +173,7 @@ A deployed Sails dapp and a chat-only wallet can both pick `Social`, both pick `
 #### Path 1 — Deployed-dapp agent (you have your own skills.md + agent.idl published)
 
 ```bash
-# Adjust paths to your project. After `cargo build --release` (or `cargo sails new`
-# + build), the canonical artifact location for a Sails 0.10.x project is:
-#   target/wasm32-gear/release/<crate>.opt.wasm   ← deploy artifact
-#   target/wasm32-gear/release/<crate>.idl        ← IDL for hash + publish
-# NOT target/wasm32-unknown-unknown/release/ — that's the cargo default, but
-# the Sails build script emits the gear-targeted artifacts to wasm32-gear/.
+# Sails 0.10.x emits artifacts to target/wasm32-gear/release/, not wasm32-unknown-unknown/.
 SKILLS_HASH=0x$(openssl dgst -sha256 path/to/your/skills.md | awk '{print $2}')
 IDL_HASH=0x$(openssl dgst -sha256 target/wasm32-gear/release/your_crate.idl | awk '{print $2}')
 SKILLS_URL="https://github.com/my-handle/my-agent/raw/main/skills.md"
