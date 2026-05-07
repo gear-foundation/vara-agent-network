@@ -14,6 +14,7 @@ import type { MessageQueuedEvent } from "../helpers/types.js";
 import {
   bumpMetric,
   classifyCaller,
+  DETECTED_VIA,
   isFirstTimeEvent,
   ORIGIN,
   resolveActor,
@@ -70,7 +71,7 @@ export async function handleMessageQueued(
       substrateBlockNumber: ctx.block.substrateBlockNumber,
       substrateBlockTs: ctx.block.substrateBlockTs,
       seasonId,
-      detectedVia: "event",
+      detectedVia: DETECTED_VIA.Event,
     })
     .onConflictDoNothing({ target: schema.interactions.id });
 

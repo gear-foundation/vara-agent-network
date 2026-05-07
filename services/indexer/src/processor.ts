@@ -37,6 +37,11 @@ export async function createProcessor(hooks: ProcessorHooks) {
 
   const p2pDetector = new P2PDetector();
 
+  // Catch-up reuses the previous block's hash as the next block's parent —
+  // saves one `state_getBlockHash` RPC per block in the live tail.
+  let lastProcessedNumber: number | null = null;
+  let lastProcessedHash: Hex | null = null;
+
   // Normalize ActorId strings to lowercase hex. Gear events surface addresses
   // in mixed formats:
   //   Gear.MessageQueued's source is SS58 (wallet-style extrinsic origin),
@@ -194,7 +199,12 @@ export async function createProcessor(hooks: ProcessorHooks) {
     // invalidate the cached parent snapshot.
     if (opts?.runP2PDetector) {
       try {
-        const parentHash = (await api.rpc.chain.getBlockHash(blockNumber - 1)).toHex() as Hex;
+        // Reuse the previous block's hash if we processed `blockNumber - 1`
+        // last; otherwise fetch fresh.
+        const parentHash =
+          lastProcessedNumber === blockNumber - 1 && lastProcessedHash
+            ? lastProcessedHash
+            : ((await api.rpc.chain.getBlockHash(blockNumber - 1)).toHex() as Hex);
         const p2pEvents = await p2pDetector.detect({
           api,
           blockHash,
@@ -225,6 +235,9 @@ export async function createProcessor(hooks: ProcessorHooks) {
       inLiveWindow: opts?.runP2PDetector === true,
     };
     await hooks.onBlock(ctx);
+
+    lastProcessedNumber = blockNumber;
+    lastProcessedHash = blockHash;
 
     await db
       .insert(schema.processorCursor)

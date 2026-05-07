@@ -14,9 +14,7 @@ import { type HandlerContext } from "./handlers/common.js";
 import { handleMessageQueued } from "./handlers/interaction.js";
 import { handleProgramMessage } from "./handlers/p2p.js";
 import {
-  buildKnownMessageIds,
-  buildKnownMQDestinations,
-  buildProgramsWithCrossBlockEdge,
+  buildBlockSets,
   handleParticipationInference,
   handleUserMessageSentBacktrack,
 } from "./handlers/p2p_inference.js";
@@ -181,19 +179,17 @@ async function main() {
         });
       }
 
-      // Built once and reused across Pass 3 (P2P overcount filter) and Pass 4
-      // (Strategy C). Pass 2's `MessageQueued` events define the wallet axis
-      // for this block; both downstream passes need the set to avoid
-      // double-counting wallet-originated messages on the P2P axes.
-      const knownMessageIdsThisBlock = buildKnownMessageIds(ctx.events);
+      // Single pass over ctx.events to build the three block-scoped sets the
+      // P2P passes need. `knownMessageIds` filters wallet-originated messages
+      // out of the P2P axis (Pass 3 + Strategy C). `knownMQDestinations` and
+      // `programsWithCrossBlockEdge` are Strategy A's exclusion sets.
+      const blockSets = buildBlockSets(ctx.events);
 
       // Pass 3: ProgramMessage events synthesized by the storage-diff detector.
       // Captures program → program edges that pallet-gear does not emit as
-      // events. Tagged `detected_via` ∈ {dispatches_storage, waitlist_storage}
-      // and bumps `app_metrics.p2p_*` columns (kept separate from the
-      // wallet-driven `integrations_*` columns). Wallet→program messages
-      // that briefly appear in dispatches/waitlist this block are filtered
-      // by `knownMessageIdsThisBlock` inside the handler.
+      // events. Wallet→program messages that briefly appear in dispatches/
+      // waitlist this block are filtered by `knownMessageIds` inside the
+      // handler so they don't inflate the P2P axis.
       let programMessageCount = 0;
       for (const event of ctx.events) {
         if (!isProgramMessage(event)) continue;
@@ -207,26 +203,22 @@ async function main() {
             eventIdx: event.indexInBlock,
             programId: processorConfig.programId,
           },
-          knownMessageIdsThisBlock,
+          blockSets.knownMessageIds,
         );
       }
 
       // Pass 4: event-only inference for intra-block P2P participation.
-      // Strategy A reads MessagesDispatched.state_changes minus this block's
-      // wallet MQ destinations and minus this block's cross-block edges to
-      // bump `p2p_active_blocks`. Strategy C reads UserMessageSent replies
-      // whose details.to is unknown to this block's MessageQueued set to
-      // bump `p2p_replies_origin`.
+      // Strategy A bumps `p2p_active_blocks` for programs in
+      // `MessagesDispatched.state_changes` minus the wallet-MQ and
+      // cross-block-edge exclusion sets. Strategy C bumps `p2p_replies_origin`
+      // when `UserMessageSent.details.to` is unknown to this block's MQ ids.
       //
-      // Gated by ctx.inLiveWindow because Strategy A's exclusion set
-      // (programs touched by ProgramMessage events from the storage-diff
-      // detector) is empty during backfill, which would cause spurious
-      // bumps. New counters intentionally start clean from live cutover.
+      // Gated by ctx.inLiveWindow because Strategy A's cross-block exclusion
+      // is empty during backfill, which would cause spurious bumps. New
+      // counters intentionally start clean from live cutover.
       let participationCount = 0;
       let backtrackCount = 0;
       if (ctx.inLiveWindow !== false) {
-        const knownMQDestinations = buildKnownMQDestinations(ctx.events);
-        const programsWithCrossBlockEdge = buildProgramsWithCrossBlockEdge(ctx.events);
         for (const event of ctx.events) {
           if (isMessagesDispatched(event)) {
             participationCount++;
@@ -234,12 +226,12 @@ async function main() {
               db,
               ctx,
               event,
-              knownMQDestinations,
-              programsWithCrossBlockEdge,
+              blockSets.knownMQDestinations,
+              blockSets.programsWithCrossBlockEdge,
             );
           } else if (isUserMessageSent(event) && event.hasReplyDetails) {
             backtrackCount++;
-            await handleUserMessageSentBacktrack(db, ctx, event, knownMessageIdsThisBlock);
+            await handleUserMessageSentBacktrack(db, ctx, event, blockSets.knownMessageIds);
           }
         }
       }

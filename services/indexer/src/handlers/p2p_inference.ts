@@ -116,32 +116,46 @@ export async function handleUserMessageSentBacktrack(
   );
 }
 
+export interface BlockSets {
+  /** `MessageQueued.destination` from this block (wallet-axis programs). */
+  knownMQDestinations: Set<Hex>;
+  /** `MessageQueued.messageId` from this block (wallet-originated msg ids). */
+  knownMessageIds: Set<Hex>;
+  /** Programs touched by any cross-block `ProgramMessage` event. */
+  programsWithCrossBlockEdge: Set<Hex>;
+}
+
 /**
- * Helpers exported for tests and the processor wiring (Pass 4).
+ * Single pass over `ctx.events` that builds the three block-scoped sets the
+ * P2P inference handlers need. Replaces three separate iterations.
  */
-export function buildKnownMQDestinations(events: BlockContext["events"]): Set<Hex> {
-  const out = new Set<Hex>();
+export function buildBlockSets(events: BlockContext["events"]): BlockSets {
+  const knownMQDestinations = new Set<Hex>();
+  const knownMessageIds = new Set<Hex>();
+  const programsWithCrossBlockEdge = new Set<Hex>();
   for (const e of events) {
-    if (e.kind === "MessageQueued") out.add(e.destination);
+    if (e.kind === "MessageQueued") {
+      knownMQDestinations.add(e.destination);
+      knownMessageIds.add(e.messageId);
+    } else if (e.kind === "ProgramMessage") {
+      programsWithCrossBlockEdge.add(e.source);
+      programsWithCrossBlockEdge.add(e.destination);
+    }
   }
-  return out;
+  return { knownMQDestinations, knownMessageIds, programsWithCrossBlockEdge };
+}
+
+// Single-purpose builders kept as a stable test API so the contract of each
+// set can be asserted independently. Production callers should use
+// `buildBlockSets` to avoid three separate iterations of `ctx.events`.
+export function buildKnownMQDestinations(events: BlockContext["events"]): Set<Hex> {
+  return buildBlockSets(events).knownMQDestinations;
 }
 
 export function buildKnownMessageIds(events: BlockContext["events"]): Set<Hex> {
-  const out = new Set<Hex>();
-  for (const e of events) {
-    if (e.kind === "MessageQueued") out.add(e.messageId);
-  }
-  return out;
+  return buildBlockSets(events).knownMessageIds;
 }
 
 export function buildProgramsWithCrossBlockEdge(events: BlockContext["events"]): Set<Hex> {
-  const out = new Set<Hex>();
-  for (const e of events) {
-    if (e.kind === "ProgramMessage") {
-      out.add(e.source);
-      out.add(e.destination);
-    }
-  }
-  return out;
+  return buildBlockSets(events).programsWithCrossBlockEdge;
 }

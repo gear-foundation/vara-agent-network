@@ -4,6 +4,9 @@
 // shape — these types document what we expect at handler boundaries.
 // Keep in sync with `programs/agents-network/client/agents_network_client.idl`.
 
+import { u8aToHex } from "@polkadot/util";
+import { decodeAddress } from "@polkadot/util-crypto";
+
 export type Hex = `0x${string}`;
 export type Hash32 = Hex | Uint8Array | number[];
 
@@ -167,6 +170,35 @@ export function parseHandleRef(s: string): HandleRef | null {
 
 export function normalizeActorId(id: Hex): Hex {
   return id.toLowerCase() as Hex;
+}
+
+/**
+ * Tolerant ActorId / MessageId coercer for raw RPC inputs.
+ *
+ * Accepts the four shapes polkadot-js / sails-js can produce — hex strings,
+ * SS58 addresses, Uint8Array, or `number[]` — and returns a lowercase 0x hex
+ * string. Returns null on anything else so callers can drop the row.
+ *
+ * Use this instead of `normalizeActorId` whenever the input may not already
+ * be hex (storage `.toJSON()` outputs, decoded event tuples, etc.).
+ */
+export function coerceActorId(v: unknown): Hex | null {
+  if (typeof v === "string") {
+    if (v.length === 0) return null;
+    if (v.startsWith("0x")) return v.toLowerCase() as Hex;
+    try {
+      return u8aToHex(decodeAddress(v)).toLowerCase() as Hex;
+    } catch {
+      return null;
+    }
+  }
+  if (v instanceof Uint8Array) {
+    return u8aToHex(v).toLowerCase() as Hex;
+  }
+  if (Array.isArray(v) && v.every((b) => typeof b === "number")) {
+    return u8aToHex(new Uint8Array(v as number[])).toLowerCase() as Hex;
+  }
+  return null;
 }
 
 export function asNumber(x: bigint | number): number {

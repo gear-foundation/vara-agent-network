@@ -32,10 +32,10 @@
 // and returns no edges, so the cursor still advances on event-only data.
 
 import type { ApiPromise } from "@polkadot/api";
-import { decodeAddress } from "@polkadot/util-crypto";
-import { u8aToHex } from "@polkadot/util";
+import { coerceActorId } from "../helpers/event-payloads.js";
 import { log } from "../helpers/logger.js";
 import type { Hex, ProgramMessageEvent } from "../helpers/types.js";
+import { DETECTED_VIA } from "../handlers/common.js";
 
 interface StoredMessageJSON {
   id?: unknown;
@@ -44,85 +44,50 @@ interface StoredMessageJSON {
   details?: { to?: unknown; code?: unknown } | null;
 }
 
+interface BlockSnapshot {
+  dispatches: Map<Hex, StoredMessageJSON>;
+  waitlist: Map<Hex, StoredMessageJSON>;
+}
+
 /**
- * Coerce a polkadot-js JSON value to a lowercase 0x-hex string. Accepts:
- *   - hex strings ("0x...")
- *   - SS58 strings (decoded to public key bytes)
- *   - Uint8Array / number[] (raw bytes hex-encoded)
- * Returns null on anything else so callers can drop the row.
+ * Read both `gearMessenger.dispatches` and `gearMessenger.waitlist` at a
+ * block hash under a single `apiAt` (one metadata join, two parallel scans).
+ * Defensive against polkadot-js JSON shape drift: missing fields drop the row
+ * rather than throwing.
  *
- * Mirrors the behaviour of `normalizeActorId` in processor.ts to keep ActorId
- * normalisation consistent with the event path. A separate copy because the
- * processor.ts version is a closure-local helper.
+ * Storage shapes:
+ *   dispatches : LinkedNode<MessageId, StoredDispatch>
+ *                = { next, value: { kind, message, context } }
+ *   waitlist   : (StoredDispatch, Interval) tuple, usually [a, b], sometimes
+ *                wrapped as { 0, 1 }; the inner shape is StoredDispatch.
  */
-function toLowerHex(v: unknown): Hex | null {
-  if (typeof v === "string") {
-    if (v.length === 0) return null;
-    if (v.startsWith("0x")) return v.toLowerCase() as Hex;
-    try {
-      return u8aToHex(decodeAddress(v)).toLowerCase() as Hex;
-    } catch {
-      return null;
-    }
-  }
-  if (v instanceof Uint8Array) {
-    return u8aToHex(v).toLowerCase() as Hex;
-  }
-  if (Array.isArray(v) && v.every((b) => typeof b === "number")) {
-    return u8aToHex(new Uint8Array(v as number[])).toLowerCase() as Hex;
-  }
-  return null;
-}
-
-/**
- * Read all `gearMessenger.dispatches` keys at a block hash and return a map
- * of message id → StoredMessage projection. Defensive against polkadot-js
- * JSON shape drift: a missing field returns null rather than throwing.
- */
-async function dispatchesAt(
-  api: ApiPromise,
-  at: Hex,
-): Promise<Map<Hex, StoredMessageJSON>> {
+async function snapshotAt(api: ApiPromise, at: Hex): Promise<BlockSnapshot> {
   const apiAt = await api.at(at);
-  const out = new Map<Hex, StoredMessageJSON>();
-  const entries = await apiAt.query.gearMessenger.dispatches.entries();
-  for (const [, node] of entries) {
+  const [dispEntries, waitEntries] = await Promise.all([
+    apiAt.query.gearMessenger.dispatches.entries(),
+    apiAt.query.gearMessenger.waitlist.entries(),
+  ]);
+
+  const dispatches = new Map<Hex, StoredMessageJSON>();
+  for (const [, node] of dispEntries) {
     const json = (node as unknown as { toJSON(): unknown }).toJSON();
-    // LinkedNode shape: { next, value: StoredDispatch }; StoredDispatch:
-    // { kind, message: StoredMessage, context: Option<...> }. We tolerate
-    // either { value: { message } } or a flatter shape if metadata changes.
     const message = extractMessage(json);
-    const id = toLowerHex(message?.id);
-    if (id && message) out.set(id, message);
+    const id = coerceActorId(message?.id);
+    if (id && message) dispatches.set(id, message);
   }
-  return out;
-}
 
-/**
- * Read all `gearMessenger.waitlist` keys at a block hash. Stored as a double
- * map keyed by `(programId, messageId) → (StoredDispatch, Interval)`. We
- * project the message id and inner StoredMessage with shape tolerance.
- */
-async function waitlistAt(
-  api: ApiPromise,
-  at: Hex,
-): Promise<Map<Hex, StoredMessageJSON>> {
-  const apiAt = await api.at(at);
-  const out = new Map<Hex, StoredMessageJSON>();
-  const entries = await apiAt.query.gearMessenger.waitlist.entries();
-  for (const [, val] of entries) {
+  const waitlist = new Map<Hex, StoredMessageJSON>();
+  for (const [, val] of waitEntries) {
     const json = (val as unknown as { toJSON(): unknown }).toJSON();
-    // Tuple `(StoredDispatch, Interval)` typically arrives as a 2-element
-    // array, but some metadata variants wrap as `{ 0, 1 }` or `[ a, b ]` of
-    // typed objects. Probe both shapes for the StoredDispatch.
     const dispatch =
       (Array.isArray(json) ? json[0] : (json as { 0?: unknown } | null)?.[0]) ??
       json;
     const message = extractMessage(dispatch);
-    const id = toLowerHex(message?.id);
-    if (id && message) out.set(id, message);
+    const id = coerceActorId(message?.id);
+    if (id && message) waitlist.set(id, message);
   }
-  return out;
+
+  return { dispatches, waitlist };
 }
 
 /**
@@ -160,14 +125,13 @@ export interface DetectorInput {
 }
 
 /**
- * Stateful detector. Holds the previous block's snapshots so live operation
- * does one set of `.entries()` reads per block instead of two — halves the
+ * Stateful detector. Holds the previous block's snapshot so live operation
+ * does one `.entries()` pair per block instead of two — halves the
  * public-RPC load. Cold-start or cache miss falls back to dual reads.
  */
 export class P2PDetector {
   private lastBlockHash: Hex | null = null;
-  private lastDispatches: Map<Hex, StoredMessageJSON> = new Map();
-  private lastWaitlist: Map<Hex, StoredMessageJSON> = new Map();
+  private lastSnapshot: BlockSnapshot = { dispatches: new Map(), waitlist: new Map() };
   private shapeWarned = false;
 
   /**
@@ -177,32 +141,17 @@ export class P2PDetector {
    */
   async detect(input: DetectorInput): Promise<ProgramMessageEvent[]> {
     const { api, blockHash, parentHash, baseIndex } = input;
-
-    let dispBefore: Map<Hex, StoredMessageJSON>;
-    let waitBefore: Map<Hex, StoredMessageJSON>;
     const cacheHit = this.lastBlockHash === parentHash;
 
-    if (cacheHit) {
-      // Fast path: previous block's snapshot is reusable.
-      dispBefore = this.lastDispatches;
-      waitBefore = this.lastWaitlist;
-    } else {
-      // Cold start, restart, or skipped block: re-read parent state.
-      [dispBefore, waitBefore] = await Promise.all([
-        dispatchesAt(api, parentHash),
-        waitlistAt(api, parentHash),
-      ]);
-    }
+    // Fast path: previous block's snapshot is reusable as `before`. Cold
+    // start / restart / skipped block: re-read parent storage.
+    const beforePromise = cacheHit
+      ? Promise.resolve(this.lastSnapshot)
+      : snapshotAt(api, parentHash);
+    const [before, after] = await Promise.all([beforePromise, snapshotAt(api, blockHash)]);
 
-    const [dispAfter, waitAfter] = await Promise.all([
-      dispatchesAt(api, blockHash),
-      waitlistAt(api, blockHash),
-    ]);
-
-    // Update cache for next call.
     this.lastBlockHash = blockHash;
-    this.lastDispatches = dispAfter;
-    this.lastWaitlist = waitAfter;
+    this.lastSnapshot = after;
 
     const out = new Map<Hex, ProgramMessageEvent>();
     let cursor = baseIndex;
@@ -212,8 +161,8 @@ export class P2PDetector {
       m: StoredMessageJSON,
       detectedVia: ProgramMessageEvent["detectedVia"],
     ) => {
-      const source = toLowerHex(m.source);
-      const destination = toLowerHex(m.destination);
+      const source = coerceActorId(m.source);
+      const destination = coerceActorId(m.destination);
       if (!source || !destination) {
         if (!this.shapeWarned) {
           log.warn("p2p detector: undecodable message shape", {
@@ -224,7 +173,7 @@ export class P2PDetector {
         }
         return;
       }
-      const replyTo = toLowerHex(m.details?.to);
+      const replyTo = coerceActorId(m.details?.to);
       const existing = out.get(id);
       out.set(id, {
         kind: "ProgramMessage",
@@ -240,16 +189,16 @@ export class P2PDetector {
       });
     };
 
-    for (const [id, m] of dispAfter) {
-      // Cross-storage dedup: a dispatch already observed in the waitlist at
-      // the parent block isn't a new edge. Same logical message moving
-      // between storage layers stays a single emission across this run.
-      if (dispBefore.has(id) || waitBefore.has(id)) continue;
-      recordEdge(id, m, "dispatches_storage");
+    // Cross-storage dedup: a message already observed in either layer at
+    // the parent block isn't a new edge. The same logical message moving
+    // between dispatches and waitlist stays a single emission across this run.
+    for (const [id, m] of after.dispatches) {
+      if (before.dispatches.has(id) || before.waitlist.has(id)) continue;
+      recordEdge(id, m, DETECTED_VIA.Dispatches);
     }
-    for (const [id, m] of waitAfter) {
-      if (waitBefore.has(id) || dispBefore.has(id)) continue;
-      recordEdge(id, m, "waitlist_storage");
+    for (const [id, m] of after.waitlist) {
+      if (before.waitlist.has(id) || before.dispatches.has(id)) continue;
+      recordEdge(id, m, DETECTED_VIA.Waitlist);
     }
 
     if (out.size > 0) {
@@ -265,7 +214,6 @@ export class P2PDetector {
   /** Clear the cache (e.g. after a long gap that invalidates the previous snapshot). */
   reset(): void {
     this.lastBlockHash = null;
-    this.lastDispatches = new Map();
-    this.lastWaitlist = new Map();
+    this.lastSnapshot = { dispatches: new Map(), waitlist: new Map() };
   }
 }
