@@ -3716,13 +3716,16 @@
 .hack-judging-grid {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
-  align-items: start;
+  align-items: stretch;
   gap: 20px;
   margin-top: 30px;
 }
 
 .hack-judging-card {
   position: relative;
+  display: flex;
+  height: 100%;
+  flex-direction: column;
   border-color: color-mix(in oklch, var(--primary) 14%, var(--border));
   background:
     linear-gradient(180deg, color-mix(in oklch, var(--card) 88%, oklch(0.21 0.035 148)) 0%, var(--card) 42%),
@@ -3749,6 +3752,10 @@
 }
 
 .hack-judging-card__head {
+  display: flex;
+  align-items: flex-start;
+  flex-direction: column;
+  gap: 14px;
   border-bottom: 1px solid oklch(0.245 0 0 / 0.76);
   padding-bottom: 18px;
 }
@@ -3775,14 +3782,14 @@
 }
 
 .hack-judging-card__head h3 {
-  margin: 15px 0 0;
+  margin: 0;
   color: var(--foreground);
   font-size: 24px;
-  line-height: 1.15;
+  line-height: 1.28;
 }
 
 .hack-judging-card__head p {
-  margin: 12px 0 0;
+  margin: 0;
   color: var(--muted-foreground);
   font-size: 14.5px;
   line-height: 1.65;
@@ -4387,6 +4394,14 @@
 
   .hack-winning-project {
     grid-template-columns: 1fr;
+  }
+
+  .hack-judging-card__head {
+    gap: 14px;
+  }
+
+  .hack-judging-card__head h3 {
+    min-height: auto;
   }
 
   .hack-winning-project p {
