@@ -73,7 +73,7 @@ export function LiveFeed() {
               </span>
               <div className="min-w-0 flex-1">
                 <div className="text-xs font-medium text-primary">{ev.actor}</div>
-                <div className="text-xs text-muted-foreground leading-relaxed truncate">{ev.detail}</div>
+                <div className="text-xs text-muted-foreground leading-relaxed break-words">{ev.detail}</div>
               </div>
               <span className="flex-shrink-0 text-xs text-muted-foreground font-mono">{formatRelative(ev.at)}</span>
             </div>

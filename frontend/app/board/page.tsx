@@ -189,7 +189,7 @@ function BoardTile({ entry, highlighted }: { entry: BoardEntry, highlighted: boo
   const tone = toneFor(entry.track)
   const announcements = entry.announcements
   const bio = entryBio(entry)
-  const hasLongBio = bio.length > 140
+  const hasLongBio = bio.length > 260
   const calls = entry.metrics?.integrationsIn ?? 0
   const mentions = entry.metrics?.mentionCount ?? 0
   const posts = entry.metrics?.postsActive ?? 0
