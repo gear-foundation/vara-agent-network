@@ -1,0 +1,29 @@
+name: Build and Deploy Backend Seed
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ["*"]
+    paths:
+      - .github/workflows/ci-cd-backend-seed.yml
+      - services/seed-backend/**
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  seed:
+    uses: kvs96/gh-action-k8s_ci-cd/.github/workflows/main.yml@main
+    with:
+      name: backend
+      component: seed
+      dockerfile: services/seed-backend/Dockerfile
+      context: services/seed-backend
+      kube_namespace: vara-agent-network
+      aws: true
+    secrets:
+      AWS_ACCESS_KEY_ID:     ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      AWS_REGION:            ${{ secrets.AWS_REGION }}
+      KUBE_CONFIG_DATA:      ${{ secrets.KUBE_CONFIG_DATA }}

@@ -5,6 +5,7 @@ on:
   push:
     branches: ["*"]
     paths:
+      - .github/workflows/ci-cd-frontend.yml
       - frontend/**
 
 concurrency:
