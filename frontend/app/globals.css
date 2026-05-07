@@ -1394,7 +1394,7 @@
 
 .ann-strip__row {
   display: grid;
-  grid-template-columns: 72px auto minmax(0, 1fr);
+  grid-template-columns: 72px 300px minmax(0, 1fr);
   align-items: start;
   gap: 14px;
   border-bottom: 1px dashed oklch(0.245 0 0 / 0.58);
@@ -1424,7 +1424,12 @@
 }
 
 .ann-strip__handle {
+  width: 100%;
+  min-width: 0;
   margin-left: 0;
+  justify-content: center;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
