@@ -127,6 +127,15 @@ impl<'a> AttestService<'a> {
     pub fn new(state: &'a RefCell<AttestState>) -> Self {
         Self { state }
     }
+
+    /// Owner-gate helper. Mirrors `programs/agents-network/app/src/admin.rs`
+    /// `ensure_admin`. Used by `set_fee` and `withdraw_fees`.
+    fn ensure_owner(&self) -> Result<(), Error> {
+        if msg::source() != self.state.borrow().owner {
+            return Err(Error::Unauthorized);
+        }
+        Ok(())
+    }
 }
 
 #[sails_rs::service(events = AttestEvent)]
@@ -177,22 +186,22 @@ impl<'a> AttestService<'a> {
         let source = msg::source();
 
         // --- Anti-cheat: reject self-loop callers (pricing.md anti-cheat block).
+        // Cheap path; no state read needed.
         if source == exec::program_id() {
             return CommandReply::new(Err(Error::SelfLoop)).with_value(value);
         }
 
-        // --- Value guard (pricing.md value-guard skeleton).
-        let fee = self.state.borrow().flat_fee;
-        if value < fee {
-            return CommandReply::new(Err(Error::InsufficientPayment)).with_value(value);
-        }
-
-        // --- Overflow-checked counter bumps. Refund full inbound value if the
-        // counter would wrap — practically unreachable but enumerated so the
-        // caller sees a typed error instead of silent saturation.
-        let excess = value - fee;
-        let seq = {
+        // Single state borrow covers fee read + value guard + overflow-checked
+        // counter bumps. Early returns inside the block drop the borrow
+        // before constructing the refund. Refund full inbound value on every
+        // typed-Err branch so the caller is made whole.
+        let (seq, fee) = {
             let mut state = self.state.borrow_mut();
+            let fee = state.flat_fee;
+            if value < fee {
+                return CommandReply::new(Err(Error::InsufficientPayment))
+                    .with_value(value);
+            }
             let next_seq = match state.next_seq.checked_add(1) {
                 Some(n) => n,
                 None => {
@@ -209,8 +218,9 @@ impl<'a> AttestService<'a> {
             };
             state.next_seq = next_seq;
             state.collected_fees = new_collected;
-            next_seq
+            (next_seq, fee)
         };
+        let excess = value - fee;
 
         let receipt = Receipt {
             seq,
@@ -221,36 +231,40 @@ impl<'a> AttestService<'a> {
             issued_at: exec::block_timestamp(),
         };
 
-        let _ = self.emit_event(AttestEvent::ReceiptIssued {
+        self.emit_event(AttestEvent::ReceiptIssued {
             caller: source,
             subject,
             kind,
             seq,
             fee_paid: fee,
-        });
+        })
+        .expect("emit ReceiptIssued failed");
 
         // --- Success path: refund excess via the reply's value. excess == 0
         // is fine — with_value(0) is a no-op from the chain's perspective.
         CommandReply::new(Ok(receipt)).with_value(excess)
     }
 
-    /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }`.
+    /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }` only
+    /// when the value actually changes (no-op set is silent).
     ///
     /// Plain `msg::source() == owner` gate per `pricing.md` "hackathon-grade
     /// owner-only governance". For production multi-admin / time-locked
     /// control, swap in `awesome-sails::access-control`.
     #[export]
     pub fn set_fee(&mut self, new_fee: u128) -> Result<(), Error> {
+        self.ensure_owner()?;
         let old = {
             let mut state = self.state.borrow_mut();
-            if msg::source() != state.owner {
-                return Err(Error::Unauthorized);
-            }
             let old = state.flat_fee;
+            if new_fee == old {
+                return Ok(());
+            }
             state.flat_fee = new_fee;
             old
         };
-        let _ = self.emit_event(AttestEvent::FeeChanged { old, new: new_fee });
+        self.emit_event(AttestEvent::FeeChanged { old, new: new_fee })
+            .expect("emit FeeChanged failed");
         Ok(())
     }
 
@@ -263,19 +277,13 @@ impl<'a> AttestService<'a> {
     /// method's scope.
     #[export]
     pub fn withdraw_fees(&mut self, amount: u128) -> Result<u128, Error> {
+        self.ensure_owner()?;
         let (owner, remaining) = {
             let mut state = self.state.borrow_mut();
-            if msg::source() != state.owner {
-                return Err(Error::Unauthorized);
-            }
             if amount > state.collected_fees {
                 return Err(Error::WithdrawExceedsCollected);
             }
-            // checked_sub is unnecessary given the comparison above, but
-            // keeps the overflow-safety pattern uniform.
-            state.collected_fees = state.collected_fees
-                .checked_sub(amount)
-                .ok_or(Error::ArithmeticOverflow)?;
+            state.collected_fees -= amount;
             (state.owner, state.collected_fees)
         };
         // Outbound send on the success path of an Ok-returning method —
@@ -285,11 +293,12 @@ impl<'a> AttestService<'a> {
         if amount > 0 {
             msg::send_bytes(owner, [], amount).expect("withdraw send failed");
         }
-        let _ = self.emit_event(AttestEvent::FeesWithdrawn {
+        self.emit_event(AttestEvent::FeesWithdrawn {
             to: owner,
             amount,
             remaining_collected: remaining,
-        });
+        })
+        .expect("emit FeesWithdrawn failed");
         Ok(amount)
     }
 }

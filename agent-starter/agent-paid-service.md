@@ -5,7 +5,7 @@ Covers fee model selection, the four patterns every chargeable method must inclu
 Do not use for consumer-side concerns (paying for someone else's service) — that's `agent-payment-handshake.md` (Phase 2, stretch).
 Do not use for free services — vouchers cover gas; charging adds friction without revenue at testnet token prices. Read `references/pricing.md` "When to stay free" before you commit.
 
-This skill is mostly read-only research + Rust authoring. The on-chain writes happen at deploy time (via `vara-skills:ship-sails-app`) and at operator-fee-setting time (via `vara-wallet`). Gas paid by the operator wallet on those writes; nothing here costs value beyond standard registration.
+This skill is mostly read-only research + Rust authoring. The on-chain writes happen at deploy time (via `vara-skills:ship-sails-app`) and at operator-fee-setting time (via `vara-wallet`).
 
 **Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI on PATH, the `vara-skills` skill pack invocable from your runtime, a Sails workspace already scaffolded via `vara-skills:sails-new-app` (or you're about to). Rust toolchain stable; sails-rs 0.10.x.
 
@@ -152,25 +152,16 @@ Once tests pass, deploy via the standard pipeline. The operator-side concerns ar
 ```bash
 vara-wallet --account "$VARA_ACCOUNT" --network "$VARA_NETWORK" --json call \
   "$YOUR_PID" Attest/SetFee --args '[2000000000000]' --idl "$YOUR_IDL"
-# → emits FeeChanged { old, new }
+# → emits FeeChanged { old, new } (silent on no-op set)
 ```
 
-Implementation in the reference (`programs/examples/priced-attestation/app/src/lib.rs`):
+Reference implementation: `programs/examples/priced-attestation/app/src/lib.rs` — search for `pub fn set_fee`. Shape:
 
 ```rust
-#[export]
 pub fn set_fee(&mut self, new_fee: u128) -> Result<(), Error> {
-    let old = {
-        let mut state = self.state.borrow_mut();
-        if msg::source() != state.owner {
-            return Err(Error::Unauthorized);
-        }
-        let old = state.flat_fee;
-        state.flat_fee = new_fee;
-        old
-    };
-    let _ = self.emit_event(AttestEvent::FeeChanged { old, new: new_fee });
-    Ok(())
+    self.ensure_owner()?;          // private helper: owner gate
+    // borrow_mut, capture old, no-op early-return if new_fee == old, write
+    // emit FeeChanged { old, new } with .expect(...) (fail-loud)
 }
 ```
 
@@ -184,33 +175,15 @@ vara-wallet --account "$VARA_ACCOUNT" --network "$VARA_NETWORK" --json call \
 # → emits FeesWithdrawn { to, amount, remaining_collected }
 ```
 
-Implementation in the reference:
+Reference implementation: `programs/examples/priced-attestation/app/src/lib.rs` — search for `pub fn withdraw_fees`. Shape:
 
 ```rust
-#[export]
 pub fn withdraw_fees(&mut self, amount: u128) -> Result<u128, Error> {
-    let (owner, remaining) = {
-        let mut state = self.state.borrow_mut();
-        if msg::source() != state.owner {
-            return Err(Error::Unauthorized);
-        }
-        if amount > state.collected_fees {
-            return Err(Error::WithdrawExceedsCollected);
-        }
-        state.collected_fees = state.collected_fees
-            .checked_sub(amount)
-            .ok_or(Error::ArithmeticOverflow)?;
-        (state.owner, state.collected_fees)
-    };
-    if amount > 0 {
-        msg::send_bytes(owner, [], amount).expect("withdraw send failed");
-    }
-    let _ = self.emit_event(AttestEvent::FeesWithdrawn {
-        to: owner,
-        amount,
-        remaining_collected: remaining,
-    });
-    Ok(amount)
+    self.ensure_owner()?;
+    // borrow_mut, validate amount <= collected_fees (else Err(WithdrawExceedsCollected)),
+    // decrement collected_fees, capture (owner, remaining) and drop the borrow.
+    // msg::send_bytes(owner, [], amount).expect(...)  — outbound transfer.
+    // emit FeesWithdrawn { to, amount, remaining_collected } with .expect(...)
 }
 ```
 
@@ -231,16 +204,14 @@ curl -s "$INDEXER_GRAPHQL_URL" \
 
 `integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0, recheck: did the call attach `msg::value()`? Was the caller a registered Application? Mission Brief minimum (`references/season-economy.md` §12) must be satisfied for the call to count.
 
-## Common pitfalls (review findings from priced-attestation)
+## Common errors
 
 | Pitfall | Symptom | Fix |
 |---------|---------|-----|
 | `saturating_add` on counters | Silent overflow; `WithdrawFees` underdraws | `checked_add` + `Error::ArithmeticOverflow` |
-| `msg::send_bytes` refund inside `Err` branch | Refund never delivered; caller balance retained | `CommandReply::with_value` |
-| `BASE_GAS` constant for outbound calls | Under-provisioned reply hooks; failed for_reply | Per-call-site named gas constant, gtest-measured + 30% headroom |
-| Tests assert events only, not balances | Refund regressions slip through | `system.balance_of(actor)` before + after each test |
+| Refund queued via `msg::send_bytes` from a method that returns `Err` | Refund never fires; gtest log shows zero outbound; caller balance retained | Return `CommandReply<Result<_, _>>::with_value(refund)` so the reply itself carries the value |
+| Tests assert events / return values only, not balances | Refund regressions slip through | `system.balance_of(actor)` before + after each test |
 | `SetFeeHackathonOwnerOnly` method name | Method survives into IDL and post-hackathon code | Use `SetFee`; put the hackathon-grade caveat in the doc comment, not the route |
-| Returning `Result<_, _>` and queuing `msg::send` for refund | Refund never fires; subtle gtest-passing-on-events-only bug | Use `CommandReply<Result<_, _>>::with_value` |
 
 ## See also
 

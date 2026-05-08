@@ -70,7 +70,8 @@ pub mod attest {
             subject: [u8; 32],
             kind: AttestationKind,
         ) -> sails_rs::client::PendingCall<io::Issue, Self::Env>;
-        /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }`.
+        /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }` only
+        /// when the value actually changes (no-op set is silent).
         ///
         /// Plain `msg::source() == owner` gate per `pricing.md` "hackathon-grade
         /// owner-only governance". For production multi-admin / time-locked

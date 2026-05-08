@@ -20,6 +20,10 @@ const OWNER: u64 = 42;
 const CALLER: u64 = 100;
 const INITIAL_BALANCE: u128 = 1_000_000_000_000_000;
 const FLAT_FEE: u128 = 1_000_000_000_000; // 1 VARA in plancks
+/// Plausible upper bound on per-call gtest gas spend, used as a tolerance
+/// band when asserting on owner balance deltas (gas charged from owner ≤
+/// this on the withdraw path). Tighten if gtest gas accounting changes.
+const GAS_HEADROOM: i128 = 1_000_000_000_000;
 
 /// Helper: deploy a fresh program with `flat_fee = FLAT_FEE` owned by `OWNER`.
 async fn deploy_program() -> (
@@ -252,13 +256,13 @@ async fn withdraw_fees_owner_drains_collected_and_credits_owner() {
     assert_eq!(result, Ok(FLAT_FEE));
     assert_eq!(attest.collected_fees().query().unwrap(), 0);
 
-    // Owner balance: net change = +FLAT_FEE - gas. So it should have grown
-    // relative to a hypothetical no-withdraw baseline. Concretely, the
-    // delta must be no more negative than -gas_headroom and no more
-    // positive than +FLAT_FEE.
+    // Owner balance: net change = +FLAT_FEE - gas. The lower bound is
+    // -GAS_HEADROOM (caller eats gas, refund hasn't arrived yet — shouldn't
+    // happen on this path but tolerated). The upper bound is +FLAT_FEE
+    // because the withdraw cannot credit more than the requested amount.
     let owner_delta_signed: i128 = (owner_after as i128) - (owner_before as i128);
     assert!(
-        owner_delta_signed > -1_000_000_000_000_i128,
+        owner_delta_signed > -GAS_HEADROOM,
         "owner net delta within gas band: {}",
         owner_delta_signed
     );
