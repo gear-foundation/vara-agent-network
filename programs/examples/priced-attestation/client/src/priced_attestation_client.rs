@@ -53,18 +53,27 @@ pub mod attest {
         /// Issue an attestation. Caller must attach `msg::value() >= required_fee()`.
         ///
         /// Refund matrix (per `agent-starter/references/pricing.md`):
-        /// - Underpayment      → `Err(InsufficientPayment)`,  full value refunded.
-        /// - Self-loop         → `Err(SelfLoop)`,             full value refunded.
-        /// - ArithmeticOverflow → `Err(ArithmeticOverflow)`,  full value refunded.
-        /// - Success + overpay → `Ok(Receipt)`,               excess refunded.
-        /// - Success + exact   → `Ok(Receipt)`,               no refund.
+        /// - Self-loop                 → `Err(SelfLoop)`,             full value refunded.
+        /// - Idempotent retry          → `Ok(existing Receipt)`,      full value refunded (no fee charge).
+        /// - Underpayment              → `Err(InsufficientPayment)`,  full value refunded.
+        /// - ArithmeticOverflow        → `Err(ArithmeticOverflow)`,   full value refunded.
+        /// - First-time + overpayment  → `Ok(Receipt)`,               excess refunded.
+        /// - First-time + exact        → `Ok(Receipt)`,               no refund.
         ///
         /// Refunds are delivered via `CommandReply::with_value(...)` — the reply
         /// itself carries the refund. Per Gear/Sails semantics, a separate
         /// `msg::send_bytes` queued from a handler that returns `Err` does NOT
         /// fire (`gear-messaging-and-replies.md`: "outbound send and reply effects
         /// appear only after successful execution"). Bundling the refund into the
-        /// reply is the canonical Sails pattern and works on both Err and Ok paths.
+        /// reply is the canonical Sails pattern and works on Err, Ok, and the
+        /// idempotent-retry-Ok path uniformly.
+        ///
+        /// The retry-Ok path returns the original `Receipt` (same `seq`,
+        /// `issued_at`, `fee_paid`) and emits `DuplicateRefunded` instead of
+        /// `ReceiptIssued`. Callers can blind-retry on RPC timeouts without
+        /// double-paying — the retry is observably distinct from the original
+        /// (different event), economically equivalent (full refund), and
+        /// idempotent at the receipt level (same `seq` returned).
         fn issue(
             &mut self,
             subject: [u8; 32],
@@ -148,12 +157,22 @@ pub mod attest {
         #[derive(PartialEq, Debug, Encode, Decode)]
         #[codec(crate = sails_rs::scale_codec)]
         pub enum AttestEvents {
+            /// First-time issuance for a `(caller, subject)` pair. Off-chain
+            /// indexers count `integrationsIn` and revenue from this event.
             ReceiptIssued {
                 caller: ActorId,
                 subject: [u8; 32],
                 kind: AttestationKind,
                 seq: u64,
                 fee_paid: u128,
+            },
+            /// Idempotent retry on a `(caller, subject)` already issued. The
+            /// existing `Receipt` is reused and the full new payment is refunded.
+            /// Distinct event so indexers can separate retries from new issues.
+            DuplicateRefunded {
+                caller: ActorId,
+                subject: [u8; 32],
+                refunded: u128,
             },
             FeeChanged {
                 old: u128,
@@ -166,7 +185,12 @@ pub mod attest {
             },
         }
         impl sails_rs::client::Event for AttestEvents {
-            const EVENT_NAMES: &'static [Route] = &["ReceiptIssued", "FeeChanged", "FeesWithdrawn"];
+            const EVENT_NAMES: &'static [Route] = &[
+                "ReceiptIssued",
+                "DuplicateRefunded",
+                "FeeChanged",
+                "FeesWithdrawn",
+            ];
         }
         impl sails_rs::client::ServiceWithEvents for AttestImpl {
             type Event = AttestEvents;
@@ -185,7 +209,10 @@ pub enum AttestationKind {
     /// Custom domain receipt — the caller's `subject` carries semantics.
     Custom,
 }
-/// Sequence-numbered attestation. Stable across retries once we add dedupe.
+/// Sequence-numbered attestation. Stable across retries — `Issue` dedupes on
+/// `(caller, subject)`, so retrying the same call returns the original
+/// `Receipt` (same `seq`, `issued_at`, `fee_paid`) rather than minting a new
+/// one.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
