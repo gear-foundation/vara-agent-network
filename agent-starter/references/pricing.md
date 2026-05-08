@@ -151,36 +151,55 @@ If owner gating grows beyond a single hardcoded `msg::source() == self.owner` ch
 Two refund concerns share the same execution path and must be handled together:
 
 - **Overpayment.** Callers can attach more than `required_fee(amount)` (rounded UI inputs, stale quotes, accidental tipping). Default policy: refund the excess.
-- **Errors.** When a call attaches `msg::value()`, the tokens transfer to your program at execution start — regardless of `Ok`/`Err`. Returning `Err` does **not** auto-refund. You must explicitly send the value back on failure.
+- **Errors.** When a call attaches `msg::value()`, the tokens transfer to your program at execution start — regardless of `Ok`/`Err`. Returning `Err` does **not** auto-refund. You must explicitly carry the refund back in the reply.
 
-Layering two separate refund blocks is unsafe: if you refund the excess *before* `internal_logic` runs and then refund full `msg::value()` on `Err`, the excess gets returned twice — paid out of program balance. Use one combined skeleton instead:
+> **Critical correction (sails-rs 0.10):** an earlier version of this skeleton used `sails_rs::gstd::msg::send(...).expect(...)` to queue the refund. **That pattern does not work for the `Err` branch.** Per `gear-messaging-and-replies.md`: "outbound send and reply effects appear only after successful execution." When a `#[service]` method returns `Err`, queued `msg::send` calls do **not** fire — the refund disappears. The correct primitive is `CommandReply<Result<T, E>>::with_value(refund)`. The reply itself carries the value atomically with the typed `Err`, on both success and failure paths. The skeleton below is the corrected version.
 
 ```rust
-let fee = self.required_fee(amount);
-if msg::value() < fee { return Err(Error::InsufficientPayment); }
-let excess = msg::value().saturating_sub(fee);
+use sails_rs::gstd::CommandReply;
 
-match self.internal_logic(amount) {
-    Ok(result) => {
-        if excess > 0 {
-            sails_rs::gstd::msg::send(msg::source(), b"refund_excess", excess)
-                .expect("refund_excess send failed");
-        }
-        self.collected_fees += fee;
-        Ok(Event::Done { result })
+#[export]
+pub fn do_something(
+    &mut self,
+    amount: u128,
+) -> CommandReply<Result<DoneEvent, Error>> {
+    let value = msg::value();
+    let fee = self.required_fee(amount);
+    if value < fee {
+        return CommandReply::new(Err(Error::InsufficientPayment))
+            .with_value(value);
     }
-    Err(e) => {
-        // Refund the full attached value (fee + excess) on failure.
-        sails_rs::gstd::msg::send(msg::source(), b"refund", msg::value())
-            .expect("refund send failed");
-        Err(e)
+    let excess = value - fee;
+
+    match self.internal_logic(amount) {
+        Ok(result) => {
+            // collected_fees uses checked_add to surface ArithmeticOverflow as
+            // a typed Err with full refund instead of silent saturation.
+            let new_collected = match self.collected_fees.checked_add(fee) {
+                Some(c) => c,
+                None => {
+                    return CommandReply::new(Err(Error::ArithmeticOverflow))
+                        .with_value(value);
+                }
+            };
+            self.collected_fees = new_collected;
+            // .with_value(0) is a no-op; no need to branch on excess > 0.
+            CommandReply::new(Ok(DoneEvent { result })).with_value(excess)
+        }
+        Err(e) => {
+            // Refund the full attached value (fee + excess) on failure via
+            // the reply itself. This is the canonical Sails-rs 0.10 pattern.
+            CommandReply::new(Err(e)).with_value(value)
+        }
     }
 }
 ```
 
-If you'd rather accept overpayment as a tip, drop the success-path `refund_excess` block — but document the choice in your service's IDL comments so callers know not to overpay accidentally. Either way, keep the error-path refund: silently keeping value on `Err` is the most common way users lose funds to a chargeable method.
+If you'd rather accept overpayment as a tip, change the success branch's `.with_value(excess)` to `.with_value(0)` — but document the choice in your service's IDL comments so callers know not to overpay accidentally. Either way, keep the error-path refund: silently keeping value on `Err` is the most common way users lose funds to a chargeable method.
 
-Prefer operator-configurable fees over hardcoded constants once the dapp has real users.
+For a buildable, tested end-to-end version of these skeletons assembled into a working Sails workspace — copy from **`programs/examples/priced-attestation/app/src/lib.rs`**. That file is the canonical reference; it includes the value guard, anti-cheat self-loop, overflow-checked counters, and the combined refund block, all wired into `Issue(subject, kind) -> CommandReply<Result<Receipt, Error>>`. The `tests/gtest.rs` covers exact-fee, overpayment, and underpayment with mandatory balance-delta assertions.
+
+Prefer operator-configurable fees over hardcoded constants once the dapp has real users. The builder workflow for adding all of this to your own dapp lives in `agent-paid-service.md`.
 
 ### Receiver-side anti-cheat
 
