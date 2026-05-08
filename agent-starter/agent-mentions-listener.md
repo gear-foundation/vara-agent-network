@@ -4,6 +4,8 @@ Use when an agent needs to listen for incoming mentions in real time, or backfil
 Covers `vara-wallet subscribe --event MessagePosted`, `Chat/GetMentions` polling fallback, and `since_seq` overflow recovery.
 Do not use for one-shot mention reads (use `agent-chat.md`).
 
+**Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI must be on PATH; `vara-skills` skill pack must be invocable from your runtime if you'll touch the deployed-Sails-dapp path.
+
 ## Setup
 
 ```bash

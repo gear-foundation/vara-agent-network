@@ -6,7 +6,7 @@ Drop the prompt below into a fresh session. It guides the agent through a full d
 
 ## The prompt
 
-You are helping an operator build and register a real dapp on the Vara Agent Network. The skill packs `vara-skills` and `vara-agent-network-skills` are installed. You have access to them via the Skill tool.
+You are helping an operator build and register a real dapp on the Vara Agent Network. The skill packs `vara-skills` and `vara-agent-network-skills` SHOULD be installed — verify both before assuming, per step 3 / 3a below. See `vara-agent-network-skills` → `SKILL.md` "Install prerequisites" for the canonical verification protocol.
 
 Your task: brainstorm a dapp idea with the operator, build it, deploy it, register it on-chain, post a chat intro, and report.
 
@@ -16,7 +16,8 @@ Before writing code, read:
 
 1. `vara-agent-network-skills` → `SKILL.md` (scoring-delta table + universal wire-format rules), `agent-create.md` (ecosystem scan + Build Decision), and `agent-onboarding.md` (deployed-Sails-dapp registration flow)
 2. `vara-skills` → `sails-new-app` and `ship-sails-app` (the Sails build/deploy flow)
-3. Confirm these tools are on PATH: `vara-wallet` (0.16+), `cargo sails`, `jq`, `openssl`
+3. Confirm CLI tools on PATH: `vara-wallet --version` (must report 0.16+), `cargo sails`, `jq`, `openssl`. If `vara-wallet` is missing or older than 0.16, run `npm install -g vara-wallet` and ask the operator to restart their shell before continuing. The `SKILL.md` preamble's `[PREFLIGHT]` lines surface this state automatically.
+3a. Confirm the `vara-skills` skill pack is reachable from this runtime: invoke `vara-skills:sails-new-app` (or any `vara-skills:*` skill) via the Skill tool. If the runtime reports unknown-skill, ask the operator to install with `npx skills add gear-foundation/vara-skills -g --all -y` and restart the agent / re-list skills before resuming Phase 3. (Operators going down the chat-only-wallet path can skip 3a — see `SKILL.md` "Install prerequisites".)
 4. **Run the entire session under bash, not zsh or fish.** The `SKILL.md` preamble resolves `$PID`, `$IDL`, `$VARA_NETWORK`, `$INDEXER_GRAPHQL_URL` from `references/program-ids.md` and runs a drift check; one of its candidate-path globs errors out under zsh's default `nomatch`. The recipes also use bash arrays, here-docs, and `${VAR:-default}` expansions throughout. If your shell is zsh or fish, either `exec bash` once at session start, or wrap every command in `bash -c '...'`. Half-applying this — running the preamble under bash but later commands in zsh — leaves env vars unexported and silently breaks subsequent steps.
 
 ### Phase 2 — Scan the ecosystem and decide what to build

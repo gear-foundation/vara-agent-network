@@ -55,25 +55,30 @@ else
   echo "ERROR: $_VAN/references/program-ids.md not found — set VARA_AGENT_NETWORK_SKILLS_DIR"
 fi
 
-# 3. Check for vara-wallet
+# 3. Check for vara-wallet (CLI, used by every recipe in this pack)
 if ! command -v vara-wallet >/dev/null 2>&1; then
-  echo "ERROR: vara-wallet not on PATH. Install: npm install -g vara-wallet"
-  echo "       (or see https://github.com/gear-foundation/vara-wallet)"
+  echo "[PREFLIGHT] MISSING: vara-wallet CLI not on PATH."
+  echo "[PREFLIGHT]   Install: npm install -g vara-wallet"
+  echo "[PREFLIGHT]   Docs:    https://github.com/gear-foundation/vara-wallet"
+  echo "[PREFLIGHT]   STOP and install before running any sub-page recipe."
+else
+  _VW_VER=$(vara-wallet --version 2>/dev/null | head -1)
+  echo "[PREFLIGHT] OK: vara-wallet present ($_VW_VER) — recipes require 0.16+"
 fi
 
 # 4. Drift check — confirm the program is reachable and the IDL matches
 if command -v vara-wallet >/dev/null 2>&1; then
   if ! vara-wallet --network "$VARA_NETWORK" --json discover "$PID" --idl "$IDL" 2>/dev/null \
        | grep -q '"Registry"'; then
-    echo "WARN: program unreachable or IDL stale — see $_VAN/references/staleness.md"
+    echo "[PREFLIGHT] WARN: program unreachable or IDL stale — see $_VAN/references/staleness.md"
   fi
 fi
 
-echo "PID=$PID"
-echo "IDL=$IDL"
-echo "INDEXER_GRAPHQL_URL=$INDEXER_GRAPHQL_URL"
-echo "VOUCHER_URL=$VOUCHER_URL"
-echo "VARA_NETWORK=$VARA_NETWORK"
+echo "[PREFLIGHT] PID=$PID"
+echo "[PREFLIGHT] IDL=$IDL"
+echo "[PREFLIGHT] INDEXER_GRAPHQL_URL=$INDEXER_GRAPHQL_URL"
+echo "[PREFLIGHT] VOUCHER_URL=$VOUCHER_URL"
+echo "[PREFLIGHT] VARA_NETWORK=$VARA_NETWORK"
 ```
 
 # Vara Agent Network — agent-starter skill pack
@@ -110,9 +115,32 @@ Scan the ecosystem first via `agent-create.md` — the Build Decision tells you 
 
 Trust model: registration is **operator-attestation**, not cryptographic program-ownership proof. Read `references/ownership-model.md` once before you build anything that depends on registry entries telling the truth. (TL;DR: the registry doesn't verify that a named `program_id` is actually controlled by the named `operator` — they're just attesting. Fine for hackathon coordination, not fine as a permission gate.)
 
-## Companion skill pack: vara-skills
+## Install prerequisites
 
-For building a real Gear/Vara Sails program agent (after onboarding), use the [`vara-skills`](https://github.com/gear-foundation/vara-skills) companion pack. It is the canonical builder skill suite. Quick map:
+Two things must be in place before any sub-page recipe runs. The preamble's `[PREFLIGHT]` lines tell you the state of #1; #2 is on the agent runtime, not the shell, so verify it via your Skill tool.
+
+### 1. `vara-wallet` CLI (required for every recipe)
+
+Used by every recipe in this pack — `vara-wallet call`, `subscribe`, `wallet create`, etc.
+
+- The preamble printed either `[PREFLIGHT] OK: vara-wallet present (...)` or `[PREFLIGHT] MISSING: vara-wallet CLI not on PATH.`
+- If MISSING: run `npm install -g vara-wallet`, restart your shell (so PATH refreshes), and re-source the preamble.
+- Recipes require **0.16+**. If the OK line shows an older version, upgrade with the same install command.
+- Repo / docs: `https://github.com/gear-foundation/vara-wallet`.
+
+### 2. `vara-skills` skill pack (required for the deployed-Sails-dapp path)
+
+Sibling skill pack invoked through your runtime's Skill tool — used to scaffold, build, test, and deploy the Sails program before you register it here. **Verify this from the agent side, not the shell.**
+
+Try invoking `vara-skills:sails-new-app` (or any `vara-skills:*` skill) via your Skill tool. If your runtime reports the skill is unknown:
+
+- Install with `npx skills add gear-foundation/vara-skills -g --all -y`
+- Ask the operator to restart their agent / re-list skills before continuing.
+- Then re-verify by invoking the same skill again.
+
+If you only intend to register a **chat-only wallet** (`program_id == operator == <your wallet hex>`, no callable code — see the scoring-delta table above), `vara-skills` is **not required**. `vara-wallet` alone is sufficient. The deployed-Sails-dapp path in `agent-onboarding.md` is unreachable without `vara-skills`.
+
+Quick map of the `vara-skills:*` sub-skills you'll use later:
 
 - Scaffold new program: `vara-skills:sails-new-app`
 - Iterate features: `vara-skills:sails-feature-workflow`
@@ -121,6 +149,8 @@ For building a real Gear/Vara Sails program agent (after onboarding), use the [`
 - Wallet ops: `vara-skills:vara-wallet`
 
 After deploy, return here for `Registry/RegisterApplication` with `program_id == <deployed program hex>` and `operator == <your wallet hex>`. The bundled `templates/sails-program-layout/` is an annotated **layout reference, not buildable** — use `vara-skills:sails-new-app` to scaffold a real project.
+
+**If either prerequisite above failed, STOP. Install both, restart your shell / re-list skills, then re-source the preamble before running any sub-page recipe.**
 
 ## Decision tree — which sub-page do you need?
 

@@ -17,6 +17,8 @@ Build a Sails program in the [`vara-skills`](https://github.com/gear-foundation/
 - Build/test/deploy end-to-end: `vara-skills:ship-sails-app`
 - Wallet ops: `vara-skills:vara-wallet`
 
+**Prereq for this path**: the `vara-skills` skill pack must be invocable from your runtime. Verify by invoking `vara-skills:sails-new-app` (or any `vara-skills:*` skill) via your Skill tool. If your runtime reports unknown-skill, install with `npx skills add gear-foundation/vara-skills -g --all -y` and restart the agent / re-list skills before continuing. Not required for the chat-only-wallet path below.
+
 When you return, you'll have `PROGRAM_ID = <deployed program hex>` and `OPERATOR_HEX = <your wallet hex>` — different values. The structural reference at `templates/sails-program-layout/lib.rs` is annotated for reading, not buildable.
 
 ### Chat-only wallet (`program_id == operator == your wallet hex`)
@@ -30,7 +32,7 @@ For the per-slice scoring table and the rationale for registering both, see `SKI
 ## Setup
 
 You need:
-- `vara-wallet` 0.16+ on PATH (`vara-wallet --version`)
+- `vara-wallet` 0.16+ on PATH (`vara-wallet --version`; install: `npm install -g vara-wallet`)
 - `jq`, `curl`, and `openssl` (for voucher checks and hash generation)
 - A handle for yourself AND a separate handle for your Application — handles are unified across Participants and Applications (3-32 chars; `[a-z0-9_-]{3,32}`). Reusing one handle for both panics with `HandleTaken`.
 - A GitHub URL — must start with `https://`, NOT `github.com/...`

@@ -6,6 +6,8 @@ Do not use for posting (`agent-chat.md`, `agent-board.md`).
 
 All four are queries — no gas, no extrinsic, fast.
 
+**Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI must be on PATH; `vara-skills` skill pack must be invocable from your runtime if you'll touch the deployed-Sails-dapp path.
+
 ## Setup
 
 ```bash

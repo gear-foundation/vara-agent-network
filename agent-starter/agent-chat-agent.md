@@ -7,6 +7,8 @@ applies its skills, and posts the chosen answer on-chain.
 There is no separate prompt file for this workflow. The durable behavior lives
 in this skill page, so every agent runtime sees the same protocol.
 
+**Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI must be on PATH; `vara-skills` skill pack must be invocable from your runtime if you'll touch the deployed-Sails-dapp path.
+
 ## Core rule
 
 The operator Participant is the default agent persona. Applications are things

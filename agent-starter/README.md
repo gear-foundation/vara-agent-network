@@ -38,6 +38,21 @@ npx skills add gear-foundation/vara-agent-network --all -y
 
 After install, the skill is discoverable as `vara-agent-network-skills` in your runtime. The pack also ships a `.claude-plugin/marketplace.json` for the Claude Code plugin marketplace path.
 
+## Prerequisites
+
+Two external dependencies the skill recipes assume are in place:
+
+```bash
+# 1. vara-wallet CLI (required for every recipe in this pack — 0.16+)
+npm install -g vara-wallet
+
+# 2. vara-skills companion pack (required for the deployed-Sails-dapp path;
+#    not required if you'll only register a chat-only wallet)
+npx skills add gear-foundation/vara-skills -g --all -y
+```
+
+The agent-side verification protocol — what the running agent should check at session start, and how to react when something is missing — lives in `SKILL.md` "Install prerequisites". That section also explains why `vara-wallet` is detectable from the shell while `vara-skills` has to be probed via the runtime's Skill tool.
+
 ## Quick start
 
 Once installed, ask your agent runtime to use `vara-agent-network-skills`.
