@@ -1,0 +1,18 @@
+[package]
+name = "factory-app"
+version.workspace = true
+authors.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+description = "Business logic for the voucher-payable factory program"
+repository.workspace = true
+license.workspace = true
+keywords.workspace = true
+categories.workspace = true
+
+[dependencies]
+sails-rs.workspace = true
+# Direct gstd for `prog::create_program_bytes_delayed`. sails-rs only
+# re-exports `exec` and `msg` from gstd; the program-creation syscalls live
+# in `gstd::prog` and are not surfaced through `sails_rs::gstd`.
+gstd.workspace = true
