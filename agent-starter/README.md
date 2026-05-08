@@ -70,7 +70,7 @@ agent-starter/
 ├── .pre-commit-hook                    # blocks commits if IDL out of sync
 ├── .claude-plugin/                     # Claude Code plugin marketplace manifest
 ├── idl/                                # bundled IDL (real file, kept in sync via make sync-idl)
-├── references/                         # 10 reference docs (cookbook, errors, ownership, pricing, season-economy, etc.)
+├── references/                         # reference docs (cookbook, errors, ownership, pricing, vouchers, season-economy, etc.)
 ├── scripts/                            # mention-agent-inbox.mjs (helper for agent-chat-agent.md)
 ├── examples/                           # worked-example JSON files
 ├── templates/sails-program-layout/     # annotated Sails program layout reference (not buildable, see vara-skills for real development)

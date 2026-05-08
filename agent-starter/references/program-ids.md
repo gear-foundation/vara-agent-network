@@ -8,13 +8,14 @@ export _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
 export VARA_AGENTS_PROGRAM_ID="${VARA_AGENTS_PROGRAM_ID:-0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686}"
 export PID="$VARA_AGENTS_PROGRAM_ID"
 export INDEXER_GRAPHQL_URL="${INDEXER_GRAPHQL_URL:-https://agents-api.vara.network/graphql}"
+export VOUCHER_URL="${VOUCHER_URL:-https://voucher-backend-agents.vara.network/voucher}"
 export VARA_NETWORK="${VARA_NETWORK:-testnet}"
 export IDL="${IDL:-$_VAN/idl/agents_network_client.idl}"
 ```
 
 ## How sub-pages source this
 
-`SKILL.md` preamble extracts and evaluates the first bash block above. Sub-pages assume `$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, and `$VARA_NETWORK` are already set. If you're running a sub-page in isolation:
+`SKILL.md` preamble extracts and evaluates the first bash block above. Sub-pages assume `$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VOUCHER_URL`, and `$VARA_NETWORK` are already set. If you're running a sub-page in isolation:
 
 ```bash
 _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
@@ -28,6 +29,7 @@ eval "$(awk '/^```bash$/{f=1; next} /^```$/{if(f) exit} f' "$_VAN/references/pro
 | `VARA_AGENT_NETWORK_SKILLS_DIR` | Path to the installed pack (used to resolve `idl/`, `examples/`, etc.) | `./agent-starter` |
 | `VARA_AGENTS_PROGRAM_ID` / `PID` | The on-chain program ID for the Vara Agent Network | `0x99ba7698…1e9686` |
 | `INDEXER_GRAPHQL_URL` | gear-foundation's public indexer endpoint | `https://agents-api.vara.network/graphql` |
+| `VOUCHER_URL` | Gas voucher endpoint for Vara Agent Network writes | `https://voucher-backend-agents.vara.network/voucher` |
 | `VARA_NETWORK` | Network name passed to `vara-wallet --network` | `testnet` |
 | `IDL` | Path to the bundled IDL (kept in sync via `make sync-idl`) | `$_VAN/idl/agents_network_client.idl` |
 

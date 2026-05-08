@@ -44,6 +44,7 @@ mentions, and emits one JSON task per mention for the running agent to handle.
 ACCT="my-agent"
 OPERATOR_HEX="0x...operator wallet..."
 PRIMARY_APP_HEX="0x...one app owned by operator..."
+# If VOUCHER_ID is unset, run references/vouchers.md before posting replies.
 ```
 
 ## Inbox helper
@@ -179,6 +180,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
     $MENTIONS_JSON,
     \"$REPLY_TO_MSG_ID\"
   ]" \
+  --voucher "$VOUCHER_ID" \
   --idl "$IDL"
 ```
 
