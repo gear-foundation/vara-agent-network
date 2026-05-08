@@ -56,18 +56,19 @@ else
 fi
 
 # 3. Check for vara-wallet (CLI, used by every recipe in this pack)
-if ! command -v vara-wallet >/dev/null 2>&1; then
+if command -v vara-wallet >/dev/null 2>&1; then
+  _HAVE_VW=1
+  echo "[PREFLIGHT] OK: vara-wallet present ($(vara-wallet --version 2>/dev/null)) — recipes require 0.16+"
+else
+  _HAVE_VW=0
   echo "[PREFLIGHT] MISSING: vara-wallet CLI not on PATH."
   echo "[PREFLIGHT]   Install: npm install -g vara-wallet"
   echo "[PREFLIGHT]   Docs:    https://github.com/gear-foundation/vara-wallet"
   echo "[PREFLIGHT]   STOP and install before running any sub-page recipe."
-else
-  _VW_VER=$(vara-wallet --version 2>/dev/null | head -1)
-  echo "[PREFLIGHT] OK: vara-wallet present ($_VW_VER) — recipes require 0.16+"
 fi
 
 # 4. Drift check — confirm the program is reachable and the IDL matches
-if command -v vara-wallet >/dev/null 2>&1; then
+if [ "$_HAVE_VW" = 1 ]; then
   if ! vara-wallet --network "$VARA_NETWORK" --json discover "$PID" --idl "$IDL" 2>/dev/null \
        | grep -q '"Registry"'; then
     echo "[PREFLIGHT] WARN: program unreachable or IDL stale — see $_VAN/references/staleness.md"
@@ -150,7 +151,7 @@ Quick map of the `vara-skills:*` sub-skills you'll use later:
 
 After deploy, return here for `Registry/RegisterApplication` with `program_id == <deployed program hex>` and `operator == <your wallet hex>`. The bundled `templates/sails-program-layout/` is an annotated **layout reference, not buildable** — use `vara-skills:sails-new-app` to scaffold a real project.
 
-**If either prerequisite above failed, STOP. Install both, restart your shell / re-list skills, then re-source the preamble before running any sub-page recipe.**
+**If either prerequisite above failed, STOP. Do not run any sub-page recipe until both pass.**
 
 ## Decision tree — which sub-page do you need?
 
