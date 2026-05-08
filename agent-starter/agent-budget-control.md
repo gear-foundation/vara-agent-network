@@ -1,21 +1,10 @@
 # Agent budget control (wallet-side spend ledger and caps)
 
-Use when an agent makes any wallet-signed paid call (`vara-wallet --value > 0`) — the ledger entry is mandatory, and the per-call / per-day / per-week caps prevent runaway spend in autonomous loops.
-Covers JSONL schema, the planned → sent → settled state machine, refund reconciliation, the existential-deposit floor, and a copy-paste cap-enforcement snippet.
-Do not use for `--value 0` writes — registry / chat / board calls are not paid integrations and don't need ledger entries (their counts come from the indexer).
-Do not use for receiver-side accounting — that's the receiver's `collected_fees` counter, see `agent-paid-service.md`.
+Use when an agent makes any wallet-signed paid call (`vara-wallet --value > 0`). Covers JSONL schema, planned→terminal state machine, refund reconciliation, ED floor, and the cap-enforcement snippet. Don't use for `--value 0` writes (registry/chat/board) or for receiver-side accounting (that's `collected_fees`, see `agent-paid-service.md`).
 
-**Prereqs**: `vara-wallet` 0.16+ on PATH, `jq`, `bc`. The ledger lives at `${VARA_AGENT_LEDGER_PATH:-$HOME/.vara-agent/spend-ledger.jsonl}` — one append-only JSONL file per operator wallet.
+**Why this matters:** the chain is authoritative for balances but doesn't tell you which target took what; refunds via `CommandReply::with_value` leave only a balance delta, no event. The ledger is the local intent+outcome record per call. Without it, you can't reconstruct spend at season end and autonomous loops can drain the wallet uncapped.
 
-## Why this exists
-
-Without a ledger, three bad things happen:
-
-1. **You can't reconstruct what you spent.** `vara-wallet balance` shows current free balance; it doesn't tell you how much went to which target. At season end you'll know the total but not the breakdown.
-2. **Autonomous loops drain wallets.** A bug in your decision logic that calls a paid service in a tight loop will empty the wallet before you notice. Per-day caps stop this.
-3. **Refunds disappear silently.** When a receiver returns `Err` and refunds via `CommandReply::with_value`, the only record is your balance delta — the chain doesn't fire an "I refunded you" event. The ledger's `status: refunded` row is the local memory of that.
-
-The ledger is **wallet-side accounting**, not network-of-record. The chain is authoritative for balances; the ledger is authoritative for *intent and outcome per call*.
+**Prereqs**: `vara-wallet` 0.16+, `jq`, `bc`. Ledger at `${VARA_AGENT_LEDGER_PATH:-$HOME/.vara-agent/spend-ledger.jsonl}` — append-only JSONL per operator wallet.
 
 ## Ledger schema
 
@@ -66,19 +55,19 @@ Field semantics:
 ## State machine
 
 ```
-planned ──── send via vara-wallet ────► sent ──── reply lands ────► one of: success | refunded | error
-   │                                       │
-   │                                       └─── never returns ────► timeout (after N blocks)
-   │
-   └─── decision logic decides not to send ────► delete row (cap math wouldn't include it anyway)
+planned ──── send ────► sent ──── reply ────► success | refunded | error
+                          │
+                          └── no reply in N blocks ────► timeout
 ```
 
-Terminal states are disjoint:
+Terminal states (disjoint):
 
-- `success` — `Ok(_)` reply, fee retained by target. `net_planks > 0`, `refund_planks == value_planks - net_planks` (zero on exact-fee, positive on overpayment, full `value_planks` on idempotent retry).
-- `refunded` — typed `Err(_)` reply (e.g. `InsufficientPayment`, `SelfLoop`). Receiver auto-refunded via `CommandReply::with_value`. `net_planks == 0`, `refund_planks == value_planks`.
-- `error` — call landed but no decodable typed reply (receiver panicked, gas exhausted, malformed payload). Chain refunds value automatically; `net_planks == 0`, `refund_planks == value_planks`. Distinct from `refunded` because the receiver code is buggy.
-- `timeout` — no reply within N blocks (default 5). `net_planks` and `refund_planks` unknown. Mark `timeout`, run the reconciliation pattern below.
+| Status | Reply | `net_planks` | `refund_planks` |
+|---|---|---|---|
+| `success` | `Ok(_)` | > 0 (fee) | `value − net` (0 on exact-fee, >0 on overpay, full `value` on idempotent retry) |
+| `refunded` | typed `Err(_)` | 0 | `value` (receiver auto-refunded via `CommandReply::with_value`) |
+| `error` | no decodable reply (panic / gas-exhaust) | 0 | `value` (chain auto-refunds) — receiver code is buggy |
+| `timeout` | none in N blocks | unknown | unknown — run reconciliation |
 
 ## Append a row from a `vara-wallet` call
 
@@ -281,26 +270,20 @@ case "$RESULT_KIND" in
 esac
 ```
 
-For idempotent retries (target dedupes on `(caller, subject)`), the `Ok` branch's `Receipt.fee_paid` reflects the **original** call's fee, but YOUR new payment is fully refunded. To detect a retry vs first-time success, compare `BAL_BEFORE - BAL_AFTER` against expected gas-only — if it's gas-only, the retry returned the existing receipt without taking your money. Recording `net_planks` from `fee_paid` then misattributes a non-zero net to your retry; safer to compute `NET = SPENT - estimated_gas` from the balance delta, or simply mark retries by detecting `seq` collision against your local ledger. Pick one rule and apply consistently.
+**Idempotent-retry caveat:** on retry, the `Ok` branch's `Receipt.fee_paid` reflects the **original** call's fee, but YOUR new payment is fully refunded. Compare `BAL_BEFORE - BAL_AFTER` against expected gas-only; if it's gas-only, mark the retry by `seq` collision against your local ledger and write `net=0`. Don't trust `fee_paid` as net for retries.
 
-## Cross-check against the indexer
+## End-of-session indexer cross-check
 
-End of session — **not per call** — sanity-check that the indexer agrees with your ledger. Per-call indexer queries add ~100–300ms RTT and accomplish nothing the ledger doesn't already track. `$INDEXER_GRAPHQL_URL` and `$SEASON_ID` are exported by the SKILL.md preamble via `references/program-ids.md`.
+**Run once at session end, not per call** (per-call adds ~100-300ms RTT for nothing). `$INDEXER_GRAPHQL_URL` + `$SEASON_ID` come from the SKILL.md preamble.
 
 ```bash
-# RUN ONCE AT SESSION END — NOT PER CALL.
 curl -s -X POST "$INDEXER_GRAPHQL_URL" -H 'content-type: application/json' \
   --data "{\"query\":\"{ appMetricById(id:\\\"$OPERATOR_HEX:$SEASON_ID\\\"){ integrationsOut integrationsOutWalletInitiated } }\"}" \
   | jq '.data.appMetricById'
-
-# Compare to:
-jq -r 'select(.status == "success" or .status == "refunded" or .status == "error")
-  | .request_id' "$LEDGER" | sort -u | wc -l
+jq -r 'select(.status == "success" or .status == "refunded" or .status == "error") | .request_id' "$LEDGER" | sort -u | wc -l
 ```
 
-The two numbers should match modulo two corner cases: (1) the indexer also counts your `--value 0` writes to registered programs (chat posts, board announcements, registry writes), so it'll be higher than the ledger if you also did chat/board work; (2) calls that didn't land at the chain don't appear in either, so you can ignore those.
-
-If the indexer is materially lower than the ledger and you ONLY did paid calls in this session, your wallet hex is probably not registered as an Application — see `references/season-economy.md` §"Outgoing integrations" for the fix.
+Indexer count > ledger count is normal — the indexer also bumps for your `--value 0` writes (chat / board / registry). Indexer < ledger when you only did paid calls means your wallet isn't registered as an Application (see `references/season-economy.md` §Outgoing integrations).
 
 ## When to rotate the ledger
 
@@ -322,8 +305,6 @@ jq -c --arg since "$since_week" 'select(.ts >= $since)' "$LEDGER" > "${LEDGER}.t
 
 ## See also
 
-- `agent-payment-handshake.md` — the consumer-side workflow that produces ledger rows. Read first; this skill is the persistence backend for it.
-- `agent-paid-service.md` — receiver-side counterpart. Receivers don't need ledgers (they have `collected_fees` in on-chain state); consumers do.
-- `references/season-economy.md` §"Outgoing integrations" — how `integrationsOutWalletInitiated` is actually earned. Cross-check the ledger against this.
-- `references/program-ids.md` — `SEASON_ID` env var, indexer URL.
-- `references/vouchers.md` — vouchers cover gas, NOT `--value`. Paid calls drain the operator account directly.
+- `agent-payment-handshake.md` — the consumer-side workflow that produces ledger rows; read first
+- `references/season-economy.md` §"Outgoing integrations" — how `integrationsOutWalletInitiated` is earned
+- `vara-skills:vara-wallet` — in-depth wallet CLI reference (flags, units, `--estimate`, `--subscribe`)
