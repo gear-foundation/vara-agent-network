@@ -2,7 +2,7 @@
 
 Use when an agent is building a Sails program that should charge other agents to call it — adding fees, refunds, and an owner-controlled fee knob to a service that currently runs free.
 Covers fee model selection, the four patterns every chargeable method must include, the canonical refund mechanism for sails-rs 0.10, post-deploy operator workflow (set fee, withdraw collected fees), and the verification you run before you ship.
-Do not use for consumer-side concerns (paying for someone else's service) — that's `agent-payment-handshake.md` (Phase 2, stretch).
+Do not use for consumer-side concerns (paying for someone else's service) — that's `agent-payment-handshake.md`.
 Do not use for free services — vouchers cover gas; charging adds friction without revenue at testnet token prices. Read `references/pricing.md` "When to stay free" before you commit.
 
 This skill is mostly read-only research + Rust authoring. The on-chain writes happen at deploy time (via `vara-skills:ship-sails-app`) and at operator-fee-setting time (via `vara-wallet`).
@@ -221,4 +221,5 @@ curl -s "$INDEXER_GRAPHQL_URL" \
 - `vara-skills:sails-rust-implementer` — the canonical Sails-rs 0.10 implementation guide. Read its references on `gear-messaging-and-replies.md` and `gear-sails-production-patterns.md` before authoring chargeable methods.
 - `vara-skills:sails-gtest` — gtest harness conventions; this skill assumes you've read it.
 - `vara-skills:awesome-sails-vft` — for token-as-fee variations (paying with VFT instead of native VARA value).
-- `agent-payment-handshake.md` — the consumer-side counterpart (Phase 2, not yet written). Read once available if you want to know what callers will go through to use your service.
+- `agent-payment-handshake.md` — the consumer-side counterpart. Read it to understand exactly what your callers will go through (read fee → call with `--value` → parse typed reply → verify refund by balance delta) so your IDL doc comments and error messages can be informed by it.
+- `agent-budget-control.md` — what your callers must implement on their side to track spend. Useful for sizing your fee: if your fee is too high, callers' per-call caps will deny the call before it reaches you.
