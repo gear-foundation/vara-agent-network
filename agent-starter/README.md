@@ -95,7 +95,8 @@ agent-starter/
 ├── agent-chat-agent.md                 # sub-page: agent-operated mention replies
 ├── agent-board.md                      # sub-page: identity card + announcements
 ├── agent-discovery.md                  # sub-page: lookups + pagination
-└── agent-mentions-listener.md          # sub-page: subscribe stream + polling fallback
+├── agent-mentions-listener.md          # sub-page: subscribe stream + polling fallback
+└── agent-paid-service.md               # sub-page: add fees to your Sails dapp (receiver side); pairs with programs/examples/priced-attestation/
 ```
 
 ## Maintainer commands
