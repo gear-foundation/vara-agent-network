@@ -4,15 +4,18 @@
 //! Demonstrates the `pricing.md` combined refund block: value guard at the
 //! top, anti-cheat self-loop reject, refund-on-error, overpayment refund.
 //!
-//! This first iteration is intentionally minimal — happy path + the two
-//! refund branches. Idempotency (dedupe on `(caller, subject)`), `SetFee`,
-//! and `WithdrawFees` land in the next iteration.
+//! Idempotency: `Issue` deduplicates on `(caller, subject)`. A retry on the
+//! same key returns the existing `Receipt` and refunds the full new payment
+//! (no fee charge), so callers can blind-retry on RPC timeouts without
+//! double-paying. `DuplicateRefunded` event distinguishes retries from
+//! first-time issues so off-chain consumers can count both.
 
 #![no_std]
 
 extern crate alloc;
 
 use sails_rs::cell::RefCell;
+use sails_rs::collections::BTreeMap;
 use sails_rs::gstd::{CommandReply, exec, msg};
 use sails_rs::prelude::*;
 
@@ -33,7 +36,10 @@ pub enum AttestationKind {
     Custom,
 }
 
-/// Sequence-numbered attestation. Stable across retries once we add dedupe.
+/// Sequence-numbered attestation. Stable across retries — `Issue` dedupes on
+/// `(caller, subject)`, so retrying the same call returns the original
+/// `Receipt` (same `seq`, `issued_at`, `fee_paid`) rather than minting a new
+/// one.
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
@@ -80,12 +86,21 @@ pub struct AttestState {
     /// Monotonic receipt counter. First receipt has `seq = 1` so that
     /// `receipt_count()` returns the actual issued count. (`seq = 0` is
     /// reserved for "no receipts yet".)
+    ///
+    /// Retained as an explicit `u64` field rather than derived from
+    /// `receipts.len()` because Vara's wasm32 target makes `usize` 32-bit;
+    /// we want the seq guarantee to hold beyond u32::MAX entries.
     pub next_seq: u64,
     /// Accounting only — reflects fees the program accepted via `Issue`.
     /// Not authoritative chain balance: value can arrive via other paths
     /// (forced transfers, etc.) and `WithdrawFees` only draws against this
     /// counter, not against arbitrary balance.
     pub collected_fees: u128,
+    /// Idempotency dedupe: `(caller, subject) -> Receipt`. A retry on the
+    /// same key returns the existing `Receipt` and refunds the full new
+    /// payment via `DuplicateRefunded`, so callers can blind-retry on RPC
+    /// timeouts without double-paying.
+    pub receipts: BTreeMap<(ActorId, [u8; 32]), Receipt>,
 }
 
 // ---------------------------------------------------------------------------
@@ -97,12 +112,22 @@ pub struct AttestState {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum AttestEvent {
+    /// First-time issuance for a `(caller, subject)` pair. Off-chain
+    /// indexers count `integrationsIn` and revenue from this event.
     ReceiptIssued {
         caller: ActorId,
         subject: [u8; 32],
         kind: AttestationKind,
         seq: u64,
         fee_paid: u128,
+    },
+    /// Idempotent retry on a `(caller, subject)` already issued. The
+    /// existing `Receipt` is reused and the full new payment is refunded.
+    /// Distinct event so indexers can separate retries from new issues.
+    DuplicateRefunded {
+        caller: ActorId,
+        subject: [u8; 32],
+        refunded: u128,
     },
     FeeChanged {
         old: u128,
@@ -164,18 +189,27 @@ impl<'a> AttestService<'a> {
     /// Issue an attestation. Caller must attach `msg::value() >= required_fee()`.
     ///
     /// Refund matrix (per `agent-starter/references/pricing.md`):
-    /// - Underpayment      → `Err(InsufficientPayment)`,  full value refunded.
-    /// - Self-loop         → `Err(SelfLoop)`,             full value refunded.
-    /// - ArithmeticOverflow → `Err(ArithmeticOverflow)`,  full value refunded.
-    /// - Success + overpay → `Ok(Receipt)`,               excess refunded.
-    /// - Success + exact   → `Ok(Receipt)`,               no refund.
+    /// - Self-loop                 → `Err(SelfLoop)`,             full value refunded.
+    /// - Idempotent retry          → `Ok(existing Receipt)`,      full value refunded (no fee charge).
+    /// - Underpayment              → `Err(InsufficientPayment)`,  full value refunded.
+    /// - ArithmeticOverflow        → `Err(ArithmeticOverflow)`,   full value refunded.
+    /// - First-time + overpayment  → `Ok(Receipt)`,               excess refunded.
+    /// - First-time + exact        → `Ok(Receipt)`,               no refund.
     ///
     /// Refunds are delivered via `CommandReply::with_value(...)` — the reply
     /// itself carries the refund. Per Gear/Sails semantics, a separate
     /// `msg::send_bytes` queued from a handler that returns `Err` does NOT
     /// fire (`gear-messaging-and-replies.md`: "outbound send and reply effects
     /// appear only after successful execution"). Bundling the refund into the
-    /// reply is the canonical Sails pattern and works on both Err and Ok paths.
+    /// reply is the canonical Sails pattern and works on Err, Ok, and the
+    /// idempotent-retry-Ok path uniformly.
+    ///
+    /// The retry-Ok path returns the original `Receipt` (same `seq`,
+    /// `issued_at`, `fee_paid`) and emits `DuplicateRefunded` instead of
+    /// `ReceiptIssued`. Callers can blind-retry on RPC timeouts without
+    /// double-paying — the retry is observably distinct from the original
+    /// (different event), economically equivalent (full refund), and
+    /// idempotent at the receipt level (same `seq` returned).
     #[export]
     pub fn issue(
         &mut self,
@@ -186,63 +220,89 @@ impl<'a> AttestService<'a> {
         let source = msg::source();
 
         // --- Anti-cheat: reject self-loop callers (pricing.md anti-cheat block).
-        // Cheap path; no state read needed.
+        // Anti-cheat trumps idempotency: even if `(program_id, subject)` is in
+        // the dedupe map, a self-loop call still rejects.
         if source == exec::program_id() {
             return CommandReply::new(Err(Error::SelfLoop)).with_value(value);
         }
 
-        // Single state borrow covers fee read + value guard + overflow-checked
-        // counter bumps. Early returns inside the block drop the borrow
-        // before constructing the refund. Refund full inbound value on every
-        // typed-Err branch so the caller is made whole.
-        let (seq, fee) = {
+        // Two paths inside one borrow scope: idempotent retry vs first-time
+        // issue. Early returns inside the block drop the borrow before
+        // constructing the refund.
+        enum Path {
+            Retry(Receipt),
+            New(Receipt, u128),
+        }
+        let path = {
             let mut state = self.state.borrow_mut();
-            let fee = state.flat_fee;
-            if value < fee {
-                return CommandReply::new(Err(Error::InsufficientPayment))
-                    .with_value(value);
+
+            // --- Idempotent retry: key already issued. Reuse existing.
+            if let Some(existing) = state.receipts.get(&(source, subject)) {
+                Path::Retry(existing.clone())
+            } else {
+                // --- First-time issue: value guard + overflow-checked bumps.
+                let fee = state.flat_fee;
+                if value < fee {
+                    return CommandReply::new(Err(Error::InsufficientPayment))
+                        .with_value(value);
+                }
+                let next_seq = match state.next_seq.checked_add(1) {
+                    Some(n) => n,
+                    None => {
+                        return CommandReply::new(Err(Error::ArithmeticOverflow))
+                            .with_value(value);
+                    }
+                };
+                let new_collected = match state.collected_fees.checked_add(fee) {
+                    Some(c) => c,
+                    None => {
+                        return CommandReply::new(Err(Error::ArithmeticOverflow))
+                            .with_value(value);
+                    }
+                };
+                state.next_seq = next_seq;
+                state.collected_fees = new_collected;
+
+                let receipt = Receipt {
+                    seq: next_seq,
+                    caller: source,
+                    subject,
+                    kind,
+                    fee_paid: fee,
+                    issued_at: exec::block_timestamp(),
+                };
+                state.receipts.insert((source, subject), receipt.clone());
+                Path::New(receipt, fee)
             }
-            let next_seq = match state.next_seq.checked_add(1) {
-                Some(n) => n,
-                None => {
-                    return CommandReply::new(Err(Error::ArithmeticOverflow))
-                        .with_value(value);
-                }
-            };
-            let new_collected = match state.collected_fees.checked_add(fee) {
-                Some(c) => c,
-                None => {
-                    return CommandReply::new(Err(Error::ArithmeticOverflow))
-                        .with_value(value);
-                }
-            };
-            state.next_seq = next_seq;
-            state.collected_fees = new_collected;
-            (next_seq, fee)
-        };
-        let excess = value - fee;
-
-        let receipt = Receipt {
-            seq,
-            caller: source,
-            subject,
-            kind,
-            fee_paid: fee,
-            issued_at: exec::block_timestamp(),
         };
 
-        self.emit_event(AttestEvent::ReceiptIssued {
-            caller: source,
-            subject,
-            kind,
-            seq,
-            fee_paid: fee,
-        })
-        .expect("emit ReceiptIssued failed");
-
-        // --- Success path: refund excess via the reply's value. excess == 0
-        // is fine — with_value(0) is a no-op from the chain's perspective.
-        CommandReply::new(Ok(receipt)).with_value(excess)
+        // emit_event is a `&mut self` method on the macro-generated
+        // Exposure; it can't run inside the state borrow above, so the path
+        // enum threads the result out and we emit + reply here.
+        match path {
+            Path::Retry(receipt) => {
+                self.emit_event(AttestEvent::DuplicateRefunded {
+                    caller: source,
+                    subject,
+                    refunded: value,
+                })
+                .expect("emit DuplicateRefunded failed");
+                // Return the original receipt; refund the entire new payment.
+                CommandReply::new(Ok(receipt)).with_value(value)
+            }
+            Path::New(receipt, fee) => {
+                self.emit_event(AttestEvent::ReceiptIssued {
+                    caller: source,
+                    subject,
+                    kind,
+                    seq: receipt.seq,
+                    fee_paid: fee,
+                })
+                .expect("emit ReceiptIssued failed");
+                let excess = value - fee;
+                CommandReply::new(Ok(receipt)).with_value(excess)
+            }
+        }
     }
 
     /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }` only
@@ -323,6 +383,7 @@ impl Program {
                 flat_fee,
                 next_seq: 0,
                 collected_fees: 0,
+                receipts: BTreeMap::new(),
             }),
         }
     }

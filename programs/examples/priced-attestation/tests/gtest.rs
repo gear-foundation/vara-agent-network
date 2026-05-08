@@ -1,14 +1,19 @@
-//! Phase 1 canary: happy path + the three refund branches.
+//! Payment-logic harness — every claim in the `Issue` doc-comment refund
+//! matrix plus the idempotency dedupe contract:
+//!   - Exact payment             → Ok(Receipt), fee retained, no refund queued.
+//!   - Overpayment               → Ok(Receipt), fee retained, excess refunded.
+//!   - Underpayment              → Err(InsufficientPayment), full refund.
+//!   - Self-loop                 → Err(SelfLoop), full refund. (Not gtest-tested;
+//!                                 see note below.)
+//!   - Idempotent retry          → Ok(existing Receipt), full refund, no new seq.
+//!   - Distinct callers / subjects → independent receipts (caller AND subject
+//!                                   are part of the dedupe key).
+//!   - Zero-fee mode             → Issue(0) succeeds when SetFee(0) was called.
+//!   - Owner-gated SetFee, WithdrawFees, including failure modes.
 //!
-//! Together these exercise every claim in the `Issue` doc-comment refund
-//! matrix:
-//!   - Exact payment    → Ok(Receipt), fee retained, no refund queued.
-//!   - Overpayment      → Ok(Receipt), fee retained, excess refunded.
-//!   - Underpayment     → Err(InsufficientPayment), full refund.
-//!   - Self-loop        → Err(SelfLoop), full refund.
-//!
-//! The full 16-scenario harness (idempotency, owner-gated SetFee/WithdrawFees,
-//! ArithmeticOverflow, etc.) lands in the next iteration.
+//! ArithmeticOverflow is in source but not gtest-tested (would require
+//! priming `next_seq` or `collected_fees` near u64/u128 max — possible via
+//! direct state injection but not via the public IDL surface).
 
 use priced_attestation_client::{
     AttestationKind, Error, PricedAttestationClient, PricedAttestationClientCtors,
@@ -286,4 +291,194 @@ async fn withdraw_fees_exceeding_collected_returns_typed_err() {
 
     assert_eq!(result, Err(Error::WithdrawExceedsCollected));
     assert_eq!(attest.collected_fees().query().unwrap(), 0);
+}
+
+// ---------------------------------------------------------------------------
+// Idempotency (dedupe on `(caller, subject)`)
+// ---------------------------------------------------------------------------
+
+#[tokio::test]
+async fn issue_idempotent_retry_returns_existing_receipt_and_refunds_payment() {
+    let (program, env) = deploy_program().await;
+    let mut attest = program.attest();
+    let subject = [0xAA; 32];
+
+    // First-time issue: charges fee, mints receipt seq=1.
+    let first = attest
+        .issue(subject, AttestationKind::Action)
+        .with_actor_id(CALLER.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("first Issue should succeed");
+    assert_eq!(first.seq, 1);
+    assert_eq!(first.fee_paid, FLAT_FEE);
+    assert_eq!(attest.receipt_count().query().unwrap(), 1);
+    assert_eq!(attest.collected_fees().query().unwrap(), FLAT_FEE);
+
+    let before = env.system().balance_of(CALLER);
+
+    // Retry on same (caller, subject): returns existing receipt + refunds new payment.
+    let retry = attest
+        .issue(subject, AttestationKind::Action)
+        .with_actor_id(CALLER.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("retry must surface the existing receipt as Ok");
+
+    // Same receipt as the first call — same seq, same issued_at, same fee_paid.
+    assert_eq!(retry, first, "retry must return the original Receipt unchanged");
+
+    // No new fee charged: counter and accounting both unchanged.
+    assert_eq!(attest.receipt_count().query().unwrap(), 1);
+    assert_eq!(attest.collected_fees().query().unwrap(), FLAT_FEE);
+
+    // Caller's balance: paid only gas. The full FLAT_FEE was refunded via
+    // CommandReply::with_value on the retry path.
+    let spent = before - env.system().balance_of(CALLER);
+    assert!(
+        spent < FLAT_FEE,
+        "retry refunded full payment — spend ({}) < FLAT_FEE ({})",
+        spent,
+        FLAT_FEE
+    );
+}
+
+#[tokio::test]
+async fn issue_distinct_callers_same_subject_get_distinct_receipts() {
+    let (program, env) = deploy_program().await;
+    let mut attest = program.attest();
+    let subject = [0xBB; 32];
+
+    // Two different callers needs two minted accounts.
+    let caller_a = CALLER;
+    let caller_b: u64 = 200;
+    env.system().mint_to(caller_b, INITIAL_BALANCE);
+
+    let a = attest
+        .issue(subject, AttestationKind::Action)
+        .with_actor_id(caller_a.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("caller A first issue");
+    let b = attest
+        .issue(subject, AttestationKind::Action)
+        .with_actor_id(caller_b.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("caller B first issue with same subject");
+
+    assert_eq!(a.seq, 1);
+    assert_eq!(a.caller, caller_a.into());
+    assert_eq!(b.seq, 2);
+    assert_eq!(b.caller, caller_b.into());
+    assert_eq!(a.subject, b.subject, "subject is shared, only caller differs");
+
+    // Both receipts persisted, both fees retained.
+    assert_eq!(attest.receipt_count().query().unwrap(), 2);
+    assert_eq!(attest.collected_fees().query().unwrap(), 2 * FLAT_FEE);
+}
+
+#[tokio::test]
+async fn issue_same_caller_distinct_subjects_get_distinct_receipts() {
+    let (program, _env) = deploy_program().await;
+    let mut attest = program.attest();
+
+    let a = attest
+        .issue([0xC1; 32], AttestationKind::Action)
+        .with_actor_id(CALLER.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("first subject");
+    let b = attest
+        .issue([0xC2; 32], AttestationKind::Identity)
+        .with_actor_id(CALLER.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("second subject");
+
+    assert_eq!(a.seq, 1);
+    assert_eq!(b.seq, 2);
+    assert_ne!(a.subject, b.subject, "subjects differ");
+    assert_eq!(a.caller, b.caller, "caller is shared");
+    assert_eq!(attest.receipt_count().query().unwrap(), 2);
+    assert_eq!(attest.collected_fees().query().unwrap(), 2 * FLAT_FEE);
+}
+
+#[tokio::test]
+async fn issue_idempotent_retry_with_overpayment_refunds_full_payment() {
+    let (program, env) = deploy_program().await;
+    let mut attest = program.attest();
+    let subject = [0xD; 32];
+
+    // First-time issue at exact fee.
+    attest
+        .issue(subject, AttestationKind::Custom)
+        .with_actor_id(CALLER.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("first issue");
+
+    let before = env.system().balance_of(CALLER);
+
+    // Retry with 5x overpayment. The retry path should refund the FULL
+    // 5x payment (not just the excess) because the retry doesn't charge a fee.
+    let attached = 5 * FLAT_FEE;
+    let retry = attest
+        .issue(subject, AttestationKind::Custom)
+        .with_actor_id(CALLER.into())
+        .with_value(attached)
+        .await
+        .unwrap()
+        .expect("retry must succeed regardless of value attached");
+    assert_eq!(retry.seq, 1, "retry returns original seq, not a new one");
+    assert_eq!(retry.fee_paid, FLAT_FEE, "fee_paid is the original fee, not the retry's value");
+    assert_eq!(attest.collected_fees().query().unwrap(), FLAT_FEE);
+
+    // Caller spent ~gas only; full 5*FLAT_FEE refunded.
+    let spent = before - env.system().balance_of(CALLER);
+    assert!(
+        spent < FLAT_FEE,
+        "retry refunded full attached value (spent: {}, attached: {})",
+        spent,
+        attached
+    );
+}
+
+#[tokio::test]
+async fn issue_with_zero_fee_mode_accepts_zero_payment() {
+    let (program, env) = deploy_program().await;
+    let mut attest = program.attest();
+
+    // Owner sets fee to zero. Free-tier mode.
+    attest
+        .set_fee(0)
+        .with_actor_id(OWNER.into())
+        .await
+        .unwrap()
+        .expect("owner can set fee to 0");
+    assert_eq!(attest.required_fee().query().unwrap(), 0);
+
+    // Issue with zero value succeeds (0 >= 0 passes the value guard).
+    let before = env.system().balance_of(CALLER);
+    let r = attest
+        .issue([0xEE; 32], AttestationKind::Action)
+        .with_actor_id(CALLER.into())
+        .with_value(0)
+        .await
+        .unwrap()
+        .expect("zero-fee mode: zero-value Issue succeeds");
+    assert_eq!(r.seq, 1);
+    assert_eq!(r.fee_paid, 0);
+
+    // collected_fees stays at 0; gas-only spend.
+    assert_eq!(attest.collected_fees().query().unwrap(), 0);
+    let spent = before - env.system().balance_of(CALLER);
+    assert!(spent < FLAT_FEE, "free tier: caller spent only gas");
 }
