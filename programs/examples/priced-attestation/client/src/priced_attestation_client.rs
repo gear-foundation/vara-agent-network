@@ -70,6 +70,26 @@ pub mod attest {
             subject: [u8; 32],
             kind: AttestationKind,
         ) -> sails_rs::client::PendingCall<io::Issue, Self::Env>;
+        /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }`.
+        ///
+        /// Plain `msg::source() == owner` gate per `pricing.md` "hackathon-grade
+        /// owner-only governance". For production multi-admin / time-locked
+        /// control, swap in `awesome-sails::access-control`.
+        fn set_fee(
+            &mut self,
+            new_fee: u128,
+        ) -> sails_rs::client::PendingCall<io::SetFee, Self::Env>;
+        /// Owner-gated. Withdraw `amount` planks from `collected_fees` to the
+        /// owner. Returns the amount withdrawn on success.
+        ///
+        /// Draws against the `collected_fees` accounting counter, NOT against
+        /// arbitrary chain balance. Value that arrived via paths other than
+        /// `Issue` (forced transfers, etc.) is intentionally outside this
+        /// method's scope.
+        fn withdraw_fees(
+            &mut self,
+            amount: u128,
+        ) -> sails_rs::client::PendingCall<io::WithdrawFees, Self::Env>;
         /// Pure read — total fees accepted via `Issue`. See state docs for the
         /// "accounting only, not chain balance" caveat.
         fn collected_fees(&self) -> sails_rs::client::PendingCall<io::CollectedFees, Self::Env>;
@@ -88,6 +108,18 @@ pub mod attest {
         ) -> sails_rs::client::PendingCall<io::Issue, Self::Env> {
             self.pending_call((subject, kind))
         }
+        fn set_fee(
+            &mut self,
+            new_fee: u128,
+        ) -> sails_rs::client::PendingCall<io::SetFee, Self::Env> {
+            self.pending_call((new_fee,))
+        }
+        fn withdraw_fees(
+            &mut self,
+            amount: u128,
+        ) -> sails_rs::client::PendingCall<io::WithdrawFees, Self::Env> {
+            self.pending_call((amount,))
+        }
         fn collected_fees(&self) -> sails_rs::client::PendingCall<io::CollectedFees, Self::Env> {
             self.pending_call(())
         }
@@ -102,6 +134,8 @@ pub mod attest {
     pub mod io {
         use super::*;
         sails_rs::io_struct_impl!(Issue (subject: [u8; 32], kind: super::AttestationKind) -> Result<super::Receipt, super::Error>);
+        sails_rs::io_struct_impl!(SetFee (new_fee: u128) -> Result<(), super::Error>);
+        sails_rs::io_struct_impl!(WithdrawFees (amount: u128) -> Result<u128, super::Error>);
         sails_rs::io_struct_impl!(CollectedFees () -> u128);
         sails_rs::io_struct_impl!(ReceiptCount () -> u64);
         sails_rs::io_struct_impl!(RequiredFee () -> u128);
@@ -120,9 +154,18 @@ pub mod attest {
                 seq: u64,
                 fee_paid: u128,
             },
+            FeeChanged {
+                old: u128,
+                new: u128,
+            },
+            FeesWithdrawn {
+                to: ActorId,
+                amount: u128,
+                remaining_collected: u128,
+            },
         }
         impl sails_rs::client::Event for AttestEvents {
-            const EVENT_NAMES: &'static [Route] = &["ReceiptIssued"];
+            const EVENT_NAMES: &'static [Route] = &["ReceiptIssued", "FeeChanged", "FeesWithdrawn"];
         }
         impl sails_rs::client::ServiceWithEvents for AttestImpl {
             type Event = AttestEvents;
@@ -157,8 +200,8 @@ pub struct Receipt {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum Error {
-    /// Owner-gated method called by a non-owner. Reserved for SetFee /
-    /// WithdrawFees (next iteration).
+    /// Owner-gated method called by a non-owner. Used by `SetFee` and
+    /// `WithdrawFees`.
     Unauthorized,
     /// `msg::value()` was less than `required_fee()`.
     InsufficientPayment,
@@ -169,4 +212,9 @@ pub enum Error {
     /// unreachable for any realistic fee/call volume but enumerated so callers
     /// see a typed error instead of a panic if it ever does.
     ArithmeticOverflow,
+    /// `WithdrawFees` requested more than `collected_fees`. The withdraw
+    /// counter is the source of truth for what the operator may draw — value
+    /// arriving via paths other than `Issue` (forced transfers, etc.) is not
+    /// withdrawable through this method.
+    WithdrawExceedsCollected,
 }

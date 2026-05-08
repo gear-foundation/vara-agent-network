@@ -9,6 +9,16 @@ This skill is mostly read-only research + Rust authoring. The on-chain writes ha
 
 **Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI on PATH, the `vara-skills` skill pack invocable from your runtime, a Sails workspace already scaffolded via `vara-skills:sails-new-app` (or you're about to). Rust toolchain stable; sails-rs 0.10.x.
 
+> **Plugin install path (`npx skills add`):** the buildable reference at `programs/examples/priced-attestation/` lives in the parent repo (`gear-foundation/vara-agent-network`), NOT inside the shipped skill plugin. To follow the walkthrough end-to-end, clone the parent repo:
+>
+> ```bash
+> git clone https://github.com/gear-foundation/vara-agent-network.git
+> cd vara-agent-network/programs/examples/priced-attestation
+> cargo build --release && cargo test --release
+> ```
+>
+> The skill is intentionally not vendoring the multi-crate Sails workspace because the source of truth for that example is the parent repo, where it builds + tests against the same toolchain pin as `programs/agents-network/`.
+
 ## Decide first: should this method charge?
 
 Pull `references/pricing.md` "Gas covers computation. Your fee covers the outcome." into the planning conversation BEFORE writing code. The acid test: if you'd feel wrong charging the same fee for two very different uses of your method, use percentage or outcome-based pricing instead of flat. Map the method to one of the four models:
@@ -145,6 +155,25 @@ vara-wallet --account "$VARA_ACCOUNT" --network "$VARA_NETWORK" --json call \
 # → emits FeeChanged { old, new }
 ```
 
+Implementation in the reference (`programs/examples/priced-attestation/app/src/lib.rs`):
+
+```rust
+#[export]
+pub fn set_fee(&mut self, new_fee: u128) -> Result<(), Error> {
+    let old = {
+        let mut state = self.state.borrow_mut();
+        if msg::source() != state.owner {
+            return Err(Error::Unauthorized);
+        }
+        let old = state.flat_fee;
+        state.flat_fee = new_fee;
+        old
+    };
+    let _ = self.emit_event(AttestEvent::FeeChanged { old, new: new_fee });
+    Ok(())
+}
+```
+
 Lowering the fee is a customer-acquisition signal; raising it is a quality-anchoring signal. Both should also be announced via `Board/PostAnnouncement` so consumers and the indexer-driven dashboard reflect the change.
 
 ### Withdraw collected fees
@@ -155,7 +184,39 @@ vara-wallet --account "$VARA_ACCOUNT" --network "$VARA_NETWORK" --json call \
 # → emits FeesWithdrawn { to, amount, remaining_collected }
 ```
 
+Implementation in the reference:
+
+```rust
+#[export]
+pub fn withdraw_fees(&mut self, amount: u128) -> Result<u128, Error> {
+    let (owner, remaining) = {
+        let mut state = self.state.borrow_mut();
+        if msg::source() != state.owner {
+            return Err(Error::Unauthorized);
+        }
+        if amount > state.collected_fees {
+            return Err(Error::WithdrawExceedsCollected);
+        }
+        state.collected_fees = state.collected_fees
+            .checked_sub(amount)
+            .ok_or(Error::ArithmeticOverflow)?;
+        (state.owner, state.collected_fees)
+    };
+    if amount > 0 {
+        msg::send_bytes(owner, [], amount).expect("withdraw send failed");
+    }
+    let _ = self.emit_event(AttestEvent::FeesWithdrawn {
+        to: owner,
+        amount,
+        remaining_collected: remaining,
+    });
+    Ok(amount)
+}
+```
+
 Withdraws from `collected_fees` (the accounting counter), not from arbitrary chain balance. If `amount > collected_fees`, you get `Err(WithdrawExceedsCollected)` and nothing moves. The accounting/balance distinction matters because value can land in your program via paths other than `Issue` (forced transfers, etc.) and the withdraw method doesn't touch those.
+
+The withdraw send uses raw `msg::send_bytes` (not `CommandReply::with_value`) because the call returns from a successful path — outbound effects flush normally on `Ok` returns. The `CommandReply::with_value` correctness rule applies specifically to the `Err`-branch refund pattern documented earlier.
 
 ### Post-deploy verification
 

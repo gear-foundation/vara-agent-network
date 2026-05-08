@@ -162,3 +162,124 @@ async fn issue_with_underpayment_returns_typed_err_and_refunds_full_value() {
 // blocks program-as-source synthesis. The branch is reachable on-chain
 // only via a real program-to-self call, which is left for the Phase 2
 // two-program harness in `priced-attestation-consumer/`.
+
+#[tokio::test]
+async fn set_fee_from_non_owner_returns_unauthorized() {
+    let (program, _env) = deploy_program().await;
+
+    // CALLER is not the owner — OWNER is the deployment actor.
+    let mut attest = program.attest();
+    let result = attest
+        .set_fee(2 * FLAT_FEE)
+        .with_actor_id(CALLER.into())
+        .await
+        .unwrap();
+
+    assert_eq!(result, Err(Error::Unauthorized));
+    // Fee unchanged.
+    assert_eq!(attest.required_fee().query().unwrap(), FLAT_FEE);
+}
+
+#[tokio::test]
+async fn set_fee_from_owner_succeeds_and_subsequent_issue_uses_new_fee() {
+    let (program, env) = deploy_program().await;
+
+    let new_fee = 2 * FLAT_FEE;
+    let mut attest = program.attest();
+    let result = attest
+        .set_fee(new_fee)
+        // Default actor on env IS the OWNER, but we set it explicitly so the
+        // test reads as a self-contained assertion.
+        .with_actor_id(OWNER.into())
+        .await
+        .unwrap();
+
+    assert_eq!(result, Ok(()));
+    assert_eq!(attest.required_fee().query().unwrap(), new_fee);
+
+    // Issue with the OLD fee now underpays.
+    let underpay_result = attest
+        .issue([5u8; 32], AttestationKind::Action)
+        .with_actor_id(CALLER.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap();
+    assert_eq!(
+        underpay_result,
+        Err(Error::InsufficientPayment),
+        "post-SetFee, paying the old fee must fail"
+    );
+
+    // Issue with the new fee succeeds.
+    let before = env.system().balance_of(CALLER);
+    let happy = attest
+        .issue([6u8; 32], AttestationKind::Action)
+        .with_actor_id(CALLER.into())
+        .with_value(new_fee)
+        .await
+        .unwrap();
+    let after = env.system().balance_of(CALLER);
+    let receipt = happy.expect("Issue with new fee should succeed");
+    assert_eq!(receipt.fee_paid, new_fee);
+    assert_eq!(attest.collected_fees().query().unwrap(), new_fee);
+    let spent = before - after;
+    assert!(spent >= new_fee && spent < new_fee * 2);
+}
+
+#[tokio::test]
+async fn withdraw_fees_owner_drains_collected_and_credits_owner() {
+    let (program, env) = deploy_program().await;
+
+    // Seed the program with one paid call.
+    let mut attest = program.attest();
+    attest
+        .issue([8u8; 32], AttestationKind::Custom)
+        .with_actor_id(CALLER.into())
+        .with_value(FLAT_FEE)
+        .await
+        .unwrap()
+        .expect("seed Issue should succeed");
+    assert_eq!(attest.collected_fees().query().unwrap(), FLAT_FEE);
+
+    let owner_before = env.system().balance_of(OWNER);
+    let result = attest
+        .withdraw_fees(FLAT_FEE)
+        .with_actor_id(OWNER.into())
+        .await
+        .unwrap();
+    let owner_after = env.system().balance_of(OWNER);
+
+    assert_eq!(result, Ok(FLAT_FEE));
+    assert_eq!(attest.collected_fees().query().unwrap(), 0);
+
+    // Owner balance: net change = +FLAT_FEE - gas. So it should have grown
+    // relative to a hypothetical no-withdraw baseline. Concretely, the
+    // delta must be no more negative than -gas_headroom and no more
+    // positive than +FLAT_FEE.
+    let owner_delta_signed: i128 = (owner_after as i128) - (owner_before as i128);
+    assert!(
+        owner_delta_signed > -1_000_000_000_000_i128,
+        "owner net delta within gas band: {}",
+        owner_delta_signed
+    );
+    assert!(
+        owner_delta_signed <= FLAT_FEE as i128,
+        "owner cannot receive more than the withdraw amount"
+    );
+}
+
+#[tokio::test]
+async fn withdraw_fees_exceeding_collected_returns_typed_err() {
+    let (program, _env) = deploy_program().await;
+
+    // No prior Issue calls — collected_fees == 0.
+    let mut attest = program.attest();
+    let result = attest
+        .withdraw_fees(FLAT_FEE)
+        .with_actor_id(OWNER.into())
+        .await
+        .unwrap();
+
+    assert_eq!(result, Err(Error::WithdrawExceedsCollected));
+    assert_eq!(attest.collected_fees().query().unwrap(), 0);
+}

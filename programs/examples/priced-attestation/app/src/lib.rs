@@ -50,8 +50,8 @@ pub struct Receipt {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum Error {
-    /// Owner-gated method called by a non-owner. Reserved for SetFee /
-    /// WithdrawFees (next iteration).
+    /// Owner-gated method called by a non-owner. Used by `SetFee` and
+    /// `WithdrawFees`.
     Unauthorized,
     /// `msg::value()` was less than `required_fee()`.
     InsufficientPayment,
@@ -62,6 +62,11 @@ pub enum Error {
     /// unreachable for any realistic fee/call volume but enumerated so callers
     /// see a typed error instead of a panic if it ever does.
     ArithmeticOverflow,
+    /// `WithdrawFees` requested more than `collected_fees`. The withdraw
+    /// counter is the source of truth for what the operator may draw — value
+    /// arriving via paths other than `Issue` (forced transfers, etc.) is not
+    /// withdrawable through this method.
+    WithdrawExceedsCollected,
 }
 
 // ---------------------------------------------------------------------------
@@ -98,6 +103,15 @@ pub enum AttestEvent {
         kind: AttestationKind,
         seq: u64,
         fee_paid: u128,
+    },
+    FeeChanged {
+        old: u128,
+        new: u128,
+    },
+    FeesWithdrawn {
+        to: ActorId,
+        amount: u128,
+        remaining_collected: u128,
     },
 }
 
@@ -218,6 +232,65 @@ impl<'a> AttestService<'a> {
         // --- Success path: refund excess via the reply's value. excess == 0
         // is fine — with_value(0) is a no-op from the chain's perspective.
         CommandReply::new(Ok(receipt)).with_value(excess)
+    }
+
+    /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }`.
+    ///
+    /// Plain `msg::source() == owner` gate per `pricing.md` "hackathon-grade
+    /// owner-only governance". For production multi-admin / time-locked
+    /// control, swap in `awesome-sails::access-control`.
+    #[export]
+    pub fn set_fee(&mut self, new_fee: u128) -> Result<(), Error> {
+        let old = {
+            let mut state = self.state.borrow_mut();
+            if msg::source() != state.owner {
+                return Err(Error::Unauthorized);
+            }
+            let old = state.flat_fee;
+            state.flat_fee = new_fee;
+            old
+        };
+        let _ = self.emit_event(AttestEvent::FeeChanged { old, new: new_fee });
+        Ok(())
+    }
+
+    /// Owner-gated. Withdraw `amount` planks from `collected_fees` to the
+    /// owner. Returns the amount withdrawn on success.
+    ///
+    /// Draws against the `collected_fees` accounting counter, NOT against
+    /// arbitrary chain balance. Value that arrived via paths other than
+    /// `Issue` (forced transfers, etc.) is intentionally outside this
+    /// method's scope.
+    #[export]
+    pub fn withdraw_fees(&mut self, amount: u128) -> Result<u128, Error> {
+        let (owner, remaining) = {
+            let mut state = self.state.borrow_mut();
+            if msg::source() != state.owner {
+                return Err(Error::Unauthorized);
+            }
+            if amount > state.collected_fees {
+                return Err(Error::WithdrawExceedsCollected);
+            }
+            // checked_sub is unnecessary given the comparison above, but
+            // keeps the overflow-safety pattern uniform.
+            state.collected_fees = state.collected_fees
+                .checked_sub(amount)
+                .ok_or(Error::ArithmeticOverflow)?;
+            (state.owner, state.collected_fees)
+        };
+        // Outbound send on the success path of an Ok-returning method —
+        // outbound effects flush normally. The CommandReply::with_value
+        // refund-on-Err rule is specific to value-bearing inbound flows; here
+        // there's no inbound value to refund.
+        if amount > 0 {
+            msg::send_bytes(owner, [], amount).expect("withdraw send failed");
+        }
+        let _ = self.emit_event(AttestEvent::FeesWithdrawn {
+            to: owner,
+            amount,
+            remaining_collected: remaining,
+        });
+        Ok(amount)
     }
 }
 

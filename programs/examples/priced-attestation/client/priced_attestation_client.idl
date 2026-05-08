@@ -19,8 +19,8 @@ type Receipt = struct {
 };
 
 type Error = enum {
-  /// Owner-gated method called by a non-owner. Reserved for SetFee /
-  /// WithdrawFees (next iteration).
+  /// Owner-gated method called by a non-owner. Used by `SetFee` and
+  /// `WithdrawFees`.
   Unauthorized,
   /// `msg::value()` was less than `required_fee()`.
   InsufficientPayment,
@@ -31,6 +31,11 @@ type Error = enum {
   /// unreachable for any realistic fee/call volume but enumerated so callers
   /// see a typed error instead of a panic if it ever does.
   ArithmeticOverflow,
+  /// `WithdrawFees` requested more than `collected_fees`. The withdraw
+  /// counter is the source of truth for what the operator may draw — value
+  /// arriving via paths other than `Issue` (forced transfers, etc.) is not
+  /// withdrawable through this method.
+  WithdrawExceedsCollected,
 };
 
 constructor {
@@ -57,6 +62,20 @@ service Attest {
   /// appear only after successful execution"). Bundling the refund into the
   /// reply is the canonical Sails pattern and works on both Err and Ok paths.
   Issue : (subject: [u8, 32], kind: AttestationKind) -> result (Receipt, Error);
+  /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }`.
+  /// 
+  /// Plain `msg::source() == owner` gate per `pricing.md` "hackathon-grade
+  /// owner-only governance". For production multi-admin / time-locked
+  /// control, swap in `awesome-sails::access-control`.
+  SetFee : (new_fee: u128) -> result (null, Error);
+  /// Owner-gated. Withdraw `amount` planks from `collected_fees` to the
+  /// owner. Returns the amount withdrawn on success.
+  /// 
+  /// Draws against the `collected_fees` accounting counter, NOT against
+  /// arbitrary chain balance. Value that arrived via paths other than
+  /// `Issue` (forced transfers, etc.) is intentionally outside this
+  /// method's scope.
+  WithdrawFees : (amount: u128) -> result (u128, Error);
   /// Pure read — total fees accepted via `Issue`. See state docs for the
   /// "accounting only, not chain balance" caveat.
   query CollectedFees : () -> u128;
@@ -72,6 +91,15 @@ service Attest {
       kind: AttestationKind,
       seq: u64,
       fee_paid: u128,
+    };
+    FeeChanged: struct {
+      old: u128,
+      new: u128,
+    };
+    FeesWithdrawn: struct {
+      to: actor_id,
+      amount: u128,
+      remaining_collected: u128,
     };
   }
 };

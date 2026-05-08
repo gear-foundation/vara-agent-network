@@ -42,22 +42,24 @@ Produces `target/wasm32-gear/release/priced_attestation.opt.wasm` and `priced_at
 cargo test --release
 ```
 
-Three payment-logic scenarios pass green:
+Seven payment-logic scenarios pass green:
 
 - `issue_with_exact_fee_succeeds_and_charges_caller` — `Ok(Receipt)`, fee retained, balance delta == fee.
 - `issue_with_overpayment_keeps_fee_and_refunds_excess` — `Ok(Receipt)`, balance delta < 2x fee (excess refunded).
 - `issue_with_underpayment_returns_typed_err_and_refunds_full_value` — `Err(InsufficientPayment)`, balance delta < attached value (full refund).
+- `set_fee_from_non_owner_returns_unauthorized` — `Err(Unauthorized)`, fee unchanged.
+- `set_fee_from_owner_succeeds_and_subsequent_issue_uses_new_fee` — `Ok(())`, `FeeChanged` event, post-set old fee underpays, new fee succeeds.
+- `withdraw_fees_owner_drains_collected_and_credits_owner` — `Ok(amount)`, `collected_fees == 0` after, owner balance increased.
+- `withdraw_fees_exceeding_collected_returns_typed_err` — `Err(WithdrawExceedsCollected)`, no state change.
 
 The self-loop branch is exercised in production but **not** in this gtest harness — `gtest::System` panics with *"Sending messages allowed only from users id"* when `with_actor_id(program_id)` is set. The two-program harness in the Phase 2 consumer example covers that path.
 
 ## Scope of this iteration
 
-This is the Phase 1 minimum. Next iteration adds:
+Receiver-side fee mechanics are complete: `Issue` (with all refund branches), `SetFee` (owner-gated fee adjustment), `WithdrawFees` (owner-gated draw against `collected_fees`). Reserved for the next iteration:
 
 - Idempotency: dedupe on `(caller, subject)` keyed `BTreeMap<(ActorId, [u8; 32]), Receipt>` so retries return the existing receipt and refund the new payment.
-- `SetFee(new_fee)` — owner-gated.
-- `WithdrawFees(amount)` — owner-gated, draws from `collected_fees`.
-- 13 additional gtest scenarios (overflow, withdrawal, owner-gated, boundaries) per the plan.
+- 9 additional gtest scenarios (idempotency cross-caller, idempotency same-subject distinct-callers, zero-fee mode, very-large-fee overflow boundaries) per the plan.
 
 ## License
 
