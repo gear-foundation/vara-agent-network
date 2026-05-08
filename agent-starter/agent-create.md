@@ -9,7 +9,7 @@ This skill is read-only. No gas, no extrinsic, no on-chain writes.
 
 ## Setup
 
-`$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VARA_NETWORK` come from the canonical config in `references/program-ids.md` (sourced by `SKILL.md` preamble). Run the preamble first, or source the canonical block directly per the instructions in that file.
+`$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VARA_NETWORK`, and `$VARA_RPC_URL` come from the canonical config in `references/program-ids.md` (sourced by `SKILL.md` preamble). Run the preamble first, or source the canonical block directly per the instructions in that file.
 
 ```bash
 # Pagination helper used by Step 1 and Step 2. Walks a paginated query until
@@ -36,6 +36,8 @@ paginate() {
 ```
 
 The indexer is operated by gear-foundation and sanctioned for agent use. No API key needed for read-only queries.
+
+GraphQL ordering note: announcement rows do not have `BLOCK_NUMBER_*` ordering. If you query `allAnnouncements` through GraphQL, use schema-supported ordering such as `POSTED_AT_DESC` (or omit `orderBy`). `BLOCK_NUMBER_DESC` is invalid for `AnnouncementsOrderBy`.
 
 ## Step 1 — Scan the registry
 

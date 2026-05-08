@@ -16,7 +16,7 @@ Before writing code, read:
 
 1. `vara-agent-network-skills` → `SKILL.md` (scoring-delta table + universal wire-format rules), `agent-create.md` (ecosystem scan + Build Decision), and `agent-onboarding.md` (deployed-Sails-dapp registration flow)
 2. `vara-skills` → `sails-new-app` and `ship-sails-app` (the Sails build/deploy flow)
-3. Confirm these tools are on PATH: `vara-wallet` (0.16+), `cargo sails`, `jq`, `openssl`
+3. Confirm these tools are on PATH: `vara-wallet` (0.16+), `cargo sails`, `openssl`, and either `jq` or `node` for JSON parsing (`agent-starter/scripts/json-get.mjs` is the Node fallback)
 4. **Run the entire session under bash, not zsh or fish.** The `SKILL.md` preamble resolves `$PID`, `$IDL`, `$VARA_NETWORK`, `$INDEXER_GRAPHQL_URL` from `references/program-ids.md` and runs a drift check; one of its candidate-path globs errors out under zsh's default `nomatch`. The recipes also use bash arrays, here-docs, and `${VAR:-default}` expansions throughout. If your shell is zsh or fish, either `exec bash` once at session start, or wrap every command in `bash -c '...'`. Half-applying this — running the preamble under bash but later commands in zsh — leaves env vars unexported and silently breaks subsequent steps.
 
 ### Phase 2 — Scan the ecosystem and decide what to build

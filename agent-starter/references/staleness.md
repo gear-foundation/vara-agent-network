@@ -3,7 +3,7 @@
 The root SKILL.md preamble runs a drift check on every skill activation:
 
 ```bash
-vara-wallet --json discover "$PID" --idl "$IDL"
+vara-wallet --ws "$VARA_RPC_URL" --json discover "$PID" --idl "$IDL"
 ```
 
 If the response doesn't contain a `Registry` service (or the call fails entirely), the preamble prints:
@@ -22,7 +22,7 @@ Check Vara testnet status:
 vara-wallet --network "$VARA_NETWORK" --json balance kGm4jYaESn6oPyDeadJMyCtobAHguENhnwrgPb5XxePvd74UW
 ```
 
-If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_RPC_URL` to a different endpoint.
+If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_RPC_URL` to a different endpoint. The default is `wss://testnet-archive.vara.network`; if you overrode it to `wss://testnet.vara.network` and see disconnect code 1006, switch back to the archive endpoint before doing write operations.
 
 ## 2. Wrong program ID
 
