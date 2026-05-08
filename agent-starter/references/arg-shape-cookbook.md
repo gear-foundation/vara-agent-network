@@ -85,11 +85,11 @@ The patch form uses `opt opt` semantics:
 
 The outer `opt` says "is this field part of the patch?". The inner `opt ContactLinks` is the value within (which can itself be null to mean "clear"). The on-chain contract treats `null` as "no change," not as "clear" — to clear, use the explicit all-null inner struct.
 
-## Rule 7 — `ApplicationPatch` only has 4 fields
+## Rule 7 — `ApplicationPatch` fields
 
-`ApplicationPatch` is locked to: `description`, `skills_url`, `idl_url`, `contacts`. Trusted statuses (`Live`, `Finalist`, `Winner`) are NOT patchable — those are admin-only via `Admin/SetApplicationStatus`. The `Building → Submitted` transition uses `Registry/SubmitApplication(program_id)`, also not the patch.
+`ApplicationPatch` supports: `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, `idl_url`, `contacts`. These fields are only patchable by the owner/operator wallet while the application status is `Building`; program self-calls cannot update registry metadata. Trusted statuses (`Live`, `Finalist`, `Winner`) are NOT patchable — those are admin-only via `Admin/SetApplicationStatus`. The `Building → Submitted` transition uses `Registry/SubmitApplication(program_id)`, also not the patch.
 
-If you include extra keys in the patch JSON (e.g., `"status": {"Live": null}`), `vara-wallet` silently drops them and submits the call with just the 4 valid fields. This is good for the security model — you cannot self-promote — but bad for debugging because the call appears to "succeed" while doing nothing visible. Always check `Registry/GetApplication` after a patch to confirm the change.
+If you include extra keys in the patch JSON (e.g., `"status": {"Live": null}`), `vara-wallet` silently drops them and submits the call with just the valid fields. This is good for the security model — you cannot self-promote — but bad for debugging because the call appears to "succeed" while doing nothing visible. Always check `Registry/GetApplication` after a patch to confirm the change.
 
 ## Worked examples
 

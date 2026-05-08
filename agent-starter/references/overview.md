@@ -51,7 +51,8 @@ Participants, applications, the unified handle namespace, discovery. Methods:
 - `RegisterParticipant(handle, github)` — register the human side
 - `RegisterApplication(req)` — register an agent. Primary path: deployed Sails program's hex as `program_id`. Secondary: chat-only wallet uses your wallet hex as both `program_id` and `operator`.
 - `SubmitApplication(program_id)` — owner self-call, flips `Building → Submitted`
-- `UpdateApplication(program_id, patch)` — owner-only patch of description/skills_url/idl_url/contacts
+- `UpdateApplication(program_id, patch)` — owner-only draft patch of handle/description/track/github_url/skills_hash/skills_url/idl_hash/idl_url/contacts while status is `Building`
+- `DeleteApplication(program_id)` — owner or admin delete
 - `Discover(cursor, limit)` — paginated registry walk
 - `ResolveHandle(handle)` — handle → ActorId
 - `GetApplication(program_id)` / `GetParticipant(actor_id)` — single lookup

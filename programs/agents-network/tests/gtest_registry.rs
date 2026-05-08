@@ -287,6 +287,212 @@ async fn wallet_agent_archetype_is_legitimate() {
 }
 
 #[tokio::test]
+async fn building_application_can_patch_all_mutable_metadata_and_handle() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("draft-app", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+
+    let mut patch = empty_patch();
+    patch.handle = Some("renamed-app".to_string());
+    patch.description = Some("renamed description".to_string());
+    patch.track = Some(Track::Open);
+    patch.github_url = Some("https://github.com/renamed/app".to_string());
+    patch.skills_hash = Some([3u8; 32]);
+    patch.skills_url = Some("https://example.com/renamed/skills.json".to_string());
+    patch.idl_hash = Some([4u8; 32]);
+    patch.idl_url = Some("https://example.com/renamed/agent.idl".to_string());
+
+    program
+        .registry()
+        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let app = program
+        .registry()
+        .get_application(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap()
+        .expect("application should exist");
+    assert_eq!(app.handle, "renamed-app");
+    assert_eq!(app.description, "renamed description");
+    assert_eq!(app.track, Track::Open);
+    assert_eq!(app.github_url, "https://github.com/renamed/app");
+    assert_eq!(app.skills_hash, [3u8; 32]);
+    assert_eq!(app.idl_hash, [4u8; 32]);
+
+    assert_eq!(
+        program
+            .registry()
+            .resolve_handle("draft-app".to_string())
+            .await
+            .unwrap(),
+        None
+    );
+    assert_eq!(
+        program
+            .registry()
+            .resolve_handle("renamed-app".to_string())
+            .await
+            .unwrap(),
+        Some(HandleRef::Application(STUB_PROGRAM_ALPHA.into()))
+    );
+}
+
+#[tokio::test]
+async fn submitted_application_cannot_be_patched_but_owner_can_delete() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("submitted-app", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let mut patch = empty_patch();
+    patch.description = Some("too late".to_string());
+    program
+        .registry()
+        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let app = program
+        .registry()
+        .get_application(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    assert!(app.is_none());
+}
+
+#[tokio::test]
+async fn owner_delete_removes_registry_and_handle() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("delete-me", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let app = program
+        .registry()
+        .get_application(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    assert!(app.is_none());
+    assert_eq!(
+        program
+            .registry()
+            .resolve_handle("delete-me".to_string())
+            .await
+            .unwrap(),
+        None
+    );
+}
+
+#[tokio::test]
+async fn admin_can_delete_submitted_application() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("admin-delete", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    let app = program
+        .registry()
+        .get_application(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    assert!(app.is_none());
+}
+
+#[tokio::test]
+async fn program_self_call_and_non_owner_cannot_delete_application() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("delete-auth", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap_err();
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(MALLORY.into())
+        .await
+        .unwrap_err();
+
+    let app = program
+        .registry()
+        .get_application(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    assert!(app.is_some());
+}
+
+#[tokio::test]
 async fn register_application_validates_contact_lengths() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());

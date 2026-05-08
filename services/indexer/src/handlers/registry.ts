@@ -10,6 +10,7 @@ import { sql } from "drizzle-orm";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import type {
+  ApplicationDeleted,
   ApplicationRegistered,
   ApplicationSubmitted,
   ApplicationUpdated,
@@ -152,37 +153,78 @@ export async function handleApplicationUpdated(
   _ctx: HandlerContext,
   payload: ApplicationUpdated,
 ): Promise<void> {
-  // Build a partial update object from the applied patch. Only non-null arms
-  // of the patch changed on-chain, so only those are written here.
-  const patch = payload.patch;
-  const updates: Record<string, unknown> = {};
-  if (patch.description != null) updates.description = patch.description;
-  if (patch.skills_url != null) updates.skillsUrl = patch.skills_url;
-  if (patch.idl_url != null) updates.idlUrl = patch.idl_url;
-
-  // contacts is Option<Option<ContactLinks>>. Some decoders omit outer None,
-  // others may materialize it as `null`, so only treat `null` as an explicit
-  // clear when contacts is the only applied field in this patch.
-  if (patch.contacts != null) {
-    updates.discordAccount = patch.contacts?.discord ?? null;
-    updates.telegramAccount = patch.contacts?.telegram ?? null;
-    updates.xAccount = patch.contacts?.x ?? null;
-  } else if (
-    Object.prototype.hasOwnProperty.call(patch, "contacts") &&
-    Object.keys(updates).length === 0
-  ) {
-    updates.discordAccount = null;
-    updates.telegramAccount = null;
-    updates.xAccount = null;
-  }
-
   const programId = normalizeActorId(payload.program_id);
-  if (Object.keys(updates).length === 0) return;
+  const app = payload.application;
+  const owner = normalizeActorId(app.owner);
+  const registeredAt = asBigInt(app.registered_at);
+  const updates = {
+    handle: app.handle,
+    owner,
+    description: app.description,
+    track: app.track,
+    githubUrl: app.github_url,
+    skillsHash: hashToHex(app.skills_hash),
+    skillsUrl: app.skills_url,
+    idlHash: hashToHex(app.idl_hash),
+    idlUrl: app.idl_url,
+    discordAccount: app.contacts?.discord ?? null,
+    telegramAccount: app.contacts?.telegram ?? null,
+    xAccount: app.contacts?.x ?? null,
+    registeredAt,
+    seasonId: app.season_id,
+    status: app.status,
+  };
 
-  await db
-    .update(schema.applications)
-    .set(updates)
-    .where(sql`${schema.applications.id} = ${programId}`);
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(schema.handleClaims)
+      .where(sql`${schema.handleClaims.ownerKind} = 'Application'
+        AND ${schema.handleClaims.ownerId} = ${programId}`);
+    const inserted = await tx
+      .insert(schema.handleClaims)
+      .values({
+        handle: app.handle,
+        ownerKind: "Application",
+        ownerId: programId,
+        seasonId: app.season_id,
+        claimedAt: _ctx.block.substrateBlockTs,
+      })
+      .onConflictDoNothing()
+      .returning({ handle: schema.handleClaims.handle });
+    if (inserted.length === 0) {
+      throw new Error(`global handle namespace violation for ${app.handle}`);
+    }
+    await tx
+      .update(schema.applications)
+      .set(updates)
+      .where(sql`${schema.applications.id} = ${programId}`);
+  });
+}
+
+export async function handleApplicationDeleted(
+  db: Db,
+  _ctx: HandlerContext,
+  payload: ApplicationDeleted,
+): Promise<void> {
+  const programId = normalizeActorId(payload.program_id);
+  await db.transaction(async (tx) => {
+    await tx
+      .delete(schema.handleClaims)
+      .where(sql`${schema.handleClaims.ownerKind} = 'Application'
+        AND ${schema.handleClaims.ownerId} = ${programId}`);
+    await tx
+      .delete(schema.identityCards)
+      .where(sql`${schema.identityCards.id} = ${programId}`);
+    await tx
+      .delete(schema.announcements)
+      .where(sql`${schema.announcements.applicationId} = ${programId}`);
+    await tx
+      .delete(schema.appMetrics)
+      .where(sql`${schema.appMetrics.applicationId} = ${programId}`);
+    await tx
+      .delete(schema.applications)
+      .where(sql`${schema.applications.id} = ${programId}`);
+  });
 }
 
 export async function handleApplicationSubmitted(

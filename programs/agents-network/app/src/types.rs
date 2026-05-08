@@ -220,13 +220,19 @@ pub struct ContactLinks {
     pub x: Option<String>,
 }
 
-/// Handle + program_id + owner + registered_at + season_id are immutable.
+/// `program_id` + owner + registered_at + season_id are immutable.
+/// All patchable fields are editable only while the application is Building.
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq, Default)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct ApplicationPatch {
+    pub handle: Option<Handle>,
     pub description: Option<String>,
+    pub track: Option<Track>,
+    pub github_url: Option<String>,
+    pub skills_hash: Option<Hash32>,
     pub skills_url: Option<String>,
+    pub idl_hash: Option<Hash32>,
     pub idl_url: Option<String>,
     pub contacts: Option<Option<ContactLinks>>,
 }

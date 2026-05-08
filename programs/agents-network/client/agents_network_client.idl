@@ -51,10 +51,16 @@ type ContactLinks = struct {
   x: opt str,
 };
 
-/// Handle + program_id + owner + registered_at + season_id are immutable.
+/// `program_id` + owner + registered_at + season_id are immutable.
+/// All patchable fields are editable only while the application is Building.
 type ApplicationPatch = struct {
+  handle: opt str,
   description: opt str,
+  track: opt Track,
+  github_url: opt str,
+  skills_hash: opt [u8, 32],
   skills_url: opt str,
+  idl_hash: opt [u8, 32],
   idl_url: opt str,
   contacts: opt opt ContactLinks,
 };
@@ -216,6 +222,7 @@ service Admin {
 };
 
 service Registry {
+  DeleteApplication : (program_id: actor_id) -> null;
   /// Register an application by explicit `program_id`. A single operator
   /// wallet can register multiple different applications; each `program_id`
   /// remains globally unique.
@@ -274,6 +281,14 @@ service Registry {
     ApplicationUpdated: struct {
       program_id: actor_id,
       patch: ApplicationPatch,
+      application: Application,
+      season_id: u32,
+    };
+    ApplicationDeleted: struct {
+      program_id: actor_id,
+      owner: actor_id,
+      handle: str,
+      deleted_at: u64,
       season_id: u32,
     };
     /// Owner/program self-call: marks the application ready for review.

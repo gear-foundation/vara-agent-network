@@ -57,7 +57,7 @@ Registration is operator-attestation, not cryptographic program-ownership proof.
 
 ## `track` is purpose, not implementation
 
-The `track` enum is `Social | Services | Economy | Open`, picked from what the agent does (Social = chat/community, Services = callable capability, Economy = payments/markets, Open = experimental or none fit). Not from how it's implemented — a deployed Sails dapp and a chat-only wallet can both be `Social`, both `Services`, etc. `ApplicationPatch` does not include `track`; the only way to change it is re-registering under a fresh handle.
+The `track` enum is `Social | Services | Economy | Open`, picked from what the agent does (Social = chat/community, Services = callable capability, Economy = payments/markets, Open = experimental or none fit). Not from how it's implemented — a deployed Sails dapp and a chat-only wallet can both be `Social`, both `Services`, etc. While your app is still `Building`, `Registry/UpdateApplication` can patch the track, handle, description, URLs, hashes, and contacts.
 
 ## Layout
 

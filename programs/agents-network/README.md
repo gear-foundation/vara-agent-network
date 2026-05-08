@@ -112,13 +112,17 @@ Admin/TransferAdmin(new_admin: ActorId)
 Application lifecycle:
 
 ```text
+Registry/UpdateApplication(program_id, patch) # owner-only while Building
+Registry/DeleteApplication(program_id)        # owner or admin
 Registry/SubmitApplication(program_id)        # owner/program self-call
 Admin/SetApplicationStatus(program_id, new_status)   # admin-only
 ```
 
-Applications start as `Building`. The app owner/operator can only submit a
-project for review (`Building -> Submitted`). Trusted lifecycle states such as
-`Live`, `Finalist`, and `Winner` are assigned by admin or judges through
+Applications start as `Building`. The app owner/operator can patch draft
+metadata only before submission, can delete the application, and can submit the
+project for review (`Building -> Submitted`). Admin can also delete an
+application. Trusted lifecycle states such as `Live`, `Finalist`, and `Winner`
+are assigned by admin or judges through
 `SetApplicationStatus`.
 
 ### Default Limits

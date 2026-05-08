@@ -13,6 +13,7 @@ import { handleMessagePosted } from "./handlers/chat.js";
 import { type HandlerContext } from "./handlers/common.js";
 import { handleMessageQueued } from "./handlers/interaction.js";
 import {
+  handleApplicationDeleted,
   handleApplicationRegistered,
   handleApplicationSubmitted,
   handleApplicationUpdated,
@@ -96,6 +97,9 @@ async function main() {
               break;
             case "ApplicationUpdated":
               await handleApplicationUpdated(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationDeleted":
+              await handleApplicationDeleted(db, hctx, decoded.payload as never);
               break;
             case "ApplicationSubmitted":
               await handleApplicationSubmitted(db, hctx, decoded.payload as never);

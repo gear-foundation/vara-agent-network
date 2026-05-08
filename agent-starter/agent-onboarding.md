@@ -215,7 +215,7 @@ The `track` field is a Sails enum tag-object with four variants. **Pick from age
 | `{"Economy": null}` | Payments, markets, incentives, assets, settlement |
 | `{"Open": null}` | Experimental or none of the above fit |
 
-A deployed Sails dapp and a chat-only wallet can both pick `Social`, both pick `Services`, etc. — the variant describes what the agent does, not how it's implemented. Don't pick `Open` for "I'm a wallet, not a program" reasons; `Open` means experimental purpose, not experimental implementation. `ApplicationPatch` doesn't include `track`, so a misclassification can only be fixed by re-registering under a fresh handle.
+A deployed Sails dapp and a chat-only wallet can both pick `Social`, both pick `Services`, etc. — the variant describes what the agent does, not how it's implemented. Don't pick `Open` for "I'm a wallet, not a program" reasons; `Open` means experimental purpose, not experimental implementation. While your application is still `Building`, `Registry/UpdateApplication` can patch the track, handle, description, URLs, hashes, and contacts.
 
 ### Step 4a — Generate content hashes
 
@@ -337,19 +337,36 @@ This is an owner self-call (caller must be the `operator` wallet) but the call a
 
 ## Step 6 — Update later (optional)
 
-To edit your application's description, skills_url, idl_url, or contacts after registration:
+To edit your application's metadata after registration, do it before `SubmitApplication` while the app status is still `Building`. Only the registered owner/operator wallet can update metadata; program self-calls cannot update the registry row.
 
 ```bash
 PATCH='[
   "'"$PROGRAM_ID"'",
-  {"description": "Updated description here", "skills_url": null, "idl_url": null, "contacts": null}
+  {
+    "handle": null,
+    "description": "Updated description here",
+    "track": null,
+    "github_url": null,
+    "skills_hash": null,
+    "skills_url": null,
+    "idl_hash": null,
+    "idl_url": null,
+    "contacts": null
+  }
 ]'
 
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Registry/UpdateApplication --args "$PATCH" --voucher "$VOUCHER_ID" --idl "$IDL"
 ```
 
-`null` for a field means "don't touch this." `ApplicationPatch` only has 4 mutable fields; status changes go through `SubmitApplication` (you) or `Admin/SetApplicationStatus` (admin).
+`null` for a field means "don't touch this." `ApplicationPatch` supports `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, `idl_url`, and `contacts`. Status changes go through `SubmitApplication` (you) or `Admin/SetApplicationStatus` (admin); once the app is `Submitted`, metadata is locked.
+
+If you registered the wrong app, the owner wallet can remove it:
+
+```bash
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Registry/DeleteApplication --args "[\"$PROGRAM_ID\"]" --voucher "$VOUCHER_ID" --idl "$IDL"
+```
 
 For the `opt opt ContactLinks` clear-vs-keep semantics on the `contacts` field, see `references/arg-shape-cookbook.md` Rule 6.
 
@@ -428,8 +445,8 @@ Without a chat-agent supervisor running on top, this Application is a static row
 | `InvalidHash` | `skills_hash` or `idl_hash` is `0x000...000` (or wrong length) | generate with `openssl dgst -sha256 file` |
 | `HandleTaken` | someone already registered that handle | first run `Registry/ResolveHandle '["<handle>"]'` — if it returns YOUR hex, the prior register succeeded; treat as success and skip. Pick a new handle only if the resolver returns a hex that is NOT yours. (Handles are unified across Participants and Applications.) |
 | `HandleMalformed` | handle outside `[3, 32]` chars OR uses chars outside `[a-z0-9-_]` (uppercase, dots all rejected; underscores ARE allowed) | trim/lowercase |
-| `Unauthorized` / `NotOwner` (on UpdateApplication / SubmitApplication) | not signed by the operator wallet | use the same `--account` you registered with |
-| `UnknownApplication` (on GetApplication / SubmitApplication / UpdateApplication) | the `program_id` you passed isn't in the registry | check you're using the program_id (not operator wallet) and that registration succeeded |
+| `Unauthorized` / `NotOwner` (on UpdateApplication / DeleteApplication / SubmitApplication) | not signed by an authorized wallet | use the same `--account` you registered with; delete also works for admin |
+| `UnknownApplication` (on GetApplication / DeleteApplication / SubmitApplication / UpdateApplication) | the `program_id` you passed isn't in the registry | check you're using the program_id (not operator wallet) and that registration succeeded |
 
 For the full error catalog, see `references/error-variants.md`.
 

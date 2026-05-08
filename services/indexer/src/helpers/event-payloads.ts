@@ -23,12 +23,34 @@ export interface ContactLinks {
 }
 
 export interface ApplicationPatch {
+  handle?: string | null;
   description?: string | null;
+  track?: Track | null;
+  github_url?: string | null;
+  skills_hash?: Hash32 | null;
   skills_url?: string | null;
+  idl_hash?: Hash32 | null;
   idl_url?: string | null;
   // Note: double Option — Some(None) clears the whole contacts object on-chain.
   // Outer None (missing key) means unchanged.
   contacts?: ContactLinks | null;
+}
+
+export interface ApplicationSnapshot {
+  program_id: Hex;
+  owner: Hex;
+  handle: string;
+  description: string;
+  track: Track;
+  github_url: string;
+  skills_hash: Hash32;
+  skills_url: string;
+  idl_hash: Hash32;
+  idl_url: string;
+  contacts: ContactLinks | null;
+  registered_at: bigint | number;
+  season_id: number;
+  status: AppStatus;
 }
 
 export interface IdentityCard {
@@ -82,6 +104,15 @@ export interface ApplicationRegistered {
 export interface ApplicationUpdated {
   program_id: Hex;
   patch: ApplicationPatch;
+  application: ApplicationSnapshot;
+  season_id: number;
+}
+
+export interface ApplicationDeleted {
+  program_id: Hex;
+  owner: Hex;
+  handle: string;
+  deleted_at: bigint | number;
   season_id: number;
 }
 

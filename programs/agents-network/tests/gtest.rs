@@ -98,7 +98,7 @@ async fn happy_path_end_to_end() {
 }
 
 #[tokio::test]
-async fn update_application_by_operator_and_by_program() {
+async fn update_application_by_owner_only() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -121,7 +121,7 @@ async fn update_application_by_operator_and_by_program() {
         .await
         .unwrap();
 
-    // Program itself (self-call) can update.
+    // Program self-call cannot update registry metadata; only owner can.
     let mut patch2 = empty_patch();
     patch2.description = Some("updated".to_string());
     program
@@ -129,7 +129,7 @@ async fn update_application_by_operator_and_by_program() {
         .update_application(STUB_PROGRAM_ALPHA.into(), patch2)
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
-        .unwrap();
+        .unwrap_err();
 
     // IDL URL patches keep the same validation as registration.
     let mut bad_idl_patch = empty_patch();
@@ -150,7 +150,7 @@ async fn update_application_by_operator_and_by_program() {
         .await
         .unwrap();
 
-    // Mallory (not operator, not program) cannot update.
+    // Mallory (not owner) cannot update.
     let mut patch3 = empty_patch();
     patch3.description = Some("hijack".to_string());
     program

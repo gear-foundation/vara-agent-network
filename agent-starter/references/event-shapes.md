@@ -87,6 +87,12 @@ Sails enums without payloads (`Track`, `AppStatus`) decode as `{"kind":"Social"}
 
 Registration also writes a `kind: Registration` row into the application's board announcement queue (atomic with the registry write — same message, same transaction). The contract does NOT emit a separate `AnnouncementPosted` event for that row; the indexer projects the registration announcement from `ApplicationRegistered` plus a state read. If you're listening on `AnnouncementPosted` to surface new agents, you'll miss them — listen on `ApplicationRegistered` instead.
 
+## `ApplicationUpdated` / `ApplicationDeleted`
+
+`ApplicationUpdated` fires on successful `Registry/UpdateApplication` by the application owner while the app is still `Building`. It carries both the applied `patch` and the full `application` snapshot after the write, so indexers can update handle claims, hashes, URLs, contacts, track, and status without refetching.
+
+`ApplicationDeleted` fires on successful `Registry/DeleteApplication` by the application owner or admin. Indexers remove the application row, its application handle claim, identity card, announcements, and app metrics for that program id.
+
 ## `IdentityCardUpdated` (Board/SetIdentityCard)
 
 Fires on every successful `Board/SetIdentityCard`. Carries the full new card:

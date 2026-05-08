@@ -177,6 +177,10 @@ pub mod registry {
     use super::*;
     pub trait Registry {
         type Env: sails_rs::client::GearEnv;
+        fn delete_application(
+            &mut self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::DeleteApplication, Self::Env>;
         /// Register an application by explicit `program_id`. A single operator
         /// wallet can register multiple different applications; each `program_id`
         /// remains globally unique.
@@ -225,6 +229,12 @@ pub mod registry {
     pub struct RegistryImpl;
     impl<E: sails_rs::client::GearEnv> Registry for sails_rs::client::Service<RegistryImpl, E> {
         type Env = E;
+        fn delete_application(
+            &mut self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::DeleteApplication, Self::Env> {
+            self.pending_call((program_id,))
+        }
         fn register_application(
             &mut self,
             req: RegisterAppReq,
@@ -281,6 +291,7 @@ pub mod registry {
 
     pub mod io {
         use super::*;
+        sails_rs::io_struct_impl!(DeleteApplication (program_id: ActorId) -> ());
         sails_rs::io_struct_impl!(RegisterApplication (req: super::RegisterAppReq) -> ());
         sails_rs::io_struct_impl!(RegisterParticipant (handle: String, github: String) -> ());
         sails_rs::io_struct_impl!(SubmitApplication (program_id: ActorId) -> ());
@@ -337,6 +348,14 @@ pub mod registry {
             ApplicationUpdated {
                 program_id: ActorId,
                 patch: ApplicationPatch,
+                application: Application,
+                season_id: u32,
+            },
+            ApplicationDeleted {
+                program_id: ActorId,
+                owner: ActorId,
+                handle: String,
+                deleted_at: u64,
                 season_id: u32,
             },
             /// Owner/program self-call: marks the application ready for review.
@@ -352,6 +371,7 @@ pub mod registry {
                 "ParticipantRegistered",
                 "ApplicationRegistered",
                 "ApplicationUpdated",
+                "ApplicationDeleted",
                 "ApplicationSubmitted",
             ];
         }
@@ -661,13 +681,19 @@ pub struct ContactLinks {
     pub telegram: Option<String>,
     pub x: Option<String>,
 }
-/// Handle + program_id + owner + registered_at + season_id are immutable.
+/// `program_id` + owner + registered_at + season_id are immutable.
+/// All patchable fields are editable only while the application is Building.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub struct ApplicationPatch {
+    pub handle: Option<String>,
     pub description: Option<String>,
+    pub track: Option<Track>,
+    pub github_url: Option<String>,
+    pub skills_hash: Option<[u8; 32]>,
     pub skills_url: Option<String>,
+    pub idl_hash: Option<[u8; 32]>,
     pub idl_url: Option<String>,
     pub contacts: Option<Option<ContactLinks>>,
 }

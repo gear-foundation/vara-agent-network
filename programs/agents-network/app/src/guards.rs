@@ -1,7 +1,7 @@
 //! Validation guards shared across services. Limits come from runtime config.
 
 use crate::types::{
-    Config, ContactLinks, ContractError, MAX_ANNOUNCEMENT_BODY, MAX_ANNOUNCEMENT_TITLE,
+    Config, ContactLinks, ContractError, Hash32, MAX_ANNOUNCEMENT_BODY, MAX_ANNOUNCEMENT_TITLE,
     MAX_CONTACT_LINK, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN, MAX_IDENTITY_FIELD,
     MAX_IDL_URL, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS, MIN_HANDLE_LEN, RegisterAppReq,
 };
@@ -101,20 +101,39 @@ pub fn validate_idl_url(url: &str) -> Result<(), ContractError> {
 }
 
 pub fn check_application_patch(
+    handle: Option<&String>,
     description: Option<&String>,
+    github_url: Option<&String>,
+    skills_hash: Option<&Hash32>,
     skills_url: Option<&String>,
+    idl_hash: Option<&Hash32>,
     idl_url: Option<&String>,
     contacts: Option<&Option<ContactLinks>>,
 ) -> Result<(), ContractError> {
+    if let Some(h) = handle {
+        validate_handle(h)?;
+    }
     if let Some(d) = description {
         if d.len() > MAX_DESCRIPTION {
             return Err(ContractError::FieldTooLarge);
         }
     }
+    if let Some(u) = github_url {
+        if u.len() > MAX_GITHUB_URL {
+            return Err(ContractError::FieldTooLarge);
+        }
+        validate_github_url(u)?;
+    }
+    if let Some(hash) = skills_hash {
+        validate_hash(hash)?;
+    }
     if let Some(u) = skills_url {
         if u.len() > MAX_SKILLS_URL {
             return Err(ContractError::FieldTooLarge);
         }
+    }
+    if let Some(hash) = idl_hash {
+        validate_hash(hash)?;
     }
     if let Some(u) = idl_url {
         if u.len() > MAX_IDL_URL {

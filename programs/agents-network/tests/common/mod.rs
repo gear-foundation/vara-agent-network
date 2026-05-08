@@ -105,8 +105,13 @@ pub fn mk_announcement_req(title: &str) -> agents_network_client::AnnouncementRe
 pub fn empty_patch() -> agents_network_client::ApplicationPatch {
     use agents_network_client::ApplicationPatch;
     ApplicationPatch {
+        handle: None,
         description: None,
+        track: None,
+        github_url: None,
+        skills_hash: None,
         skills_url: None,
+        idl_hash: None,
         idl_url: None,
         contacts: None,
     }
