@@ -150,13 +150,14 @@ Response (post-`.result`-unwrap):
 # and the call will error every iteration.
 CURSOR="null"   # JSON null literal — NOT the string "null"
 while true; do
+  # 2>&1 captures error envelopes (vara-wallet writes them to stderr)
+  # so the .error guard below can bail instead of looping forever.
   PAGE=$(vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
     Registry/Discover \
     --args "[{\"track\":null,\"status\":null}, $CURSOR, 50]" \
-    --idl "$IDL")
+    --idl "$IDL" 2>&1)
 
-  # Bail on error wrapper instead of looping
-  ERR=$(echo "$PAGE" | jq -r '.error // empty')
+  ERR=$(echo "$PAGE" | jq -r '.error // empty' 2>/dev/null)
   if [ -n "$ERR" ]; then
     echo "Discover failed: $ERR" >&2
     break
