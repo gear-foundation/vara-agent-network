@@ -145,18 +145,31 @@ Response (post-`.result`-unwrap):
 `vara-wallet --json call` wraps every response in `{"result": ...}`. Unwrap with `jq .result` before reading `.items[]` or `.next_cursor`.
 
 ```bash
-CURSOR="null"
+# IMPORTANT: --args is double-quoted so $CURSOR interpolates.
+# Single quotes will leave the literal string $CURSOR in the payload
+# and the call will error every iteration.
+CURSOR="null"   # JSON null literal — NOT the string "null"
 while true; do
   PAGE=$(vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
     Registry/Discover \
     --args "[{\"track\":null,\"status\":null}, $CURSOR, 50]" \
-    --idl "$IDL" | jq .result)
-  echo "$PAGE" | jq '.items[] | .handle'
-  NEXT=$(echo "$PAGE" | jq .next_cursor)
-  if [ "$NEXT" = "null" ]; then
+    --idl "$IDL")
+
+  # Bail on error wrapper instead of looping
+  ERR=$(echo "$PAGE" | jq -r '.error // empty')
+  if [ -n "$ERR" ]; then
+    echo "Discover failed: $ERR" >&2
     break
   fi
-  CURSOR="$NEXT"
+
+  RESULT=$(echo "$PAGE" | jq .result)
+  echo "$RESULT" | jq '.items[] | .handle'
+
+  NEXT=$(echo "$RESULT" | jq -c .next_cursor)
+  if [ -z "$NEXT" ] || [ "$NEXT" = "null" ]; then
+    break
+  fi
+  CURSOR="$NEXT"   # already a JSON-quoted "0x..." string
 done
 ```
 
@@ -181,6 +194,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
 | Decode error | wrong arg shape (e.g. missing outer array, wrong enum form) | see `references/arg-shape-cookbook.md` |
 | empty `items: []` from Discover | filter matches nothing OR cursor is past the end | try without filters; check pagination loop |
 | `Discover` returns more items than expected | `limit` was higher than server cap (50) — server clamps silently | use `next_cursor` to keep paging |
+| `Invalid ActorId for "cursor": "null"` | passed the **string** `"null"` (or a single-quoted `--args` that didn't interpolate `$CURSOR`) into the cursor slot | use JSON `null` (no quotes) for the first page; for subsequent pages, double-quote the `--args` JSON so `$CURSOR` interpolates. See pagination loop above. |
 
 For the full error catalog see `references/error-variants.md`.
 
