@@ -55,7 +55,7 @@ function makeVoucher(overrides: Partial<Voucher> = {}): Voucher {
     id: 'v1',
     voucherId: '0xvoucher',
     account: DECODED,
-    programs: [PROGRAM_A],
+    programs: [],
     varaToIssue: TRANCHE_VARA,
     validUpToBlock: 1000n,
     validUpTo: new Date(Date.now() + TRANCHE_DURATION_SEC * 1000),
@@ -109,15 +109,8 @@ describe('GaslessService (hourly-tranche model)', () => {
     };
     programRepo = {
       findBy: jest.fn().mockImplementation(async ({ address }) => {
-        // `address` is a TypeORM `In([...])` FindOperator. We reach into its
-        // internal value to let tests stub per-request program lists without
-        // spinning up a real DB.
-        //
-        // WARNING: This couples to TypeORM's internal `_value`/`value`
-        // property names. If TypeORM upgrades and rename/hide these fields,
-        // this mock returns no results and the whole suite silently starts
-        // hitting the "program not whitelisted" branch. If that happens,
-        // update this extraction (or replace with a real in-memory DB).
+        // Legacy repository mock retained because the module still registers
+        // GaslessProgram, but the request path no longer calls it.
         const addrs: string[] = address._value ?? address.value ?? [];
         return addrs.map((a) => makeProgram(a));
       }),
@@ -209,84 +202,67 @@ describe('GaslessService (hourly-tranche model)', () => {
     ).rejects.toThrow(BadRequestException);
   });
 
-  it('throws 400 when programs array is empty', async () => {
-    await expect(
-      service.requestVoucher({ account: ACCOUNT, programs: [] }, IP),
-    ).rejects.toThrow(/non-empty/);
-  });
-
-  it('throws 400 naming the program when one is not whitelisted', async () => {
-    programRepo.findBy.mockResolvedValue([makeProgram(PROGRAM_A)]);
-    await expect(
-      service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B] }, IP),
-    ).rejects.toThrow(new RegExp(PROGRAM_B.slice(2, 10)));
-  });
-
-  it('throws 400 naming the program when one is disabled', async () => {
-    programRepo.findBy.mockResolvedValue([
-      makeProgram(PROGRAM_A),
-      makeProgram(PROGRAM_B, { status: GaslessProgramStatus.Disabled }),
-    ]);
-    await expect(
-      service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B] }, IP),
-    ).rejects.toThrow(new RegExp(PROGRAM_B.slice(2, 10)));
-  });
-
-  it('lowercases programs before whitelist lookup and passes lowercase to issue()', async () => {
+  it('accepts an omitted programs array and issues an unrestricted code-upload voucher', async () => {
     voucherSvc.getVoucher.mockResolvedValue(null);
-    await service.requestVoucher(
-      { account: ACCOUNT, programs: [PROGRAM_A.toUpperCase()] },
-      IP,
-    );
-    const lookupArg = (programRepo.findBy.mock.calls[0][0] as any).address;
-    const lookedUp: string[] = lookupArg._value ?? lookupArg.value;
-    expect(lookedUp).toEqual([PROGRAM_A]);
+    await service.requestVoucher({ account: ACCOUNT }, IP);
     expect(voucherSvc.issue).toHaveBeenCalledWith(
       DECODED,
-      [PROGRAM_A],
+      undefined,
       TRANCHE_VARA,
       TRANCHE_DURATION_SEC,
+      true,
     );
   });
 
-  it('dedupes programs array before whitelist lookup', async () => {
+  it('accepts an empty programs array and still issues unrestricted', async () => {
     voucherSvc.getVoucher.mockResolvedValue(null);
-    await service.requestVoucher(
-      { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_A, PROGRAM_B] },
-      IP,
-    );
+    await service.requestVoucher({ account: ACCOUNT, programs: [] }, IP);
     expect(voucherSvc.issue).toHaveBeenCalledWith(
       DECODED,
-      [PROGRAM_A, PROGRAM_B],
+      undefined,
       TRANCHE_VARA,
       TRANCHE_DURATION_SEC,
+      true,
     );
   });
 
-  // ── oneTime across batch ───────────────────────────────────────────────────
-
-  it('throws 400 naming the oneTime program already in existing voucher', async () => {
-    programRepo.findBy.mockResolvedValue([
-      makeProgram(PROGRAM_A, { oneTime: true }),
-    ]);
-    voucherSvc.getVoucher.mockResolvedValue(
-      makeVoucher({ programs: [PROGRAM_A], lastRenewedAt: hoursAgo(2) }),
+  it('ignores arbitrary requested programs instead of checking the whitelist', async () => {
+    voucherSvc.getVoucher.mockResolvedValue(null);
+    await service.requestVoucher(
+      { account: ACCOUNT, programs: [PROGRAM_A.toUpperCase(), PROGRAM_B] },
+      IP,
     );
-    await expect(
-      service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A] }, IP),
-    ).rejects.toThrow(/One-time/);
+    expect(programRepo.findBy).not.toHaveBeenCalled();
+    expect(voucherSvc.issue).toHaveBeenCalledWith(
+      DECODED,
+      undefined,
+      TRANCHE_VARA,
+      TRANCHE_DURATION_SEC,
+      true,
+    );
   });
 
-  it('allows oneTime program when not yet in voucher', async () => {
-    programRepo.findBy.mockResolvedValue([
-      makeProgram(PROGRAM_A, { oneTime: true }),
-    ]);
+  it('replaces a legacy restricted voucher with an unrestricted code-upload voucher', async () => {
+    const legacy = makeVoucher({ programs: [PROGRAM_A], lastRenewedAt: hoursAgo(0.2) });
     voucherSvc.getVoucher.mockResolvedValue(
-      makeVoucher({ programs: [PROGRAM_B], lastRenewedAt: hoursAgo(2) }),
+      legacy,
     );
-    await expect(
-      service.requestVoucher({ account: ACCOUNT, programs: [PROGRAM_A] }, IP),
-    ).resolves.toEqual({ status: 'ok', voucherId: '0xvoucher' });
+    voucherSvc.issue.mockResolvedValueOnce('0xunrestricted');
+
+    const result = await service.requestVoucher(
+      { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B] },
+      IP,
+    );
+
+    expect(voucherSvc.markRevokedLocally).not.toHaveBeenCalled();
+    expect(voucherSvc.issue).toHaveBeenCalledWith(
+      DECODED,
+      undefined,
+      TRANCHE_VARA,
+      TRANCHE_DURATION_SEC,
+      true,
+    );
+    expect(result).toEqual({ status: 'ok', voucherId: '0xunrestricted' });
   });
 
   // ── Advisory lock ──────────────────────────────────────────────────────────
@@ -357,9 +333,10 @@ describe('GaslessService (hourly-tranche model)', () => {
     );
     expect(voucherSvc.issue).toHaveBeenCalledWith(
       DECODED,
-      [PROGRAM_A, PROGRAM_B, PROGRAM_C],
+      undefined,
       TRANCHE_VARA,
       TRANCHE_DURATION_SEC,
+      true,
     );
     expect(voucherSvc.update).not.toHaveBeenCalled();
     expect(result).toEqual({ status: 'ok', voucherId: '0xnewvoucher' });
@@ -369,7 +346,7 @@ describe('GaslessService (hourly-tranche model)', () => {
 
   it('tops up existing voucher when >1h since last renewal', async () => {
     const existing = makeVoucher({
-      programs: [PROGRAM_A],
+      programs: [],
       lastRenewedAt: hoursAgo(2),
     });
     voucherSvc.getVoucher.mockResolvedValue(existing);
@@ -379,30 +356,13 @@ describe('GaslessService (hourly-tranche model)', () => {
       TRANCHE_VARA,
       TRANCHE_DURATION_SEC,
       undefined,
+      true,
     );
   });
 
-  it('top-up filters to only NEW programs (subset already registered)', async () => {
+  it('top-up ignores requested programs when voucher is already unrestricted', async () => {
     const existing = makeVoucher({
-      programs: [PROGRAM_A],
-      lastRenewedAt: hoursAgo(2),
-    });
-    voucherSvc.getVoucher.mockResolvedValue(existing);
-    await service.requestVoucher(
-      { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B] },
-      IP,
-    );
-    expect(voucherSvc.update).toHaveBeenCalledWith(
-      existing,
-      TRANCHE_VARA,
-      TRANCHE_DURATION_SEC,
-      [PROGRAM_B],
-    );
-  });
-
-  it('top-up passes undefined for addPrograms when no new programs', async () => {
-    const existing = makeVoucher({
-      programs: [PROGRAM_A, PROGRAM_B],
+      programs: [],
       lastRenewedAt: hoursAgo(2),
     });
     voucherSvc.getVoucher.mockResolvedValue(existing);
@@ -415,12 +375,32 @@ describe('GaslessService (hourly-tranche model)', () => {
       TRANCHE_VARA,
       TRANCHE_DURATION_SEC,
       undefined,
+      true,
+    );
+  });
+
+  it('top-up passes undefined for addPrograms when no new programs', async () => {
+    const existing = makeVoucher({
+      programs: [],
+      lastRenewedAt: hoursAgo(2),
+    });
+    voucherSvc.getVoucher.mockResolvedValue(existing);
+    await service.requestVoucher(
+      { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B] },
+      IP,
+    );
+    expect(voucherSvc.update).toHaveBeenCalledWith(
+      existing,
+      TRANCHE_VARA,
+      TRANCHE_DURATION_SEC,
+      undefined,
+      true,
     );
   });
 
   it('recovers from a stale on-chain voucher during top-up by issuing a replacement', async () => {
     const existing = makeVoucher({
-      programs: [PROGRAM_A],
+      programs: [],
       lastRenewedAt: hoursAgo(2),
       voucherId: '0xstale',
     });
@@ -441,9 +421,10 @@ describe('GaslessService (hourly-tranche model)', () => {
     );
     expect(voucherSvc.issue).toHaveBeenCalledWith(
       DECODED,
-      [PROGRAM_A, PROGRAM_B],
+      undefined,
       TRANCHE_VARA,
       TRANCHE_DURATION_SEC,
+      true,
     );
     expect(result).toEqual({ status: 'ok', voucherId: '0xreplacement' });
   });
@@ -498,61 +479,55 @@ describe('GaslessService (hourly-tranche model)', () => {
     expect(ok.status).toBe('ok');
   });
 
-  // ── Regression: legacy voucher missing programs in 1h window ──────────────
-  // Scenario: a migrated wallet has a voucher funded <1h ago that only covers
-  // a subset of the requested programs. A POST listing additional programs
-  // should append them FREE OF CHARGE — no tranche consumed, no duration
-  // extension — instead of 429-ing the wallet into a 1h lockout where writes
-  // to newly added programs fail.
+  // ── Legacy restricted voucher migration ───────────────────────────────────
+  // Old vouchers with non-empty `programs` are restricted on-chain. They must
+  // be replaced by a fresh unrestricted voucher so builders can pay gas for
+  // arbitrary program calls and program upload.
 
-  it('1h window + missing programs: appends free of charge (no tranche)', async () => {
-    const existing = makeVoucher({
-      programs: [PROGRAM_A], // only 1 of 3 programs registered
-      lastRenewedAt: hoursAgo(0.3), // within 1h window
-    });
-    voucherSvc.getVoucher.mockResolvedValue(existing);
-    const result = await service.requestVoucher(
-      { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B, PROGRAM_C] },
-      IP,
-    );
-    expect(result).toEqual({ status: 'ok', voucherId: '0xvoucher' });
-    expect(voucherSvc.appendProgramsFreeOfCharge).toHaveBeenCalledWith(
-      existing,
-      [PROGRAM_B, PROGRAM_C],
-    );
-    expect(voucherSvc.update).not.toHaveBeenCalled();
-    // IP ceiling not charged (no tranche).
-    expect(ipRows.size).toBe(0);
-  });
-
-  it('recovers from a stale on-chain voucher during free append by issuing a replacement', async () => {
+  it('1h window + legacy restricted voucher: issues unrestricted replacement', async () => {
     const existing = makeVoucher({
       programs: [PROGRAM_A],
       lastRenewedAt: hoursAgo(0.3),
-      voucherId: '0xstale',
     });
     voucherSvc.getVoucher.mockResolvedValue(existing);
-    voucherSvc.appendProgramsFreeOfCharge.mockRejectedValueOnce(
-      new Error('gearVoucher.VoucherExpired: Voucher has expired and could not be used'),
-    );
     voucherSvc.issue.mockResolvedValueOnce('0xreplacement');
+    const result = await service.requestVoucher(
+      { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B, PROGRAM_C] },
+      IP,
+    );
+    expect(result).toEqual({ status: 'ok', voucherId: '0xreplacement' });
+    expect(voucherSvc.markRevokedLocally).not.toHaveBeenCalled();
+    expect(voucherSvc.issue).toHaveBeenCalledWith(
+      DECODED,
+      undefined,
+      TRANCHE_VARA,
+      TRANCHE_DURATION_SEC,
+      true,
+    );
+    expect(voucherSvc.appendProgramsFreeOfCharge).not.toHaveBeenCalled();
+  });
 
+  it('branch (b) with IP ceiling hit and legacy restricted voucher: returns 429', async () => {
+    cfgOverrides.perIpTranchesPerDay = 1;
+    voucherSvc.getVoucher.mockResolvedValueOnce(null);
+    await service.requestVoucher({ account: 'fresh1', programs: [PROGRAM_A] }, IP);
+
+    const existing = makeVoucher({
+      programs: [PROGRAM_A],
+      lastRenewedAt: hoursAgo(2),
+    });
+    voucherSvc.getVoucher.mockResolvedValueOnce(existing);
     const result = await service.requestVoucher(
       { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B, PROGRAM_C] },
       IP,
     );
 
-    expect(voucherSvc.markRevokedLocally).toHaveBeenCalledWith(
+    expect(result.status).toBe('rate_limited');
+    expect(voucherSvc.markRevokedLocally).not.toHaveBeenCalledWith(
       existing,
-      expect.stringContaining('stale on-chain during append'),
+      expect.any(String),
     );
-    expect(voucherSvc.issue).toHaveBeenCalledWith(
-      DECODED,
-      [PROGRAM_A, PROGRAM_B, PROGRAM_C],
-      TRANCHE_VARA,
-      TRANCHE_DURATION_SEC,
-    );
-    expect(result).toEqual({ status: 'ok', voucherId: '0xreplacement' });
+    expect(voucherSvc.issue).toHaveBeenCalledTimes(1);
   });
 
   it('exact 1h boundary: top-up eligible (no spurious 429 at nextTopUpEligibleAt)', async () => {
@@ -570,45 +545,14 @@ describe('GaslessService (hourly-tranche model)', () => {
     expect(voucherSvc.update).toHaveBeenCalled();
   });
 
-  // Codex round-5 regression: legacy voucher >1h old + partial programs
-  // + IP ceiling exhausted. Before this fix, branch (b) reserved the IP
-  // tranche, got a 429, and returned early — leaving the voucher with a
-  // subset of programs until UTC midnight. Writes to the missing programs
-  // failed for the entire day.
-
-  it('branch (b) with IP ceiling hit falls back to free append when programs missing', async () => {
-    cfgOverrides.perIpTranchesPerDay = 1;
-    // Exhaust the IP quota first.
-    voucherSvc.getVoucher.mockResolvedValueOnce(null);
-    await service.requestVoucher({ account: 'fresh1', programs: [PROGRAM_A] }, IP);
-
-    // Now a legacy wallet (>1h old, partial programs) POSTs from the same IP.
-    const legacy = makeVoucher({
-      programs: [PROGRAM_A],
-      lastRenewedAt: hoursAgo(2),
-    });
-    voucherSvc.getVoucher.mockResolvedValueOnce(legacy);
-    const result = await service.requestVoucher(
-      { account: ACCOUNT, programs: [PROGRAM_A, PROGRAM_B, PROGRAM_C] },
-      IP,
-    );
-    expect(result).toEqual({ status: 'ok', voucherId: '0xvoucher' });
-    expect(voucherSvc.appendProgramsFreeOfCharge).toHaveBeenCalledWith(
-      legacy,
-      [PROGRAM_B, PROGRAM_C],
-    );
-    // No top-up — we're over the IP cap, so update() must NOT run.
-    expect(voucherSvc.update).not.toHaveBeenCalled();
-  });
-
-  it('branch (b) with IP ceiling hit AND no missing programs: returns 429 (true rate limit)', async () => {
+  it('branch (b) with IP ceiling hit: returns 429 (true rate limit)', async () => {
     cfgOverrides.perIpTranchesPerDay = 1;
     voucherSvc.getVoucher.mockResolvedValueOnce(null);
     await service.requestVoucher({ account: 'fresh1', programs: [PROGRAM_A] }, IP);
 
     voucherSvc.getVoucher.mockResolvedValueOnce(
       makeVoucher({
-        programs: [PROGRAM_A, PROGRAM_B, PROGRAM_C],
+        programs: [],
         lastRenewedAt: hoursAgo(2),
       }),
     );
@@ -623,7 +567,7 @@ describe('GaslessService (hourly-tranche model)', () => {
 
   it('1h window + all programs already present: returns 429 (true rate limit)', async () => {
     const existing = makeVoucher({
-      programs: [PROGRAM_A, PROGRAM_B, PROGRAM_C],
+      programs: [],
       lastRenewedAt: hoursAgo(0.3),
     });
     voucherSvc.getVoucher.mockResolvedValue(existing);
@@ -750,7 +694,7 @@ describe('GaslessService (hourly-tranche model)', () => {
 
   it('CRITICAL: mid-cycle migration calls update() with amountToAdd=500, NOT a diff', async () => {
     const existing = makeVoucher({
-      programs: [PROGRAM_A],
+      programs: [],
       lastRenewedAt: hoursAgo(25), // old 2000-VARA voucher from yesterday
     });
     voucherSvc.getVoucher.mockResolvedValue(existing);
@@ -762,6 +706,7 @@ describe('GaslessService (hourly-tranche model)', () => {
       500, // NOT (500 - 1800) = -1300; NOT "top up to 500"; always +500
       TRANCHE_DURATION_SEC,
       undefined,
+      true,
     );
   });
 

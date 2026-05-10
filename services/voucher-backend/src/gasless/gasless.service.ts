@@ -9,14 +9,10 @@ import {
   OnModuleInit,
 } from '@nestjs/common';
 import { InjectRepository } from '@nestjs/typeorm';
-import { DataSource, In, Repository } from 'typeorm';
+import { DataSource, Repository } from 'typeorm';
 import { decodeAddress, HexString } from '@gear-js/api';
 import { AdvisoryLockTimeoutError, withAdvisoryLock } from './advisory-lock';
 import { getWalletLockKey } from './wallet-lock';
-import {
-  GaslessProgram,
-  GaslessProgramStatus,
-} from '../entities/gasless-program.entity';
 import { Voucher } from '../entities/voucher.entity';
 import { IpTrancheUsage } from '../entities/ip-tranche-usage.entity';
 import { VoucherService } from './voucher.service';
@@ -24,12 +20,12 @@ import { ConfigService } from '@nestjs/config';
 
 /**
  * Hourly-tranche model:
- *   - POST /voucher accepts `programs: string[]` and batch-registers them.
+ *   - POST /voucher accepts an account and issues an unrestricted voucher.
  *   - First POST for an agent issues a voucher with `HOURLY_TRANCHE_VARA` VARA
- *     covering all listed programs.
+ *     that can pay gas for any program and for code upload.
  *   - Subsequent POSTs ≥ TRANCHE_INTERVAL_SEC after the last funding event add
  *     another `HOURLY_TRANCHE_VARA` AND extend the voucher duration by
- *     `TRANCHE_DURATION_SEC`. New programs in the payload get appended.
+ *     `TRANCHE_DURATION_SEC`.
  *   - POSTs within TRANCHE_INTERVAL_SEC return 429 with `Retry-After` header.
  *
  * Abuse gates:
@@ -94,8 +90,6 @@ export class GaslessService implements OnModuleInit {
     private readonly voucherService: VoucherService,
     private readonly configService: ConfigService,
     private readonly dataSource: DataSource,
-    @InjectRepository(GaslessProgram)
-    private readonly programRepo: Repository<GaslessProgram>,
     @InjectRepository(Voucher)
     private readonly voucherRepo: Repository<Voucher>,
     @InjectRepository(IpTrancheUsage)
@@ -317,32 +311,12 @@ export class GaslessService implements OnModuleInit {
       throw new BadRequestException('Invalid account address');
     }
 
-    // Normalize + dedupe program addresses.
-    const programs = Array.from(
+    // Programs are accepted for backward compatibility with old clients, but
+    // no longer constrain the voucher. New vouchers are unrestricted and also
+    // enable code upload gas payment.
+    const requestedPrograms = Array.from(
       new Set((body.programs ?? []).map((p) => p.toLowerCase())),
     );
-
-    if (programs.length === 0) {
-      throw new BadRequestException('programs must be a non-empty array');
-    }
-
-    // Batch whitelist lookup. Every requested program must exist + be Enabled.
-    const programRows = await this.programRepo.findBy({ address: In(programs) });
-    if (programRows.length !== programs.length) {
-      const foundAddrs = new Set(programRows.map((r) => r.address));
-      const missing = programs.filter((p) => !foundAddrs.has(p));
-      throw new BadRequestException(
-        `Program(s) not whitelisted: ${missing.join(', ')}`,
-      );
-    }
-    const disabled = programRows.filter(
-      (r) => r.status !== GaslessProgramStatus.Enabled,
-    );
-    if (disabled.length > 0) {
-      throw new BadRequestException(
-        `Program(s) disabled: ${disabled.map((r) => r.address).join(', ')}`,
-      );
-    }
 
     const trancheVara = this.configService.get<number>('hourlyTrancheVara');
     const trancheIntervalSec = this.configService.get<number>('trancheIntervalSec');
@@ -358,142 +332,86 @@ export class GaslessService implements OnModuleInit {
         async () => {
           const existing = await this.voucherService.getVoucher(address);
 
-      // oneTime enforcement across the batch: if any requested program is
-      // oneTime AND already in the voucher, reject.
-      //
-      // KNOWN LIMITATION (accepted for this PR, no oneTime programs in
-      // seed.ts today): this only inspects the current non-revoked voucher.
-      // If the cron revokes a voucher carrying a oneTime program, `existing`
-      // becomes null and the next POST re-issues that oneTime program on a
-      // fresh voucher. When any program is actually marked oneTime,
-      // introduce a separate `one_time_claim(account, program_address)` row
-      // with a unique constraint so the check spans the full history.
-      const oneTimeConflicts = programRows
-        .filter(
-          (r) => r.oneTime && existing?.programs.includes(r.address),
-        )
-        .map((r) => r.address);
-      if (oneTimeConflicts.length > 0) {
-        throw new BadRequestException(
-          `One-time voucher already issued for: ${oneTimeConflicts.join(', ')}`,
-        );
-      }
-
-      // Branch (a): no existing voucher → fresh issue.
-      if (!existing) {
-        const ipLimit = await this.reserveIpTrancheCount(ip);
-        if (ipLimit) return ipLimit;
-        const voucherId = await this.voucherService.issue(
-          address,
-          programs as HexString[],
-          trancheVara,
-          trancheDurationSec,
-        );
-        return { status: 'ok', voucherId };
-      }
-
-      const cutoffMs = Date.now() - trancheIntervalSec * 1000;
-      const lastRenewedMs = existing.lastRenewedAt.getTime();
-      const missingPrograms = programs.filter(
-        (p) => !existing.programs.includes(p),
-      );
-
-      // Branch (b): eligible for top-up.
-      // Boundary is inclusive (<=) so clients that sleep until
-      // `nextTopUpEligibleAt` and POST exactly at that instant don't hit a
-      // spurious 429 — matches getVoucherState's `now >= nextEligibleMs`
-      // semantics for canTopUpNow.
-      if (lastRenewedMs <= cutoffMs) {
-        const ipLimit = await this.reserveIpTrancheCount(ip);
-        if (ipLimit) {
-          // IP daily tranche budget exhausted. A funded top-up isn't
-          // possible right now, but widening the program whitelist costs
-          // no VARA — let migrated legacy vouchers with partial programs
-          // escape the "stuck until midnight" trap. If there's nothing to
-          // append, surface the 429 as usual.
-          if (missingPrograms.length > 0) {
-            await this.voucherService.appendProgramsFreeOfCharge(
-              existing,
-              missingPrograms as HexString[],
+          // Branch (a): no existing voucher → fresh issue.
+          if (!existing) {
+            const ipLimit = await this.reserveIpTrancheCount(ip);
+            if (ipLimit) return ipLimit;
+            const voucherId = await this.voucherService.issue(
+              address,
+              undefined,
+              trancheVara,
+              trancheDurationSec,
+              true,
             );
+            return { status: 'ok', voucherId };
+          }
+
+          // Legacy vouchers stored a non-empty `programs` array and are restricted
+          // on-chain. Replace them with a fresh unrestricted + code-upload-enabled
+          // voucher immediately so builders can deploy their own programs without
+          // waiting for the next tranche window.
+          if (existing.programs.length > 0) {
+            const ipLimit = await this.reserveIpTrancheCount(ip);
+            if (ipLimit) return ipLimit;
+            this.logger.warn(
+              `Replacing legacy restricted voucher ${existing.voucherId} for account=${address}; requested programs=[${requestedPrograms.join(', ')}]`,
+            );
+            const voucherId = await this.voucherService.issue(
+              address,
+              undefined,
+              trancheVara,
+              trancheDurationSec,
+              true,
+            );
+            return { status: 'ok', voucherId };
+          }
+
+          const cutoffMs = Date.now() - trancheIntervalSec * 1000;
+          const lastRenewedMs = existing.lastRenewedAt.getTime();
+
+          // Branch (b): eligible for top-up.
+          // Boundary is inclusive (<=) so clients that sleep until
+          // `nextTopUpEligibleAt` and POST exactly at that instant don't hit a
+          // spurious 429 — matches getVoucherState's `now >= nextEligibleMs`
+          // semantics for canTopUpNow.
+          if (lastRenewedMs <= cutoffMs) {
+            const ipLimit = await this.reserveIpTrancheCount(ip);
+            if (ipLimit) return ipLimit;
+            try {
+              await this.voucherService.update(
+                existing,
+                trancheVara,
+                trancheDurationSec,
+                undefined,
+                true,
+              );
+            } catch (error) {
+              if (!isStaleOnChainVoucherError(error)) throw error;
+
+              this.logger.warn(
+                `Voucher ${existing.voucherId} for account=${address} is stale on-chain (${formatUnknownError(error)}); issuing replacement`,
+              );
+              await this.voucherService.markRevokedLocally(
+                existing,
+                `stale on-chain during update: ${formatUnknownError(error)}`,
+              );
+              const voucherId = await this.voucherService.issue(
+                address,
+                undefined,
+                trancheVara,
+                trancheDurationSec,
+                true,
+              );
+              return { status: 'ok', voucherId };
+            }
             return { status: 'ok', voucherId: existing.voucherId };
           }
-          return ipLimit;
-        }
-        try {
-          await this.voucherService.update(
-            existing,
-            trancheVara,
-            trancheDurationSec,
-            missingPrograms.length
-              ? (missingPrograms as HexString[])
-              : undefined,
-          );
-        } catch (error) {
-          if (!isStaleOnChainVoucherError(error)) throw error;
 
-          this.logger.warn(
-            `Voucher ${existing.voucherId} for account=${address} is stale on-chain (${formatUnknownError(error)}); issuing replacement`,
+          const nextEligibleMs = lastRenewedMs + trancheIntervalSec * 1000;
+          const retryAfterSec = Math.max(
+            1,
+            Math.ceil((nextEligibleMs - Date.now()) / 1000),
           );
-          await this.voucherService.markRevokedLocally(
-            existing,
-            `stale on-chain during update: ${formatUnknownError(error)}`,
-          );
-          const voucherId = await this.voucherService.issue(
-            address,
-            programs as HexString[],
-            trancheVara,
-            trancheDurationSec,
-          );
-          return { status: 'ok', voucherId };
-        }
-        return { status: 'ok', voucherId: existing.voucherId };
-      }
-
-      // Branch (c): within the 1h window.
-      //
-      // If the request lists any programs NOT already on the voucher, append
-      // them free of charge (no tranche cost, no duration bump, no
-      // lastRenewedAt update). This covers migrated legacy vouchers that
-      // were funded with only a subset of programs and need the remaining
-      // ones before the hour elapses.
-      //
-      // If all requested programs are already on the voucher, it's a true
-      // rate-limit violation → 429.
-      if (missingPrograms.length > 0) {
-        try {
-          await this.voucherService.appendProgramsFreeOfCharge(
-            existing,
-            missingPrograms as HexString[],
-          );
-        } catch (error) {
-          if (!isStaleOnChainVoucherError(error)) throw error;
-
-          this.logger.warn(
-            `Voucher ${existing.voucherId} for account=${address} is stale on-chain (${formatUnknownError(error)}); issuing replacement`,
-          );
-          await this.voucherService.markRevokedLocally(
-            existing,
-            `stale on-chain during append: ${formatUnknownError(error)}`,
-          );
-          const ipLimit = await this.reserveIpTrancheCount(ip);
-          if (ipLimit) return ipLimit;
-          const voucherId = await this.voucherService.issue(
-            address,
-            programs as HexString[],
-            trancheVara,
-            trancheDurationSec,
-          );
-          return { status: 'ok', voucherId };
-        }
-        return { status: 'ok', voucherId: existing.voucherId };
-      }
-
-      const nextEligibleMs = lastRenewedMs + trancheIntervalSec * 1000;
-      const retryAfterSec = Math.max(
-        1,
-        Math.ceil((nextEligibleMs - Date.now()) / 1000),
-      );
           return {
             status: 'rate_limited',
             retryAfterSec,

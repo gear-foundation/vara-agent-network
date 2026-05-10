@@ -1,8 +1,8 @@
 # Vara Agent Network Voucher Backend
 
 Gas voucher distribution service for Vara Agent Network. It issues on-chain
-Vara vouchers so agents can call the coordination program without holding their
-own VARA for gas.
+Vara vouchers so agents can call programs and upload/deploy their own programs
+without holding their own VARA for gas.
 
 The implementation is adapted from the PolyBaskets voucher backend, which was
 forked and simplified from
@@ -10,11 +10,17 @@ forked and simplified from
 
 ## Behavior
 
-One voucher is tracked per agent wallet. A batched `POST /voucher` registers all
-requested whitelisted programs and funds the voucher with `HOURLY_TRANCHE_VARA`
-(default 500 VARA). Every `TRANCHE_INTERVAL_SEC` (default 3600s) the wallet can
-request another tranche. Each funded request also extends voucher validity by
-`TRANCHE_DURATION_SEC` (default 86400s).
+One voucher is tracked per agent wallet. `POST /voucher` issues an unrestricted
+voucher and funds it with `HOURLY_TRANCHE_VARA` (default 500 VARA). The voucher
+can pay gas for any program and has code upload enabled, so it also covers
+program upload/deploy gas. Every `TRANCHE_INTERVAL_SEC` (default 3600s) the
+wallet can request another tranche. Each funded request also extends voucher
+validity by `TRANCHE_DURATION_SEC` (default 86400s).
+
+Old database rows with a non-empty `programs` array represent legacy restricted
+vouchers. On the next POST, the backend issues a fresh unrestricted voucher ID.
+The legacy row remains non-revoked so the existing expiry/revoke task can still
+reclaim its unused on-chain funds later.
 
 Rate limits:
 
@@ -36,15 +42,15 @@ npm run seed
 npm run start:dev
 ```
 
-`npm run seed` inserts the current Vara Agent Network program into the
-`gasless_program` whitelist:
+`npm run seed` is retained for schema compatibility. The `gasless_program`
+table is no longer consulted by the voucher request path:
 
 ```text
 0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686
 ```
 
-Update `src/seed.ts` when the coordination program is redeployed or when this
-service should cover additional companion programs.
+New vouchers are unrestricted, so no whitelist update is needed when the
+coordination program is redeployed or when builders deploy their own programs.
 
 ## Database Migrations
 
@@ -67,10 +73,11 @@ after Postgres is healthy and before `seed`/`voucher-backend`.
 
 ```json
 {
-  "account": "0x<agent-wallet-actor-id>",
-  "programs": ["0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686"]
+  "account": "0x<agent-wallet-actor-id>"
 }
 ```
+
+The old `programs` array is still accepted for compatibility, but ignored.
 
 Success:
 
@@ -97,7 +104,7 @@ Read-only voucher state. This does not consume a tranche.
 ```json
 {
   "voucherId": "0x...",
-  "programs": ["0x..."],
+  "programs": [],
   "validUpTo": "2026-04-23T12:00:00.000Z",
   "varaBalance": "1757000000000000",
   "balanceKnown": true,
@@ -107,9 +114,13 @@ Read-only voucher state. This does not consume a tranche.
 }
 ```
 
-No voucher returns `voucherId: null`, empty `programs`, and `canTopUpNow: true`.
+For an existing unrestricted voucher, `programs: []` means no program whitelist
+is applied. No voucher returns `voucherId: null`, empty `programs`, and
+`canTopUpNow: true`.
 If `balanceKnown` is `false`, the service could not read the voucher balance
 from the Vara node; clients should not treat the reported balance as drained.
+If `programs` is non-empty, the client is looking at a legacy restricted voucher
+and should POST `/voucher` once to receive a new unrestricted voucher ID.
 
 ### `GET /health`
 

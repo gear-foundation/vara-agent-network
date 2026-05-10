@@ -10,17 +10,9 @@ import { Voucher } from './entities/voucher.entity';
 config();
 
 /**
- * Vara Agent Network program whitelist for the voucher backend.
- *
- * Hourly-tranche: POST /voucher accepts programs: string[] and
- * batch-registers all listed programs on a single voucher. First POST funds
- * the voucher with `HOURLY_TRANCHE_VARA` (env var, default 500) for the
- * TRANCHE_DURATION_SEC duration. Each subsequent POST after TRANCHE_INTERVAL_SEC
- * adds another tranche AND extends the duration (sliding 24h window).
- *
- * `varaToIssue` and `weight` on each row are retained for schema compatibility
- * but are no longer read by `gasless.service.ts` — the per-tranche amount is
- * applied uniformly across all programs.
+ * Legacy program rows retained for schema compatibility. The voucher backend
+ * now issues unrestricted vouchers with code upload enabled, so this table is
+ * no longer consulted when processing POST /voucher.
  */
 const PROGRAMS = [
   {
