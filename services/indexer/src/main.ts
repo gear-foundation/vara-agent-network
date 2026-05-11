@@ -1,5 +1,5 @@
 // Processor entrypoint. Wires config → decoder → processor → handlers.
-import cron from "node-cron";
+import cron, { type ScheduledTask } from "node-cron";
 import { config, requireProcessorConfig } from "./config.js";
 import { SailsDecoder } from "./decoder/sails-decoder.js";
 import { handleApplicationStatusChanged } from "./handlers/admin.js";
@@ -18,7 +18,7 @@ import {
   handleApplicationUpdated,
   handleParticipantRegistered,
 } from "./handlers/registry.js";
-import { log } from "./helpers/logger.js";
+import { formatError, log } from "./helpers/logger.js";
 import {
   isMessageQueued,
   isSailsEvent,
@@ -29,7 +29,50 @@ import { db } from "./model/db.js";
 import { createProcessor } from "./processor.js";
 import { runDailyRollup, todayUtc, yesterdayUtc } from "./services/metrics-rollup.js";
 
-async function main() {
+type Processor = Awaited<ReturnType<typeof createProcessor>>;
+
+let shuttingDown = false;
+let currentProcessor: Processor | null = null;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function retryDelayMs(attempt: number): number {
+  const min = config.processorReconnectMinMs;
+  const max = config.processorReconnectMaxMs;
+  const exponential = min * 2 ** Math.max(0, attempt - 1);
+  const jitter = Math.floor(Math.random() * Math.min(1_000, min));
+  return Math.min(max, exponential + jitter);
+}
+
+function scheduleRollups(): ScheduledTask[] {
+  if (process.env.ENABLE_INLINE_ROLLUP_CRON === "false") return [];
+
+  const daily = cron.schedule("5 0 * * *", async () => {
+    const date = yesterdayUtc();
+    log.info("cron: daily rollup firing", { date });
+    try {
+      await runDailyRollup(db, config.seasonId, date);
+    } catch (err) {
+      log.error("cron: daily rollup failed", { date, error: formatError(err) });
+    }
+  }, { timezone: "UTC" });
+
+  const refresh = cron.schedule("*/15 * * * *", async () => {
+    const date = todayUtc();
+    try {
+      await runDailyRollup(db, config.seasonId, date);
+    } catch (err) {
+      log.error("cron: hourly refresh failed", { date, error: formatError(err) });
+    }
+  }, { timezone: "UTC" });
+
+  log.info("rollup crons scheduled", { daily: "5 0 * * * UTC", refresh: "*/15 * * * *" });
+  return [daily, refresh];
+}
+
+async function runProcessorOnce() {
   const processorConfig = requireProcessorConfig();
   log.info("boot", {
     programId: processorConfig.programId,
@@ -167,6 +210,7 @@ async function main() {
       });
     },
   });
+  currentProcessor = processor;
 
   const finalizedHead = (await processor.api.rpc.chain.getFinalizedHead()).toHex();
   const latestHeader = await processor.api.rpc.chain.getHeader(finalizedHead);
@@ -177,45 +221,65 @@ async function main() {
   await processor.runBackfill(latestHeight);
   await processor.runLive();
 
-  // Schedule daily metrics rollup at 00:05 UTC. Covers the day that just
-  // ended (yesterday UTC). Also runs a "today-so-far" rollup once per hour
-  // so the stakeholder dashboard has fresh numbers throughout the day.
-  // Set ENABLE_INLINE_ROLLUP_CRON=false to turn off (e.g., when using an
-  // external cron / k8s CronJob instead).
-  if (process.env.ENABLE_INLINE_ROLLUP_CRON !== "false") {
-    cron.schedule("5 0 * * *", async () => {
-      const date = yesterdayUtc();
-      log.info("cron: daily rollup firing", { date });
-      try {
-        await runDailyRollup(db, config.seasonId, date);
-      } catch (err) {
-        log.error("cron: daily rollup failed", { date, error: String(err) });
-      }
-    }, { timezone: "UTC" });
-    cron.schedule("*/15 * * * *", async () => {
-      // Refresh today's rollup every 15 minutes so the live dashboard tracks
-      // extrinsics/day with sub-hour latency. Idempotent.
-      const date = todayUtc();
-      try {
-        await runDailyRollup(db, config.seasonId, date);
-      } catch (err) {
-        log.error("cron: hourly refresh failed", { date, error: String(err) });
-      }
-    }, { timezone: "UTC" });
-    log.info("rollup crons scheduled", { daily: "5 0 * * * UTC", refresh: "*/15 * * * *" });
+  const rollupTasks = scheduleRollups();
+  try {
+    await processor.waitUntilStopped;
+  } finally {
+    for (const task of rollupTasks) task.stop();
+    await processor.stop();
+    if (currentProcessor === processor) currentProcessor = null;
   }
+}
+
+async function main() {
+  process.on("unhandledRejection", (reason) => {
+    log.error("unhandled rejection", { error: formatError(reason) });
+  });
+  process.on("uncaughtException", (err) => {
+    log.error("uncaught exception", { error: formatError(err) });
+  });
 
   // Graceful shutdown.
   const onExit = async () => {
+    if (shuttingDown) return;
+    shuttingDown = true;
     log.info("shutting down");
-    await processor.stop();
+    await currentProcessor?.stop();
     process.exit(0);
   };
   process.on("SIGINT", onExit);
   process.on("SIGTERM", onExit);
+
+  let attempt = 0;
+  while (!shuttingDown) {
+    try {
+      await runProcessorOnce();
+      attempt = 0;
+      if (!shuttingDown) {
+        log.warn("processor stopped unexpectedly; restarting");
+      }
+    } catch (err) {
+      if (shuttingDown) break;
+      attempt++;
+      const retryInMs = retryDelayMs(attempt);
+      log.error("processor crashed; retrying", {
+        attempt,
+        retryInMs,
+        error: formatError(err),
+      });
+      try {
+        await currentProcessor?.stop();
+      } catch (stopErr) {
+        log.warn("processor stop after crash failed", { error: formatError(stopErr) });
+      } finally {
+        currentProcessor = null;
+      }
+      await sleep(retryInMs);
+    }
+  }
 }
 
 main().catch((err) => {
-  log.error("fatal", { error: String(err) });
+  log.error("fatal", { error: formatError(err) });
   process.exit(1);
 });

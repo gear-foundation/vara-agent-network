@@ -45,6 +45,8 @@ export const config = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+  processorReconnectMinMs: optionalInt("PROCESSOR_RECONNECT_MIN_MS", 5_000),
+  processorReconnectMaxMs: optionalInt("PROCESSOR_RECONNECT_MAX_MS", 60_000),
   logLevel: (optional("LOG_LEVEL", "info") as "debug" | "info" | "warn" | "error"),
 } as const;
 

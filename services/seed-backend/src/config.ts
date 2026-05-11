@@ -17,6 +17,16 @@ function intEnv(name: string, fallback: string, min = 0): number {
   return value;
 }
 
+function optionalDateEnv(name: string, fallback: string): Date | null {
+  const raw = process.env[name] ?? fallback;
+  if (!raw) return null;
+  const value = new Date(raw);
+  if (Number.isNaN(value.getTime())) {
+    throw new Error(`${name} must be an ISO date (got "${raw}")`);
+  }
+  return value;
+}
+
 function boolEnv(name: string, fallback: string): boolean {
   const raw = (process.env[name] ?? fallback).toLowerCase();
   if (["1", "true", "yes", "on"].includes(raw)) return true;
@@ -69,6 +79,16 @@ export const config = {
   applicationSyncIntervalSec: intEnv("APPLICATION_SYNC_INTERVAL_SEC", "300", 0),
   autoClaimIntervalSec: intEnv("AUTO_CLAIM_INTERVAL_SEC", "0", 0),
   autoRefillIntervalSec: intEnv("AUTO_REFILL_INTERVAL_SEC", "0", 0),
+  socialXRewardVara: intEnv("SOCIAL_X_REWARD_VARA", "100", 1),
+  socialXParticipantMinAgeSec: intEnv("SOCIAL_X_PARTICIPANT_MIN_AGE_SEC", "900", 0),
+  socialXMaxPayoutsPerHour: intEnv("SOCIAL_X_MAX_PAYOUTS_PER_HOUR", "10", 1),
+  socialXMaxPayoutsPerDay: intEnv("SOCIAL_X_MAX_PAYOUTS_PER_DAY", "50", 1),
+  socialXGlobalDailyLimitVara: intEnv("SOCIAL_X_GLOBAL_DAILY_LIMIT_VARA", "5000", 1),
+  socialXIpAttemptsPerHour: intEnv("SOCIAL_X_IP_ATTEMPTS_PER_HOUR", "5", 1),
+  socialXIpAttemptsPerDay: intEnv("SOCIAL_X_IP_ATTEMPTS_PER_DAY", "20", 1),
+  socialXSubnetClaimsPerDay: intEnv("SOCIAL_X_SUBNET_CLAIMS_PER_DAY", "30", 1),
+  socialXPayoutIntervalSec: intEnv("SOCIAL_X_PAYOUT_INTERVAL_SEC", "60", 0),
+  socialXCampaignStart: optionalDateEnv("SOCIAL_X_CAMPAIGN_START_ISO", "2026-05-10T00:00:00.000Z"),
 };
 
 export function validateRuntimeConfig(): void {

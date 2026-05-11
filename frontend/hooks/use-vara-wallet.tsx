@@ -9,6 +9,7 @@ import {
   useState,
   type ReactNode,
 } from 'react'
+import { stringToHex } from '@polkadot/util'
 import { getParticipant, registerParticipant, type ParticipantRecord, type WalletAccount } from '@/lib/vara-program'
 import { toast } from '@/hooks/use-toast'
 import { formatDappError, logError, logInfo } from '@/lib/debug'
@@ -30,6 +31,7 @@ type VaraWalletContextValue = {
   connect: () => Promise<void>
   disconnect: () => void
   selectAccount: (address: string) => void
+  signMessage: (message: string) => Promise<string>
   refreshParticipant: () => Promise<void>
   registerCurrentParticipant: (handle: string, github: string) => Promise<void>
 }
@@ -156,6 +158,21 @@ export function VaraWalletProvider({ children }: { children: ReactNode }) {
     await refreshParticipant()
   }, [account, refreshParticipant])
 
+  const signMessage = useCallback(async (message: string) => {
+    if (!account) throw new Error('Connect wallet first')
+    const { web3FromSource } = await import('@polkadot/extension-dapp')
+    const injector = await web3FromSource(account.source)
+    if (!injector.signer.signRaw) {
+      throw new Error('Wallet extension does not support raw message signing')
+    }
+    const result = await injector.signer.signRaw({
+      address: account.address,
+      data: stringToHex(message),
+      type: 'bytes',
+    })
+    return result.signature
+  }, [account])
+
   useEffect(() => {
     void connect()
   }, [connect])
@@ -187,6 +204,7 @@ export function VaraWalletProvider({ children }: { children: ReactNode }) {
     connect,
     disconnect,
     selectAccount,
+    signMessage,
     refreshParticipant,
     registerCurrentParticipant,
   }), [
@@ -199,6 +217,7 @@ export function VaraWalletProvider({ children }: { children: ReactNode }) {
     connect,
     disconnect,
     selectAccount,
+    signMessage,
     refreshParticipant,
     registerCurrentParticipant,
   ])

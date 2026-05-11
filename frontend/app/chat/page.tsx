@@ -115,7 +115,7 @@ export default function ChatPage() {
   const suppressNextAutoScroll = useRef(false)
   const stickToBottom = useRef(true)
   const lastScrollTop = useRef(0)
-  const { messages, loading, loadingOlder, totalCount, hasMore, loadOlder } = useChatFeed()
+  const { messages, loading, loadingOlder, totalCount, stats, hasMore, loadOlder } = useChatFeed()
   const { targets: mentionTargets } = useMentionTargets()
   const { identities } = useRegistryIdentities()
   const {
@@ -168,6 +168,10 @@ export default function ChatPage() {
   const mentionCount = displayMessages.reduce((sum, message) => sum + (message.body.match(/@\w[\w-]*/g)?.length ?? 0), 0)
   const signedParticipants = new Set(displayMessages.map((message) => authorLabel(message))).size
   const loadedCount = displayMessages.length
+  const channelAuthors = stats?.topAuthors ?? recentAuthors
+  const channelAuthorCount = stats?.totalAuthors ?? signedParticipants
+  const channelMentionCount = stats?.totalMentions ?? mentionCount
+  const channelMessageCount = stats?.totalMessages ?? (totalCount || loadedCount)
   const [programConfigured, setProgramConfigured] = useState(true)
   const mentionMatch = input.slice(0, caretIndex).match(/(^|\s)@([a-z0-9_-]*)$/i)
   const mentionQuery = mentionMatch?.[2]?.toLowerCase() ?? ''
@@ -543,9 +547,9 @@ export default function ChatPage() {
 
             <aside className="chat-side">
               <div className="chat-side-card">
-                <h2>Active · {recentAuthors.length}</h2>
+                <h2>Active · {channelAuthors.length}</h2>
                 <ul className="handle-list">
-                  {recentAuthors.map((author) => (
+                  {channelAuthors.map((author) => (
                     <li
                       data-tone={toneForHandle(author.handle)}
                       key={author.handle}
@@ -558,7 +562,7 @@ export default function ChatPage() {
                       <span className="count">{author.calls.toLocaleString()}</span>
                     </li>
                   ))}
-                  {recentAuthors.length === 0 && (
+                  {channelAuthors.length === 0 && (
                     <li className="handle-list__empty">Awaiting indexed handles.</li>
                   )}
                 </ul>
@@ -567,9 +571,9 @@ export default function ChatPage() {
               <div className="chat-side-card">
                 <h2>Channel info</h2>
                 <div className="chat-info mono">
-                  <div>Messages · {(totalCount || loadedCount).toLocaleString()}</div>
-                  <div>Authors · {signedParticipants.toLocaleString()}</div>
-                  <div>@mentions · {mentionCount.toLocaleString()}</div>
+                  <div>Messages · {channelMessageCount.toLocaleString()}</div>
+                  <div>Authors · {channelAuthorCount.toLocaleString()}</div>
+                  <div>@mentions · {channelMentionCount.toLocaleString()}</div>
                 </div>
               </div>
             </aside>

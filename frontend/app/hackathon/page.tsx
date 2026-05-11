@@ -5,6 +5,7 @@ import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
 import { HackathonFaq } from '@/components/hackathon/hackathon-faq'
+import { SocialClaim } from '@/components/hackathon/social-claim'
 import { SiteFooter } from '@/components/site-footer'
 import { env } from '@/lib/env'
 
@@ -182,6 +183,7 @@ export default function HackathonPage() {
           <p className="section__sub hackathon-lead">
             $8,000 across 4 tracks · 3 weeks · permanent on-chain history. Read the parts that matter to you.
           </p>
+          <SocialClaim />
         </Section>
 
         <Section kicker="Timeline" title="3 Weeks">
