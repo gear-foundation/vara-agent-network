@@ -15,7 +15,7 @@ import { decodeAddress } from "@polkadot/util-crypto";
 import { u8aToHex } from "@polkadot/util";
 import { eq } from "drizzle-orm";
 import { requireProcessorConfig } from "./config.js";
-import { log } from "./helpers/logger.js";
+import { formatError, log } from "./helpers/logger.js";
 import {
   type BlockContext,
   type GearEvent,
@@ -30,7 +30,41 @@ export interface ProcessorHooks {
 export async function createProcessor(hooks: ProcessorHooks) {
   const config = requireProcessorConfig();
   const provider = new WsProvider(config.varaRpcUrl);
-  const api = await ApiPromise.create({ provider });
+  let stopped = false;
+  let stopReason: Error | null = null;
+  let failProcessor!: (error: Error) => void;
+  const waitUntilStopped = new Promise<never>((_, reject) => {
+    failProcessor = reject;
+  });
+
+  function asError(reason: unknown): Error {
+    if (reason instanceof Error) return reason;
+    const meta = formatError(reason);
+    return new Error(typeof meta.message === "string" ? meta.message : String(reason));
+  }
+
+  function fail(reason: unknown): void {
+    if (stopped || stopReason) return;
+    stopReason = asError(reason);
+    failProcessor(stopReason);
+  }
+
+  provider.on("connected", () => {
+    log.info("rpc connected", { endpoint: config.varaRpcUrl });
+  });
+  provider.on("disconnected", () => {
+    log.warn("rpc disconnected", { endpoint: config.varaRpcUrl });
+    fail(new Error("RPC provider disconnected"));
+  });
+  provider.on("error", (error: unknown) => {
+    log.error("rpc provider error", { endpoint: config.varaRpcUrl, error: formatError(error) });
+    fail(error);
+  });
+
+  const api = await Promise.race([
+    ApiPromise.create({ provider }),
+    waitUntilStopped,
+  ]);
   const chain = (await api.rpc.system.chain()).toString();
   log.info("connected", { chain, endpoint: config.varaRpcUrl });
 
@@ -217,6 +251,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
   // guard, two async callbacks would both read a stale cursor, both try to
   // process the same blocks, and race on cursor writes. (Finding #1.)
   let catchUpInFlight: Promise<void> | null = null;
+  let unsubscribeFinalizedHeads: (() => void) | null = null;
   async function catchUpTo(height: number): Promise<void> {
     const resume = await clampedResumePoint(height);
     for (let n = resume; n <= height; n++) {
@@ -244,7 +279,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
 
   async function runLive(): Promise<void> {
     log.info("subscribing to finalized heads");
-    await api.rpc.chain.subscribeFinalizedHeads(async (header) => {
+    unsubscribeFinalizedHeads = await api.rpc.chain.subscribeFinalizedHeads(async (header) => {
       const height = header.number.toNumber();
       if (catchUpInFlight) {
         // A prior callback is still running. It will see the new head via its
@@ -257,7 +292,8 @@ export async function createProcessor(hooks: ProcessorHooks) {
         try {
           await catchUpTo(height);
         } catch (err) {
-          log.error("block processing failed", { block: height, error: String(err) });
+          log.error("block processing failed", { block: height, error: formatError(err) });
+          fail(err);
         } finally {
           catchUpInFlight = null;
         }
@@ -272,7 +308,13 @@ export async function createProcessor(hooks: ProcessorHooks) {
     resumePoint,
     runBackfill,
     runLive,
+    waitUntilStopped,
     async stop() {
+      stopped = true;
+      if (unsubscribeFinalizedHeads) {
+        unsubscribeFinalizedHeads();
+        unsubscribeFinalizedHeads = null;
+      }
       await api.disconnect();
     },
   };

@@ -89,8 +89,6 @@ export const config = {
   socialXSubnetClaimsPerDay: intEnv("SOCIAL_X_SUBNET_CLAIMS_PER_DAY", "30", 1),
   socialXPayoutIntervalSec: intEnv("SOCIAL_X_PAYOUT_INTERVAL_SEC", "60", 0),
   socialXCampaignStart: optionalDateEnv("SOCIAL_X_CAMPAIGN_START_ISO", "2026-05-10T00:00:00.000Z"),
-  socialXRequiredHandle: process.env.SOCIAL_X_REQUIRED_HANDLE ?? "@varabot1000",
-  socialXRequiredPhrase: process.env.SOCIAL_X_REQUIRED_PHRASE ?? "Я участвую в хакатоне",
 };
 
 export function validateRuntimeConfig(): void {

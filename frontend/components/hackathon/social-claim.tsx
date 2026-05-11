@@ -10,8 +10,6 @@ import { buildSocialXClaimMessage, type SocialXClaim } from '@/lib/social-x-clai
 type ClaimResponse = {
   claim: SocialXClaim | null
   rewardVara?: number
-  requiredPhrase?: string
-  requiredHandle?: string
   participantMinAgeSec?: number
   error?: string
 }

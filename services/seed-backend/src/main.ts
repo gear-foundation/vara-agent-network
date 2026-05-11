@@ -164,8 +164,6 @@ app.get("/social/x-claim/:wallet", requireApiKey, async (req, res, next) => {
       rewardVara: config.socialXRewardVara,
       participantMinAgeSec: config.socialXParticipantMinAgeSec,
       campaignStart: config.socialXCampaignStart?.toISOString() ?? null,
-      requiredPhrase: config.socialXRequiredPhrase,
-      requiredHandle: config.socialXRequiredHandle,
     });
   } catch (error) {
     next(error);
