@@ -60,6 +60,11 @@ export const config = {
     "PROCESSOR_SYNTHETIC_CODE_UPDATED_AT_BLOCK",
     0,
   ),
+  // Debug-only: skip processor_cursor writes. The bench script sets this so
+  // a fetch-only benchmark against any DATABASE_URL can't accidentally
+  // advance the production cursor without writing projections.
+  processorDisableCursorWrites:
+    (process.env.PROCESSOR_DISABLE_CURSOR_WRITES ?? "").toLowerCase() === "true",
   logLevel: (optional("LOG_LEVEL", "info") as "debug" | "info" | "warn" | "error"),
 } as const;
 

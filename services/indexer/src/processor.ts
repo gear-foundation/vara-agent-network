@@ -304,6 +304,10 @@ export async function createProcessor(hooks: ProcessorHooks) {
   }
 
   async function updateCursor(blockNumber: number): Promise<void> {
+    // Bench/debug escape hatch — see processorDisableCursorWrites in config.ts.
+    // Prevents a no-op-handler fetch benchmark from advancing the cursor in
+    // whatever DATABASE_URL it happens to be pointed at.
+    if (config.processorDisableCursorWrites) return;
     await db
       .insert(schema.processorCursor)
       .values({
@@ -324,6 +328,9 @@ export async function createProcessor(hooks: ProcessorHooks) {
   }
 
   async function resumePoint(): Promise<number> {
+    // When cursor writes are disabled (bench mode), also ignore cursor reads
+    // so a stale row from a previous real run doesn't skew the start point.
+    if (config.processorDisableCursorWrites) return config.startBlock;
     const cursor = await db
       .select()
       .from(schema.processorCursor)
@@ -373,39 +380,39 @@ export async function createProcessor(hooks: ProcessorHooks) {
     await processRange(resume, height, "live");
   }
 
-  async function maybeRevalidate(blockHash: Hex): Promise<void> {
+  /** Pre-batch revalidation. Runs before any block of the upcoming batch is
+   *  fetched/applied so a missed `CodeUpdated` is detected BEFORE stale
+   *  projections are written and the cursor is advanced. Probes the runtime
+   *  at the first block of the next batch via raw JSON-RPC (api.at would
+   *  short-circuit on the #registries[*].lastBlockHash match set earlier).
+   *
+   *  On mismatch, resets `runtimeVersion=undefined`. The very next
+   *  fetchInner call triggers discoverRuntimeAt's slow path, which both
+   *  refetches the runtime AND repopulates polkadot.js's metadata cache
+   *  against the new (specName, specVersion).
+   */
+  async function maybeRevalidateBeforeBatch(nextBlockNumber: number): Promise<void> {
     if (revalidateEveryN <= 0) return;
-    blocksSinceRevalidate += 1;
     if (blocksSinceRevalidate < revalidateEveryN) return;
     blocksSinceRevalidate = 0;
-    // Bypass the cache via direct JSON-RPC. polkadot.js's api.at(blockHash)
-    // would short-circuit on the #registries[*].lastBlockHash match (set
-    // earlier by fetchInner) and never actually probe the chain — making
-    // the "revalidation" a no-op. state.getRuntimeVersion is a raw RPC and
-    // hits the node every time.
-    const fresh = (await api.rpc.state.getRuntimeVersion(blockHash)) as unknown as CachedRuntimeVersion;
-    const prev = runtimeVersion;
+    if (!runtimeVersion) return; // Nothing to validate yet; fetchInner will discover.
+    const probeHash = (await api.rpc.chain.getBlockHash(nextBlockNumber)).toHex() as Hex;
+    const fresh = (await api.rpc.state.getRuntimeVersion(probeHash)) as unknown as CachedRuntimeVersion;
     if (
-      prev &&
-      prev.specName.eq(fresh.specName) &&
-      prev.specVersion.eq(fresh.specVersion)
+      runtimeVersion.specName.eq(fresh.specName) &&
+      runtimeVersion.specVersion.eq(fresh.specVersion)
     ) {
       log.info("runtime revalidation ok", {
-        blockHash,
+        nextBlock: nextBlockNumber,
         specVersion: fresh.specVersion.toNumber(),
       });
       return;
     }
-    log.error("runtime revalidation mismatch", {
-      blockHash,
-      prev: prev
-        ? `${prev.specName.toString()}@${prev.specVersion.toNumber()}`
-        : "<none>",
+    log.error("runtime revalidation mismatch — missed CodeUpdated; resetting cache", {
+      nextBlock: nextBlockNumber,
+      prev: `${runtimeVersion.specName.toString()}@${runtimeVersion.specVersion.toNumber()}`,
       fresh: `${fresh.specName.toString()}@${fresh.specVersion.toNumber()}`,
     });
-    // Don't trust the freshly-fetched RuntimeVersionPartial verbatim — force
-    // the next fetchInner to rediscover via api.at(blockHash) which also
-    // populates polkadot.js's #registries with the right metadata.
     runtimeVersion = undefined;
   }
 
@@ -414,6 +421,11 @@ export async function createProcessor(hooks: ProcessorHooks) {
 
     let batchFrom = from;
     while (batchFrom <= to) {
+      // Pre-batch: if we've crossed the revalidation threshold, probe the
+      // chain BEFORE fetching this batch so a missed runtime upgrade is
+      // caught before any stale projection is committed.
+      await maybeRevalidateBeforeBatch(batchFrom);
+
       const batchTo = Math.min(to, batchFrom + backfillFetchConcurrency - 1);
       const fetched = await Promise.all(
         Array.from({ length: batchTo - batchFrom + 1 }, async (_, i) => {
@@ -475,7 +487,10 @@ export async function createProcessor(hooks: ProcessorHooks) {
           break;
         }
 
-        await maybeRevalidate(result.ctx.substrateBlockHash);
+        // Count applied blocks toward the next revalidation probe. Probe
+        // itself runs pre-batch (see top of while loop), not post-apply,
+        // so a missed upgrade is caught before stale blocks are written.
+        blocksSinceRevalidate += 1;
       }
 
       batchFrom = nextBatchFrom;
