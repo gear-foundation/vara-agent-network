@@ -155,9 +155,13 @@ export async function createProcessor(hooks: ProcessorHooks) {
     }
 
     const apiAt = await api.at(blockHash, runtimeVersion);
-    const [rawEvents, timestampRaw] = await Promise.all([
-      apiAt.query.system.events(),
-      apiAt.query.timestamp.now(),
+    // Batch events + timestamp into a single `state_queryStorageAt` RPC.
+    // Previously these were two separate Promise.all'd calls — same wall-clock
+    // sometimes, but doubles the WS message volume. queryMulti folds both
+    // storage reads into one network roundtrip and one server-side lookup.
+    const [rawEvents, timestampRaw] = await apiAt.queryMulti([
+      apiAt.query.system.events,
+      apiAt.query.timestamp.now,
     ]);
     const timestamp = (timestampRaw as unknown as { toBigInt(): bigint }).toBigInt();
 
