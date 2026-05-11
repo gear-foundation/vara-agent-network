@@ -101,6 +101,18 @@ export const INTERACTION_KIND = {
 export type InteractionKind = typeof INTERACTION_KIND[keyof typeof INTERACTION_KIND];
 
 /**
+ * Provenance tag stored on every `interactions` row. `Event` = wallet-driven
+ * `Gear.MessageQueued`; `Dispatches` / `Waitlist` = synthesised by the
+ * cross-block storage-diff detector.
+ */
+export const DETECTED_VIA = {
+  Event: "event",
+  Dispatches: "dispatches_storage",
+  Waitlist: "waitlist_storage",
+} as const;
+export type DetectedVia = typeof DETECTED_VIA[keyof typeof DETECTED_VIA];
+
+/**
  * Classify a caller. A wallet-agent (ActorId registered as BOTH Participant
  * AND Application) maps to `wallet_initiated` — the human IS driving the
  * call, even though their wallet is also registered as an app.
@@ -226,7 +238,12 @@ export type BumpableColumn =
   | "integrationsOutWalletInitiated"
   | "integrationsOutProgramInitiated"
   | "integrationsIn"
-  | "uniquePartners";
+  | "uniquePartners"
+  | "p2pCallsOut"
+  | "p2pCallsIn"
+  | "p2pUniquePartners"
+  | "p2pActiveBlocks"
+  | "p2pRepliesOrigin";
 
 /** Increment an app_metrics column by 1 (create row if missing). */
 export async function bumpMetric(

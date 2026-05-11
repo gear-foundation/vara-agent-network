@@ -22,6 +22,7 @@ import {
   type Hex,
 } from "./helpers/types.js";
 import { db, schema } from "./model/db.js";
+import { P2PDetector } from "./processor/p2p-detector.js";
 
 export interface ProcessorHooks {
   onBlock: (ctx: BlockContext) => Promise<void>;
@@ -68,7 +69,12 @@ export async function createProcessor(hooks: ProcessorHooks) {
   const chain = (await api.rpc.system.chain()).toString();
   log.info("connected", { chain, endpoint: config.varaRpcUrl });
 
-  const targetProgramIdLower = config.programId.toLowerCase();
+  const p2pDetector = new P2PDetector();
+
+  // Catch-up reuses the previous block's hash as the next block's parent —
+  // saves one `state_getBlockHash` RPC per block in the live tail.
+  let lastProcessedNumber: number | null = null;
+  let lastProcessedHash: Hex | null = null;
 
   // Normalize ActorId strings to lowercase hex. Gear events surface addresses
   // in mixed formats:
@@ -85,7 +91,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
     }
   }
 
-  async function processBlock(blockNumber: number): Promise<void> {
+  async function processBlock(blockNumber: number, opts?: { runP2PDetector?: boolean }): Promise<void> {
     const blockHash = (await api.rpc.chain.getBlockHash(blockNumber)).toHex() as Hex;
     const apiAt = await api.at(blockHash);
     const rawEvents = await apiAt.query.system.events();
@@ -114,17 +120,27 @@ export async function createProcessor(hooks: ProcessorHooks) {
           destination?: string;
           payload?: string;
           value?: string | number | bigint;
-          details?: unknown | null;
+          details?: { to?: string; code?: unknown } | null;
         } | undefined;
         if (!stored || typeof stored.source !== "string") {
           idx++;
           continue;
         }
         const source = normalizeActorId(stored.source);
-        if (source !== targetProgramIdLower) {
-          idx++;
-          continue;
-        }
+        // NOTE: we used to early-continue when `source !== targetProgramIdLower`,
+        // dropping every reply that didn't come from the network program. That
+        // hid replies from registered applications — needed by Strategy C
+        // (`handleUserMessageSentBacktrack` in `handlers/p2p_inference.ts`)
+        // to detect hidden P2P intermediates. The `source !== networkProgram`
+        // gate now lives at the top of Pass 1 in `main.ts`, where the Sails
+        // decoder still skips non-network replies. If you remove that gate
+        // without restoring this filter, the Sails decoder will warn about
+        // every app reply ("undecodable sails event"). Co-landed change.
+        const detailsObj = stored.details ?? null;
+        const replyToMessageId =
+          detailsObj && typeof detailsObj.to === "string"
+            ? normalizeActorId(detailsObj.to)
+            : null;
         events.push({
           kind: "UserMessageSent",
           messageId: normalizeActorId(stored.id ?? "0x"),
@@ -132,7 +148,37 @@ export async function createProcessor(hooks: ProcessorHooks) {
           destination: normalizeActorId(stored.destination ?? "0x"),
           payload: (stored.payload ?? "0x") as Hex,
           value: String(stored.value ?? "0"),
-          hasReplyDetails: stored.details != null,
+          hasReplyDetails: detailsObj != null,
+          replyToMessageId,
+          indexInBlock: idx,
+        });
+      } else if (method === "MessagesDispatched") {
+        // JSON shape: [total, statuses, stateChanges] from polkadot-js raw
+        // events on Vara dev / testnet. Some metadata variants surface this as
+        // a struct-shape object — handle both. statuses is a BTreeMap rendered
+        // as { msgId: status }; we don't consume it here, only total + state
+        // changes feed Strategy A. stateChanges is a BTreeSet<ActorId>
+        // serialised as an array of hex strings.
+        const obj = Array.isArray(json)
+          ? { total: json[0], statuses: json[1], stateChanges: json[2] }
+          : (json as { total?: unknown; stateChanges?: unknown });
+        const totalRaw = obj?.total;
+        const total =
+          typeof totalRaw === "number"
+            ? totalRaw
+            : typeof totalRaw === "string"
+              ? Number.parseInt(totalRaw, 10)
+              : 0;
+        const rawStateChanges = obj?.stateChanges;
+        const stateChanges: Hex[] = Array.isArray(rawStateChanges)
+          ? rawStateChanges
+              .filter((s): s is string => typeof s === "string")
+              .map((s) => normalizeActorId(s))
+          : [];
+        events.push({
+          kind: "MessagesDispatched",
+          total,
+          stateChanges,
           indexInBlock: idx,
         });
       } else if (method === "MessageQueued") {
@@ -172,13 +218,60 @@ export async function createProcessor(hooks: ProcessorHooks) {
       idx++;
     }
 
+    // P2P detector: snapshot-diff the messenger storage between parent and
+    // current block to surface program → program edges that pallet-gear does
+    // not emit as events. Public RPCs prune state ≈250 blocks back, so this
+    // only runs in live mode (the catch-up loop opts in). During backfill
+    // the parent-state read would fail with `State already discarded`.
+    //
+    // Failure policy: best-effort overlay. Any detector error logs and
+    // returns no edges; the wallet-driven `MessageQueued` projection still
+    // runs and the cursor still advances. Halting the cursor on a P2P
+    // overlay failure would block the entire indexer over a secondary
+    // metric, which trades a transient gap in `p2p_*` columns for a hard
+    // outage on the public dashboard. Detector reset on hard error to
+    // invalidate the cached parent snapshot.
+    if (opts?.runP2PDetector) {
+      try {
+        // Reuse the previous block's hash if we processed `blockNumber - 1`
+        // last; otherwise fetch fresh.
+        const parentHash =
+          lastProcessedNumber === blockNumber - 1 && lastProcessedHash
+            ? lastProcessedHash
+            : ((await api.rpc.chain.getBlockHash(blockNumber - 1)).toHex() as Hex);
+        const p2pEvents = await p2pDetector.detect({
+          api,
+          blockHash,
+          parentHash,
+          baseIndex: events.length,
+        });
+        events.push(...p2pEvents);
+      } catch (err) {
+        const msg = String(err);
+        if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
+          log.warn("p2p detector: parent state pruned, skipping", { block: blockNumber });
+        } else {
+          log.warn("p2p detector failed (continuing)", { block: blockNumber, error: msg });
+        }
+        p2pDetector.reset();
+      }
+    } else {
+      // Skipped this block — cached snapshot is no longer adjacent to the
+      // next block we'll see, so invalidate it.
+      p2pDetector.reset();
+    }
+
     const ctx: BlockContext = {
       substrateBlockNumber: blockNumber,
       substrateBlockHash: blockHash,
       substrateBlockTs: timestamp,
       events,
+      inLiveWindow: opts?.runP2PDetector === true,
     };
     await hooks.onBlock(ctx);
+
+    lastProcessedNumber = blockNumber;
+    lastProcessedHash = blockHash;
 
     await db
       .insert(schema.processorCursor)
@@ -256,7 +349,11 @@ export async function createProcessor(hooks: ProcessorHooks) {
     const resume = await clampedResumePoint(height);
     for (let n = resume; n <= height; n++) {
       try {
-        await processBlock(n);
+        // Only run P2P detector when we're close enough to the head that
+        // (n - 1) state is still served by the RPC. Older catch-up blocks
+        // skip detection — backfill gap is documented in the README.
+        const inLiveWindow = height - n < PRUNED_RPC_BACKFILL_DEPTH;
+        await processBlock(n, { runP2PDetector: inLiveWindow });
       } catch (err) {
         const msg = String(err);
         if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
