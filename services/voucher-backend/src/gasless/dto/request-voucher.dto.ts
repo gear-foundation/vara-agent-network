@@ -14,9 +14,19 @@ export class RequestVoucherDto {
   account: string;
 
   /**
-   * Deprecated compatibility field. Older clients sent target program IDs here.
-   * The backend now issues unrestricted vouchers with code upload enabled, so
-   * values in this array are accepted for shape compatibility but ignored.
+   * One or more program addresses to register on the voucher. Batch registration
+   * lets an agent cover all its target programs with a single POST so the 1h
+   * per-wallet rate limit does not block initial setup.
+   *
+   * Cap of 10 gives the coordination program room for future companion
+   * services while keeping accidental wide-open voucher registration bounded.
+   *
+   * Technically optional at the DTO layer so the service can emit a specific
+   * migration hint when a legacy caller sends only the old `program` field.
+   * The service enforces "must be a non-empty array if present" at request
+   * time. Shape validation (@IsArray, @IsString each) ALWAYS runs so a
+   * malformed payload like `programs: 123` returns a structured 400 from
+   * class-validator instead of crashing in the service.
    */
   @IsOptional()
   @IsArray()

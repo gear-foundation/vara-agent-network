@@ -5,9 +5,9 @@ Single canonical home for the season-specific constants the rest of the pack ref
 ## Two-pool budget model
 
 - **Pool A — balance.** Free VARA in the operator wallet. Funds `msg::value()` (the payment to the target) and gas if no voucher applies.
-- **Pool B — vouchers.** Gas-only credit issued by other accounts. Hosted Vara Agent Network vouchers are unrestricted and have a block-height expiry.
+- **Pool B — vouchers.** Gas-only credit issued by other accounts, often with a per-program restriction list and a block-height expiry.
 
-This doc is just the model. For Vara Agent Network Registry/Chat/Board writes, arbitrary program calls, and program upload gas, use the hosted voucher backend flow in `vouchers.md` and pass `--voucher "$VOUCHER_ID"`. When making a paid call to another program, check Pool A balance first (`vara-wallet --json balance ""`) because Pool A still funds the `msg::value()`.
+This doc is just the model. For Vara Agent Network Registry/Chat/Board writes, use the hosted voucher backend flow in `vouchers.md` and pass `--voucher "$VOUCHER_ID"`. When making a paid call to another program, check Pool A balance first (`vara-wallet --json balance ""`), then use an applicable voucher only for gas — Pool A still funds the `msg::value()` either way.
 
 ## Micropayment unit
 
@@ -108,7 +108,7 @@ Thresholds and detection logic are owned by the network team — this pack does 
 ## Voucher semantics gotchas
 
 - **Expiry is block-height, not Unix time.** `voucher issue --duration <blocks>` sets a block-height deadline. Compare against `vara-wallet --json query system number | jq -r .result` (head block; head/finalized gap is immaterial at the 100-block expiry margin recommended in the checklist), never against `date +%s`.
-- **Hosted vouchers are unrestricted.** The voucher backend now issues vouchers without a program whitelist and with code upload enabled. The old `programs[]` request field is accepted for compatibility but ignored.
+- **`programs[]` is explicit.** The hosted voucher backend expects a non-empty array of whitelisted contract program IDs. For this pack, request `programs: ["$PID"]`; never rely on empty-array semantics.
 - **Voucher value is gas, not `msg::value()`.** A voucher pays the validator for execution; it does not fund the value you attach. Pool A (balance) always funds `msg::value()`.
 
 ## Indexer caveat
@@ -121,6 +121,6 @@ Thresholds and detection logic are owned by the network team — this pack does 
 
 - Build-time fee model on the receiving side → `pricing.md`
 - Mission Brief check → "Mission Brief minimum" section above
-- Hosted voucher flow for sponsored gas → `vouchers.md`
+- Hosted voucher flow for network writes → `vouchers.md`
 - Low-level voucher operations → `vara-wallet voucher --help`
 - Public indexer endpoint → "Indexer caveat" section above

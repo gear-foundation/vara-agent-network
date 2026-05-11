@@ -192,21 +192,19 @@ export class VoucherService implements OnModuleInit {
   }
 
   /**
-   * Issue a fresh voucher. When `programIds` is undefined, the voucher is not
-   * restricted to specific programs. `codeUploading=true` lets the spender pay
-   * for program upload gas with the same voucher.
+   * Issue a fresh voucher registering all listed programs and funding the
+   * voucher with `amount` VARA. `programIds` must be non-empty.
    */
   async issue(
     account: HexString,
-    programIds: HexString[] | undefined,
+    programIds: HexString[],
     amount: number,
     durationInSec: number,
-    codeUploading = false,
   ): Promise<string> {
     const requestedDurationInBlocks = Math.round(durationInSec / SECONDS_PER_BLOCK);
 
     this.logger.log(
-      `Issuing voucher: account=${account} amount=${amount} VARA duration=${durationInSec}s programs=${programIds ? `[${programIds.join(', ')}]` : '<unrestricted>'} codeUploading=${codeUploading}`,
+      `Issuing voucher: account=${account} amount=${amount} VARA duration=${durationInSec}s programs=[${programIds.join(', ')}]`,
     );
 
     const [voucherId, blockNumber] = await this.sendWithOutdatedRetry(
@@ -233,7 +231,6 @@ export class VoucherService implements OnModuleInit {
           BigInt(amount) * PLANCK_PER_VARA,
           durationInBlocks,
           programIds,
-          codeUploading,
         );
 
         const [voucherId, blockHash] = await withTimeout(
@@ -289,7 +286,7 @@ export class VoucherService implements OnModuleInit {
         voucherId,
         validUpToBlock,
         validUpTo,
-        programs: programIds ? [...programIds] : [],
+        programs: [...programIds],
         varaToIssue: amount,
         lastRenewedAt: now,
         revoked: false,
@@ -314,7 +311,6 @@ export class VoucherService implements OnModuleInit {
     amountToAdd: number,
     prolongDurationInSec?: number,
     addPrograms?: HexString[],
-    codeUploading?: boolean,
   ) {
     if (voucher.revoked) {
       throw new Error(`Cannot update revoked voucher ${voucher.voucherId} — issue a new one instead`);
@@ -327,12 +323,9 @@ export class VoucherService implements OnModuleInit {
     if (amountToAdd > 0) {
       params.balanceTopUp = BigInt(amountToAdd) * PLANCK_PER_VARA;
     }
-    if (codeUploading !== undefined) {
-      params.codeUploading = codeUploading;
-    }
 
     this.logger.log(
-      `Updating voucher: ${voucher.voucherId} for ${voucher.account} (+${amountToAdd} VARA, +${prolongDurationInSec ?? 0}s, codeUploading=${codeUploading ?? '<unchanged>'})`,
+      `Updating voucher: ${voucher.voucherId} for ${voucher.account} (+${amountToAdd} VARA, +${prolongDurationInSec ?? 0}s)`,
     );
 
     const blockNumber = await this.sendWithOutdatedRetry(
@@ -460,12 +453,13 @@ export class VoucherService implements OnModuleInit {
 
   /**
    * Append new programs to an existing voucher WITHOUT funding or extending
-   * duration. Retained for compatibility with older tests/tools that operated
-   * on restricted vouchers; the current request path issues unrestricted
-   * vouchers instead of appending program IDs.
+   * duration. Used to let migrated legacy vouchers register missing programs
+   * during the 1h rate-limit window — the voucher isn't getting a new tranche,
+   * it's just widening its program whitelist so writes to the new programs
+   * stop failing while the 1h cooldown elapses.
    *
    * No `lastRenewedAt` update (this is not a funding event), no tranche
-   * charge, no duration bump.
+   * charge, no duration bump. Pure chain-side whitelist amendment.
    */
   async appendProgramsFreeOfCharge(
     voucher: Voucher,
@@ -614,11 +608,7 @@ export class VoucherService implements OnModuleInit {
   }
 
   async getVoucher(account: string): Promise<Voucher | null> {
-    const vouchers = await this.repo.find({
-      where: { account, revoked: false },
-      order: { createdAt: 'DESC' },
-    });
-    return vouchers.find((v) => v.programs.length === 0) ?? vouchers[0] ?? null;
+    return this.repo.findOneBy({ account, revoked: false });
   }
 
   /**

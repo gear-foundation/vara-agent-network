@@ -8,7 +8,7 @@ import { Voucher } from '../entities/voucher.entity';
 // ── GearApi mock ───────────────────────────────────────────────────────────────
 // We only test the parts of VoucherService that don't need a live chain:
 //   • onModuleInit throws when the API rejects
-//   • getVoucher filters by revoked:false and prefers unrestricted vouchers
+//   • getVoucher filters by revoked: false
 //   • issue() rejects with a clear error when issuer balance is too low
 //   • issue() passes the programIds array unmodified to the Gear SDK
 //   • update() guards against revoked vouchers
@@ -81,7 +81,7 @@ function makeVoucher(overrides: Partial<Voucher> = {}): Voucher {
 
 describe('VoucherService', () => {
   let service: VoucherService;
-  let repo: { find: jest.Mock; save: jest.Mock };
+  let repo: { findOneBy: jest.Mock; save: jest.Mock };
   let cfg: { get: jest.Mock };
   let ds: { createQueryRunner: jest.Mock };
   let qrQuery: jest.Mock;
@@ -103,7 +103,7 @@ describe('VoucherService', () => {
     mockDisconnect.mockResolvedValue(undefined);
 
     repo = {
-      find: jest.fn().mockResolvedValue([]),
+      findOneBy: jest.fn().mockResolvedValue(null),
       save: jest.fn().mockResolvedValue(undefined),
     };
     cfg = {
@@ -164,39 +164,22 @@ describe('VoucherService', () => {
   // ── getVoucher ─────────────────────────────────────────────────────────────
 
   it('queries with revoked: false so revoked vouchers are not returned', async () => {
-    repo.find.mockResolvedValue([]);
+    repo.findOneBy.mockResolvedValue(null);
     await service.getVoucher('0xabc');
-    expect(repo.find).toHaveBeenCalledWith({
-      where: { account: '0xabc', revoked: false },
-      order: { createdAt: 'DESC' },
-    });
+    expect(repo.findOneBy).toHaveBeenCalledWith({ account: '0xabc', revoked: false });
   });
 
   it('returns null when the only matching voucher is revoked', async () => {
-    repo.find.mockResolvedValue([]);
+    repo.findOneBy.mockResolvedValue(null);
     const result = await service.getVoucher('0xabc');
     expect(result).toBeNull();
   });
 
   it('returns the voucher when it exists and is not revoked', async () => {
     const v = makeVoucher();
-    repo.find.mockResolvedValue([v]);
+    repo.findOneBy.mockResolvedValue(v);
     const result = await service.getVoucher('0xabc');
     expect(result).toBe(v);
-  });
-
-  it('prefers an unrestricted voucher over an older restricted voucher', async () => {
-    const restricted = makeVoucher({
-      voucherId: '0xrestricted',
-      programs: ['0xprog'],
-    });
-    const unrestricted = makeVoucher({
-      voucherId: '0xunrestricted',
-      programs: [],
-    });
-    repo.find.mockResolvedValue([restricted, unrestricted]);
-    const result = await service.getVoucher('0xabc');
-    expect(result).toBe(unrestricted);
   });
 
   // ── issue() — balance guard ────────────────────────────────────────────────
@@ -236,24 +219,6 @@ describe('VoucherService', () => {
       BigInt(500) * BigInt(1e12),
       Math.round(86400 / 3),
       programs,
-      false,
-    );
-  });
-
-  it('issue() can create unrestricted vouchers with code upload enabled', async () => {
-    mockBalance.mockResolvedValue({ toBigInt: () => BigInt(1000 * 1e12) });
-    mockVoucherIssue.mockRejectedValue(new Error('stop after args capture'));
-
-    await expect(
-      service.issue('0xaccount' as any, undefined, 500, 86400, true),
-    ).rejects.toThrow('stop after args capture');
-
-    expect(mockVoucherIssue).toHaveBeenCalledWith(
-      '0xaccount',
-      BigInt(500) * BigInt(1e12),
-      Math.round(86400 / 3),
-      undefined,
-      true,
     );
   });
 
