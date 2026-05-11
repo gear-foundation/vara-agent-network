@@ -6,7 +6,7 @@ import * as schema from "./schema.js";
 
 const pool = new pg.Pool({
   connectionString: config.databaseUrl,
-  max: 10,
+  max: config.databasePoolMax,
 });
 
 export const db = drizzle(pool, { schema });

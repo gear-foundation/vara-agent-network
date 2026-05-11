@@ -259,6 +259,17 @@ export async function createProcessor(hooks: ProcessorHooks) {
       idx++;
     }
 
+    // Debug hook: PROCESSOR_SYNTHETIC_CODE_UPDATED_AT_BLOCK=<N> forces this
+    // block to be tagged as if it contained system.CodeUpdated. Lets us
+    // exercise the drain path without waiting for a real runtime upgrade.
+    if (
+      config.processorSyntheticCodeUpdatedAtBlock > 0 &&
+      blockNumber === config.processorSyntheticCodeUpdatedAtBlock
+    ) {
+      log.warn("synthetic CodeUpdated injected", { block: blockNumber });
+      containsCodeUpdated = true;
+    }
+
     return {
       substrateBlockNumber: blockNumber,
       substrateBlockHash: blockHash,
@@ -367,9 +378,12 @@ export async function createProcessor(hooks: ProcessorHooks) {
     blocksSinceRevalidate += 1;
     if (blocksSinceRevalidate < revalidateEveryN) return;
     blocksSinceRevalidate = 0;
-    // Bypass the cache: fresh slow-path lookup against this block's hash.
-    const apiAt = await api.at(blockHash);
-    const fresh = apiAt.runtimeVersion as CachedRuntimeVersion;
+    // Bypass the cache via direct JSON-RPC. polkadot.js's api.at(blockHash)
+    // would short-circuit on the #registries[*].lastBlockHash match (set
+    // earlier by fetchInner) and never actually probe the chain — making
+    // the "revalidation" a no-op. state.getRuntimeVersion is a raw RPC and
+    // hits the node every time.
+    const fresh = (await api.rpc.state.getRuntimeVersion(blockHash)) as unknown as CachedRuntimeVersion;
     const prev = runtimeVersion;
     if (
       prev &&
@@ -389,7 +403,10 @@ export async function createProcessor(hooks: ProcessorHooks) {
         : "<none>",
       fresh: `${fresh.specName.toString()}@${fresh.specVersion.toNumber()}`,
     });
-    runtimeVersion = fresh;
+    // Don't trust the freshly-fetched RuntimeVersionPartial verbatim — force
+    // the next fetchInner to rediscover via api.at(blockHash) which also
+    // populates polkadot.js's #registries with the right metadata.
+    runtimeVersion = undefined;
   }
 
   async function processRange(from: number, to: number, label: "backfill" | "live"): Promise<void> {
@@ -414,7 +431,8 @@ export async function createProcessor(hooks: ProcessorHooks) {
       // against a now-stale registry and must be re-fetched.
       let nextBatchFrom = batchTo + 1;
 
-      for (const result of fetched) {
+      for (let i = 0; i < fetched.length; i++) {
+        const result = fetched[i]!;
         if ("error" in result) {
           if (isPrunedBlockError(result.error)) {
             log.warn("skipping pruned block", { block: result.block });
@@ -437,10 +455,19 @@ export async function createProcessor(hooks: ProcessorHooks) {
           // Drop remaining pre-fetched results in this batch — they were
           // decoded against the pre-upgrade registry. Reset the cache so the
           // next fetchBlockContext call rediscovers the post-upgrade runtime
-          // at result.block + 1 via the slow path.
+          // at result.block + 1 via the slow path. Classify the dropped
+          // tail by ok/error so we don't silently swallow a real fetch
+          // failure that happened to land after the upgrade boundary.
+          let droppedOk = 0;
+          let droppedErr = 0;
+          for (let j = i + 1; j < fetched.length; j++) {
+            if ("error" in fetched[j]!) droppedErr += 1;
+            else droppedOk += 1;
+          }
           log.warn("CodeUpdated detected; draining batch", {
             at: result.block,
-            dropped: batchTo - result.block,
+            droppedOk,
+            droppedErr,
           });
           runtimeVersion = undefined;
           blocksSinceRevalidate = 0;
