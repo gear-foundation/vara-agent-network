@@ -1,5 +1,10 @@
 import { config } from "./config.js";
-import { type ApplicationRow, upsertApplicationsFromIndexer } from "./db.js";
+import {
+  type ApplicationRow,
+  type ParticipantRow,
+  upsertApplicationsFromIndexer,
+  upsertParticipantsFromIndexer,
+} from "./db.js";
 import { log } from "./logger.js";
 
 interface GraphqlApplication {
@@ -13,13 +18,15 @@ interface GraphqlApplication {
 }
 
 interface ApplicationSyncResult {
-  fetched: number;
-  upserted: number;
+  applicationsFetched: number;
+  applicationsUpserted: number;
+  participantsFetched: number;
+  participantsUpserted: number;
 }
 
 const QUERY = `
-  query ApplicationsForSeedBackend($first: Int!, $after: Cursor) {
-    allApplications(first: $first, after: $after, orderBy: REGISTERED_AT_ASC) {
+  query RegistryForSeedBackend($first: Int!, $applicationsAfter: Cursor, $participantsAfter: Cursor) {
+    allApplications(first: $first, after: $applicationsAfter, orderBy: REGISTERED_AT_ASC) {
       nodes {
         id
         handle
@@ -34,8 +41,29 @@ const QUERY = `
         endCursor
       }
     }
+    allParticipants(first: $first, after: $participantsAfter, orderBy: JOINED_AT_ASC) {
+      nodes {
+        id
+        handle
+        github
+        joinedAt
+        seasonId
+      }
+      pageInfo {
+        hasNextPage
+        endCursor
+      }
+    }
   }
 `;
+
+interface GraphqlParticipant {
+  id: string;
+  handle: string;
+  github: string;
+  joinedAt: string;
+  seasonId: number;
+}
 
 export class IndexerApplicationSync {
   private running = false;
@@ -53,28 +81,41 @@ export class IndexerApplicationSync {
   }
 
   async sync(): Promise<ApplicationSyncResult> {
-    if (!config.applicationSyncEnabled || !config.indexerGraphqlUrl) return { fetched: 0, upserted: 0 };
-    if (this.syncRunning) return { fetched: 0, upserted: 0 };
+    if (!config.applicationSyncEnabled || !config.indexerGraphqlUrl) {
+      return { applicationsFetched: 0, applicationsUpserted: 0, participantsFetched: 0, participantsUpserted: 0 };
+    }
+    if (this.syncRunning) {
+      return { applicationsFetched: 0, applicationsUpserted: 0, participantsFetched: 0, participantsUpserted: 0 };
+    }
     this.syncRunning = true;
     try {
-      const applications = await fetchApplications();
-      const upserted = await upsertApplicationsFromIndexer(applications);
-      log.info("applications synced from indexer", { fetched: applications.length, upserted });
-      return { fetched: applications.length, upserted };
+      const registry = await fetchRegistry();
+      const applicationsUpserted = await upsertApplicationsFromIndexer(registry.applications);
+      const participantsUpserted = await upsertParticipantsFromIndexer(registry.participants);
+      const result = {
+        applicationsFetched: registry.applications.length,
+        applicationsUpserted,
+        participantsFetched: registry.participants.length,
+        participantsUpserted,
+      };
+      log.info("registry synced from indexer", result);
+      return result;
     } finally {
       this.syncRunning = false;
     }
   }
 }
 
-async function fetchApplications(): Promise<ApplicationRow[]> {
-  const all: ApplicationRow[] = [];
-  let after: string | null = null;
+async function fetchRegistry(): Promise<{ applications: ApplicationRow[]; participants: ParticipantRow[] }> {
+  const applications: ApplicationRow[] = [];
+  const participants: ParticipantRow[] = [];
+  let applicationsAfter: string | null = null;
+  let participantsAfter: string | null = null;
   for (;;) {
     const res = await fetch(config.indexerGraphqlUrl, {
       method: "POST",
       headers: { "content-type": "application/json" },
-      body: JSON.stringify({ query: QUERY, variables: { first: 100, after } }),
+      body: JSON.stringify({ query: QUERY, variables: { first: 100, applicationsAfter, participantsAfter } }),
     });
     if (!res.ok) throw new Error(`indexer graphql failed with ${res.status}`);
     const json = await res.json() as {
@@ -83,19 +124,26 @@ async function fetchApplications(): Promise<ApplicationRow[]> {
           nodes: GraphqlApplication[];
           pageInfo: { hasNextPage: boolean; endCursor: string | null };
         };
+        allParticipants?: {
+          nodes: GraphqlParticipant[];
+          pageInfo: { hasNextPage: boolean; endCursor: string | null };
+        };
       };
       errors?: Array<{ message: string }>;
     };
     if (json.errors?.length) {
       throw new Error(`indexer graphql error: ${json.errors.map((e) => e.message).join("; ")}`);
     }
-    const conn = json.data?.allApplications;
-    if (!conn) throw new Error("indexer graphql response missing allApplications");
-    all.push(...conn.nodes.map(mapApplication));
-    if (!conn.pageInfo.hasNextPage) break;
-    after = conn.pageInfo.endCursor;
+    const applicationConn = json.data?.allApplications;
+    const participantConn = json.data?.allParticipants;
+    if (!applicationConn || !participantConn) throw new Error("indexer graphql response missing registry data");
+    applications.push(...applicationConn.nodes.map(mapApplication));
+    participants.push(...participantConn.nodes.map(mapParticipant));
+    if (!applicationConn.pageInfo.hasNextPage && !participantConn.pageInfo.hasNextPage) break;
+    applicationsAfter = applicationConn.pageInfo.hasNextPage ? applicationConn.pageInfo.endCursor : applicationsAfter;
+    participantsAfter = participantConn.pageInfo.hasNextPage ? participantConn.pageInfo.endCursor : participantsAfter;
   }
-  return all;
+  return { applications, participants };
 }
 
 function mapApplication(app: GraphqlApplication): ApplicationRow {
@@ -107,5 +155,15 @@ function mapApplication(app: GraphqlApplication): ApplicationRow {
     status: app.status,
     season_id: app.seasonId,
     registered_at: BigInt(app.registeredAt),
+  };
+}
+
+function mapParticipant(participant: GraphqlParticipant): ParticipantRow {
+  return {
+    id: participant.id.toLowerCase(),
+    handle: participant.handle,
+    github: participant.github,
+    joined_at: BigInt(participant.joinedAt),
+    season_id: participant.seasonId,
   };
 }

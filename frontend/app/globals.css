@@ -3850,6 +3850,265 @@
   text-align: center;
 }
 
+.social-claim {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  margin-top: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, transparent), transparent 48%),
+    var(--card);
+  padding: 22px;
+}
+
+.social-claim__copy h3 {
+  margin: 8px 0 8px;
+  color: var(--foreground);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.social-claim__copy p,
+.social-claim-modal__checking {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.social-claim__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(205px, 18vw, 280px);
+  min-height: 42px;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: oklch(0.12 0 0);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 8px 14px;
+  text-align: center;
+}
+
+.social-claim__status[data-state="PENDING"] {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  color: var(--primary);
+}
+
+.social-claim__status[data-state="SENT"] {
+  border-color: color-mix(in oklch, var(--primary) 45%, var(--border));
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.social-claim__status[data-state="FAILED"] {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  color: var(--primary);
+}
+
+.social-claim__tweet,
+.social-claim .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.social-claim__tweet {
+  width: clamp(205px, 18vw, 280px);
+  min-height: 42px;
+  border-color: var(--border);
+  background: transparent;
+  padding: 8px 14px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.social-claim__tweet:hover {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  background: color-mix(in oklch, var(--primary) 8%, transparent);
+  color: var(--primary);
+}
+
+.social-claim__error,
+.social-claim__muted {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+
+.social-claim__error {
+  color: var(--destructive);
+}
+
+.social-claim__muted {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.social-claim__spin {
+  animation: social-claim-spin 0.9s linear infinite;
+}
+
+@keyframes social-claim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.social-claim-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.social-claim-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: color-mix(in oklch, black 68%, transparent);
+  cursor: default;
+}
+
+.social-claim-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 520px);
+  max-height: min(720px, calc(100dvh - 36px));
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.45);
+  padding: 24px;
+}
+
+.social-claim-modal__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.social-claim-modal__panel h3 {
+  margin: 10px 44px 18px 0;
+  color: var(--foreground);
+  font-size: 25px;
+  line-height: 1.2;
+}
+
+.social-claim-modal__steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.social-claim-modal__steps span {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: oklch(0.1 0 0);
+  color: var(--muted-foreground);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.social-claim-modal__steps span:first-child {
+  border-color: color-mix(in oklch, var(--primary) 34%, var(--border));
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+
+.social-claim-modal__tweet {
+  border: 1px solid color-mix(in oklch, var(--primary) 28%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--primary) 7%, transparent);
+  color: var(--foreground);
+  padding: 16px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.social-claim-modal__intent {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 54px;
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.social-claim-modal__field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.social-claim-modal__field span {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.social-claim-modal__field input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: oklch(0.1 0 0);
+  color: var(--foreground);
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.social-claim-modal__field-error {
+  margin: 8px 0 0;
+  color: var(--destructive);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.social-claim-modal__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.social-claim-modal__checking {
+  margin-top: 12px;
+  text-align: center;
+}
+
 .hack-prize-row span,
 .hack-prize-row strong {
   display: block;
@@ -4412,6 +4671,17 @@
     grid-template-columns: 1fr;
   }
 
+  .social-claim {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .social-claim__status,
+  .social-claim .btn,
+  .social-claim__tweet {
+    width: 100%;
+  }
+
   .hack-prize-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
@@ -4523,6 +4793,18 @@
   .hack-track-card__foot {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .social-claim {
+    padding: 18px;
+  }
+
+  .social-claim-modal__panel {
+    padding: 20px;
+  }
+
+  .social-claim-modal__panel h3 {
+    font-size: 22px;
   }
 
   .hack-cta {

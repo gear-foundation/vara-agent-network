@@ -7,6 +7,7 @@ import { SeedService } from "./seed-service.js";
 import { SpendMonitor } from "./monitor.js";
 import { log } from "./logger.js";
 import { IndexerApplicationSync } from "./indexer-sync.js";
+import { ClaimRequestError, publicClaim, SocialXClaimService } from "./social-x.js";
 
 validateRuntimeConfig();
 
@@ -19,6 +20,7 @@ const chain = new ChainClient();
 await chain.connect();
 
 const seedService = new SeedService(chain);
+const socialXClaimService = new SocialXClaimService(chain);
 const applicationSync = new IndexerApplicationSync();
 await applicationSync.start();
 const monitor = new SpendMonitor(chain);
@@ -32,7 +34,12 @@ if (config.autoRefillIntervalSec > 0) {
   scheduleRecurring("auto refill scan", config.autoRefillIntervalSec, () => seedService.autoRefillScan(500));
 }
 
+if (config.socialXPayoutIntervalSec > 0) {
+  scheduleRecurring("social X payout queue", config.socialXPayoutIntervalSec, () => socialXClaimService.processQueue(10));
+}
+
 const app = express();
+app.set("trust proxy", 1);
 app.use(express.json({ limit: "64kb" }));
 if (config.corsOrigin) {
   app.use(cors({ origin: config.corsOrigin.split(",").map((s) => s.trim()).filter(Boolean) }));
@@ -150,10 +157,38 @@ app.post("/seed/allocations/:wallet/unblacklist", requireApiKey, async (req, res
   }
 });
 
+app.get("/social/x-claim/:wallet", requireApiKey, async (req, res, next) => {
+  try {
+    res.json({
+      claim: publicClaim(await socialXClaimService.getClaim(req.params.wallet)),
+      rewardVara: config.socialXRewardVara,
+      participantMinAgeSec: config.socialXParticipantMinAgeSec,
+      campaignStart: config.socialXCampaignStart?.toISOString() ?? null,
+      requiredPhrase: config.socialXRequiredPhrase,
+      requiredHandle: config.socialXRequiredHandle,
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
+app.post("/social/x-claim", requireApiKey, async (req, res, next) => {
+  try {
+    const claim = await socialXClaimService.submitClaim(req.body, clientIp(req));
+    res.json({
+      claim: publicClaim(claim),
+      message: "claim accepted for review",
+    });
+  } catch (error) {
+    next(error);
+  }
+});
+
 app.use((error: unknown, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
   const message = error instanceof Error ? error.message : String(error);
   log.error("request failed", error);
-  res.status(500).json({ error: message });
+  const statusCode = error instanceof ClaimRequestError ? error.statusCode : 500;
+  res.status(statusCode).json({ error: message });
 });
 
 app.listen(config.port, () => {
@@ -189,6 +224,12 @@ function requireString(body: unknown, field: string): string {
     throw new Error(`${field} must be a non-empty string`);
   }
   return value.trim();
+}
+
+function clientIp(req: express.Request): string {
+  const forwarded = req.header("x-forwarded-for");
+  if (forwarded) return forwarded.split(",")[0].trim();
+  return req.ip || req.socket.remoteAddress || "unknown";
 }
 
 function scheduleRecurring<T>(name: string, intervalSec: number, task: () => Promise<T>): void {
