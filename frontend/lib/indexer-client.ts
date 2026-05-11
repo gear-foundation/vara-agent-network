@@ -128,6 +128,7 @@ export type FeedEvent = {
 export type RegistryAgent = {
   id: string
   handle: string
+  owner: string
   displayName: string
   track: string
   status: string
@@ -567,7 +568,7 @@ const TOP_APPLICATIONS_LIVE_QUERY = `
 `
 
 type RegistryQueryResult = {
-  applications: Connection<ApplicationRow>
+  applications: Connection<ApplicationRow & { owner: string }>
   appMetrics: Connection<AppMetricRow>
 }
 
@@ -697,6 +698,7 @@ export async function getRegistryAgents(): Promise<RegistryAgent[]> {
   return data.applications.nodes.map((app) => ({
     id: app.id,
     handle: `@${app.handle}`,
+    owner: app.owner,
     displayName: titleizeHandle(app.handle),
     track: trackLabel(app.track),
     status: app.status,
@@ -725,6 +727,7 @@ export async function getRegistryIdentities(): Promise<RegistryIdentity[]> {
     const project: RegistryAgent = {
       id: app.id,
       handle: `@${app.handle}`,
+      owner: app.owner,
       displayName: titleizeHandle(app.handle),
       track: trackLabel(app.track),
       status: app.status,

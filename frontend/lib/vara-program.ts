@@ -116,7 +116,7 @@ async function getSigner(account: WalletAccount) {
   return injector.signer
 }
 
-async function addressToActorId(address: string) {
+export async function addressToActorId(address: string) {
   const [{ decodeAddress }, { u8aToHex }] = await Promise.all([
     import('@polkadot/util-crypto'),
     import('@polkadot/util'),
