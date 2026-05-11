@@ -204,22 +204,20 @@ export async function createProcessor(hooks: ProcessorHooks) {
   }
 
   /** Most public Vara RPCs run with pruning — state reads older than ~256
-   *  blocks fail with "State already discarded". For an archive-backed RPC
-   *  we want to backfill from VARA_AGENTS_START_BLOCK. For a pruned RPC we
-   *  clamp backfill to a safe recent window so the indexer can still boot
-   *  and catch the tail of live activity.
-   *
-   *  PRODUCTION: point VARA_RPC_URL at an archive endpoint (or add a
-   *  Subsquid archive adapter to the processor) before mainnet deploy. */
-  const PRUNED_RPC_BACKFILL_DEPTH = 250;
+   *  blocks fail with "State already discarded". Production should use an
+   *  archive endpoint and replay every missing block. Local/dev pruned RPCs
+   *  may opt into clamping with PROCESSOR_PRUNED_RPC_BACKFILL_DEPTH. */
   async function clampedResumePoint(finalizedHeight: number): Promise<number> {
     const raw = await resumePoint();
-    const floor = Math.max(0, finalizedHeight - PRUNED_RPC_BACKFILL_DEPTH);
+    const depth = config.processorPrunedRpcBackfillDepth;
+    if (depth <= 0) return raw;
+    const floor = Math.max(0, finalizedHeight - depth);
     if (raw < floor) {
       log.warn("pruned RPC — clamping backfill", {
         wantedFrom: raw,
         clampedFrom: floor,
         finalized: finalizedHeight,
+        depth,
       });
       return floor;
     }
