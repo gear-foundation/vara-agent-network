@@ -29,6 +29,7 @@ export interface ProcessorHooks {
 
 export async function createProcessor(hooks: ProcessorHooks) {
   const config = requireProcessorConfig();
+  const backfillFetchConcurrency = Math.max(1, config.processorBackfillFetchConcurrency);
   const provider = new WsProvider(config.varaRpcUrl);
   let stopped = false;
   let stopReason: Error | null = null;
@@ -85,7 +86,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
     }
   }
 
-  async function processBlock(blockNumber: number): Promise<void> {
+  async function fetchBlockContext(blockNumber: number): Promise<BlockContext> {
     const blockHash = (await api.rpc.chain.getBlockHash(blockNumber)).toHex() as Hex;
     const apiAt = await api.at(blockHash);
     const rawEvents = await apiAt.query.system.events();
@@ -172,14 +173,19 @@ export async function createProcessor(hooks: ProcessorHooks) {
       idx++;
     }
 
-    const ctx: BlockContext = {
+    return {
       substrateBlockNumber: blockNumber,
       substrateBlockHash: blockHash,
       substrateBlockTs: timestamp,
       events,
     };
-    await hooks.onBlock(ctx);
+  }
 
+  async function applyBlockContext(ctx: BlockContext): Promise<void> {
+    await hooks.onBlock(ctx);
+  }
+
+  async function updateCursor(blockNumber: number): Promise<void> {
     await db
       .insert(schema.processorCursor)
       .values({
@@ -191,6 +197,12 @@ export async function createProcessor(hooks: ProcessorHooks) {
         target: schema.processorCursor.id,
         set: { lastProcessedBlock: blockNumber, updatedAt: BigInt(Date.now()) },
       });
+  }
+
+  async function processBlock(blockNumber: number): Promise<void> {
+    const ctx = await fetchBlockContext(blockNumber);
+    await applyBlockContext(ctx);
+    await updateCursor(blockNumber);
   }
 
   async function resumePoint(): Promise<number> {
@@ -227,20 +239,8 @@ export async function createProcessor(hooks: ProcessorHooks) {
   async function runBackfill(toBlock: number): Promise<void> {
     let from = await clampedResumePoint(toBlock);
     if (from > toBlock) return;
-    log.info("backfill start", { from, to: toBlock });
-    for (let n = from; n <= toBlock; n++) {
-      try {
-        await processBlock(n);
-      } catch (err) {
-        const msg = String(err);
-        if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
-          log.warn("skipping pruned block", { block: n });
-          continue;
-        }
-        throw err;
-      }
-      if (n % 50 === 0) log.info("backfill progress", { at: n, to: toBlock });
-    }
+    log.info("backfill start", { from, to: toBlock, fetchConcurrency: backfillFetchConcurrency });
+    await processRange(from, toBlock, "backfill");
     log.info("backfill done", { at: toBlock });
   }
 
@@ -252,25 +252,48 @@ export async function createProcessor(hooks: ProcessorHooks) {
   let unsubscribeFinalizedHeads: (() => void) | null = null;
   async function catchUpTo(height: number): Promise<void> {
     const resume = await clampedResumePoint(height);
-    for (let n = resume; n <= height; n++) {
-      try {
-        await processBlock(n);
-      } catch (err) {
-        const msg = String(err);
-        if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
-          log.warn("skipping pruned block", { block: n });
-          // Skipped blocks still advance the cursor to avoid infinite retry.
-          await db
-            .insert(schema.processorCursor)
-            .values({ id: "main", lastProcessedBlock: n, updatedAt: BigInt(Date.now()) })
-            .onConflictDoUpdate({
-              target: schema.processorCursor.id,
-              set: { lastProcessedBlock: n, updatedAt: BigInt(Date.now()) },
-            });
-          continue;
+    await processRange(resume, height, "live");
+  }
+
+  function isPrunedBlockError(error: unknown): boolean {
+    const msg = String(error);
+    return msg.includes("State already discarded") || msg.includes("Unknown Block");
+  }
+
+  async function processRange(from: number, to: number, label: "backfill" | "live"): Promise<void> {
+    if (from > to) return;
+
+    for (let batchFrom = from; batchFrom <= to; batchFrom += backfillFetchConcurrency) {
+      const batchTo = Math.min(to, batchFrom + backfillFetchConcurrency - 1);
+      const fetched = await Promise.all(
+        Array.from({ length: batchTo - batchFrom + 1 }, async (_, i) => {
+          const block = batchFrom + i;
+          try {
+            return { block, ctx: await fetchBlockContext(block) } as const;
+          } catch (error) {
+            return { block, error } as const;
+          }
+        }),
+      );
+
+      for (const result of fetched) {
+        if ("error" in result) {
+          if (isPrunedBlockError(result.error)) {
+            log.warn("skipping pruned block", { block: result.block });
+            // Skipped blocks still advance the cursor to avoid infinite retry.
+            await updateCursor(result.block);
+            continue;
+          }
+          // Non-pruning error: bail without advancing so the next restart/head
+          // retries from the first unprocessed block.
+          throw result.error;
         }
-        // Non-pruning error: bail without advancing so next head triggers retry.
-        throw err;
+
+        await applyBlockContext(result.ctx);
+        await updateCursor(result.block);
+        if (label === "backfill" && result.block % 50 === 0) {
+          log.info("backfill progress", { at: result.block, to });
+        }
       }
     }
   }
