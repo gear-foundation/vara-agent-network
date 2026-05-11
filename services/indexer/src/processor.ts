@@ -27,9 +27,17 @@ export interface ProcessorHooks {
   onBlock: (ctx: BlockContext) => Promise<void>;
 }
 
+// polkadot.js exposes apiAt.runtimeVersion as `RuntimeVersionPartial` at runtime,
+// but its `api.at(blockHash, knownVersion)` parameter is typed as `RuntimeVersion`.
+// The internal cache lookup (_getBlockRegistryViaVersion) only inspects
+// specName/specVersion, both of which the partial type has. Use the api.at
+// parameter type as the cache type and cast at the discovery boundary.
+type CachedRuntimeVersion = NonNullable<Parameters<ApiPromise["at"]>[1]>;
+
 export async function createProcessor(hooks: ProcessorHooks) {
   const config = requireProcessorConfig();
   const backfillFetchConcurrency = Math.max(1, config.processorBackfillFetchConcurrency);
+  const revalidateEveryN = Math.max(0, config.processorRuntimeRevalidateEveryNBlocks);
   const provider = new WsProvider(config.varaRpcUrl);
   let stopped = false;
   let stopReason: Error | null = null;
@@ -71,6 +79,43 @@ export async function createProcessor(hooks: ProcessorHooks) {
 
   const targetProgramIdLower = config.programId.toLowerCase();
 
+  // Runtime-version cache. Anchored to a specific historical block, NOT the
+  // node's current head — initializing from `api.rpc.state.getRuntimeVersion()`
+  // (unqualified) would silently mis-decode historical events on a chain that
+  // has had a runtime upgrade between then and now. Discovery happens on the
+  // first block of each run via api.at(blockHash) without knownVersion, which
+  // populates polkadot.js's internal #registries cache and lets every
+  // subsequent call short-circuit `state_getRuntimeVersion`.
+  let runtimeVersion: CachedRuntimeVersion | undefined = undefined;
+  // Counter for telemetry / verification. Increments on every slow-path
+  // (no-knownVersion) discovery call.
+  let runtimeDiscoveryCount = 0;
+  // Tracks blocks applied since the last revalidation probe. Reset every
+  // `revalidateEveryN` applied blocks.
+  let blocksSinceRevalidate = 0;
+
+  async function discoverRuntimeAt(blockHash: Hex): Promise<void> {
+    // Slow path: forces polkadot.js to fetch chain.getHeader + state.getRuntimeVersion
+    // for this hash (see @polkadot/api/base/Init.js:_getBlockRegistryViaHash).
+    // After this call, the resolved (specName, specVersion) lives in the
+    // #registries array and matches against `api.at(blockHash, runtimeVersion)`
+    // hit the fast path.
+    const apiAt = await api.at(blockHash);
+    runtimeVersion = apiAt.runtimeVersion as CachedRuntimeVersion;
+    runtimeDiscoveryCount += 1;
+    log.info("runtime discovered", {
+      blockHash,
+      specName: runtimeVersion.specName.toString(),
+      specVersion: runtimeVersion.specVersion.toNumber(),
+      discoveryCount: runtimeDiscoveryCount,
+    });
+  }
+
+  function isPrunedBlockError(error: unknown): boolean {
+    const msg = String(error);
+    return msg.includes("State already discarded") || msg.includes("Unknown Block");
+  }
+
   // Normalize ActorId strings to lowercase hex. Gear events surface addresses
   // in mixed formats:
   //   Gear.MessageQueued's source is SS58 (wallet-style extrinsic origin),
@@ -86,19 +131,41 @@ export async function createProcessor(hooks: ProcessorHooks) {
     }
   }
 
-  async function fetchBlockContext(blockNumber: number): Promise<BlockContext> {
+  async function fetchInner(blockNumber: number): Promise<BlockContext> {
     const blockHash = (await api.rpc.chain.getBlockHash(blockNumber)).toHex() as Hex;
-    const apiAt = await api.at(blockHash);
-    const rawEvents = await apiAt.query.system.events();
-    const timestamp = ((await apiAt.query.timestamp.now()) as unknown as { toBigInt(): bigint })
-      .toBigInt();
+
+    if (!runtimeVersion) {
+      // First block of the run, or just after a CodeUpdated drain.
+      await discoverRuntimeAt(blockHash);
+    }
+
+    const apiAt = await api.at(blockHash, runtimeVersion);
+    const [rawEvents, timestampRaw] = await Promise.all([
+      apiAt.query.system.events(),
+      apiAt.query.timestamp.now(),
+    ]);
+    const timestamp = (timestampRaw as unknown as { toBigInt(): bigint }).toBigInt();
 
     const events: GearEvent[] = [];
+    let containsCodeUpdated = false;
     let idx = 0;
     for (const record of rawEvents as unknown as Array<{
       event: { section: string; method: string; data: { toJSON(): unknown } };
     }>) {
       const { section, method, data } = record.event;
+
+      // Detect runtime upgrades. Substrate semantics: `set_code` executes
+      // under the parent runtime, `system.CodeUpdated` is emitted by the same
+      // block under that old runtime, and the new code applies from N+1.
+      // Decoding the current block with the cached (old) version is therefore
+      // correct; processRange will drain any in-flight successor blocks and
+      // rediscover the post-upgrade runtime at N+1.
+      if (section === "system" && method === "CodeUpdated") {
+        containsCodeUpdated = true;
+        idx++;
+        continue;
+      }
+
       if (section !== "gear") {
         idx++;
         continue;
@@ -178,7 +245,28 @@ export async function createProcessor(hooks: ProcessorHooks) {
       substrateBlockHash: blockHash,
       substrateBlockTs: timestamp,
       events,
+      containsCodeUpdated,
     };
+  }
+
+  async function fetchBlockContext(blockNumber: number): Promise<BlockContext> {
+    try {
+      return await fetchInner(blockNumber);
+    } catch (firstErr) {
+      // Pruned blocks must propagate as-is so processRange can skip them.
+      if (isPrunedBlockError(firstErr)) throw firstErr;
+      // Reset cache; the second call will hit discoverRuntimeAt's slow path
+      // and rebuild against actual chain state. If that also fails, surface
+      // both errors via Error.cause so debugging keeps the original context.
+      runtimeVersion = undefined;
+      try {
+        return await fetchInner(blockNumber);
+      } catch (secondErr) {
+        throw new Error(`fetchBlockContext(${blockNumber}) failed twice`, {
+          cause: { firstErr, secondErr },
+        });
+      }
+    }
   }
 
   async function applyBlockContext(ctx: BlockContext): Promise<void> {
@@ -255,15 +343,41 @@ export async function createProcessor(hooks: ProcessorHooks) {
     await processRange(resume, height, "live");
   }
 
-  function isPrunedBlockError(error: unknown): boolean {
-    const msg = String(error);
-    return msg.includes("State already discarded") || msg.includes("Unknown Block");
+  async function maybeRevalidate(blockHash: Hex): Promise<void> {
+    if (revalidateEveryN <= 0) return;
+    blocksSinceRevalidate += 1;
+    if (blocksSinceRevalidate < revalidateEveryN) return;
+    blocksSinceRevalidate = 0;
+    // Bypass the cache: fresh slow-path lookup against this block's hash.
+    const apiAt = await api.at(blockHash);
+    const fresh = apiAt.runtimeVersion as CachedRuntimeVersion;
+    const prev = runtimeVersion;
+    if (
+      prev &&
+      prev.specName.eq(fresh.specName) &&
+      prev.specVersion.eq(fresh.specVersion)
+    ) {
+      log.info("runtime revalidation ok", {
+        blockHash,
+        specVersion: fresh.specVersion.toNumber(),
+      });
+      return;
+    }
+    log.error("runtime revalidation mismatch", {
+      blockHash,
+      prev: prev
+        ? `${prev.specName.toString()}@${prev.specVersion.toNumber()}`
+        : "<none>",
+      fresh: `${fresh.specName.toString()}@${fresh.specVersion.toNumber()}`,
+    });
+    runtimeVersion = fresh;
   }
 
   async function processRange(from: number, to: number, label: "backfill" | "live"): Promise<void> {
     if (from > to) return;
 
-    for (let batchFrom = from; batchFrom <= to; batchFrom += backfillFetchConcurrency) {
+    let batchFrom = from;
+    while (batchFrom <= to) {
       const batchTo = Math.min(to, batchFrom + backfillFetchConcurrency - 1);
       const fetched = await Promise.all(
         Array.from({ length: batchTo - batchFrom + 1 }, async (_, i) => {
@@ -275,6 +389,11 @@ export async function createProcessor(hooks: ProcessorHooks) {
           }
         }),
       );
+
+      // Default: advance past this batch. Overridden below if a CodeUpdated
+      // boundary is found inside the batch — successor results were decoded
+      // against a now-stale registry and must be re-fetched.
+      let nextBatchFrom = batchTo + 1;
 
       for (const result of fetched) {
         if ("error" in result) {
@@ -294,7 +413,26 @@ export async function createProcessor(hooks: ProcessorHooks) {
         if (label === "backfill" && result.block % 50 === 0) {
           log.info("backfill progress", { at: result.block, to });
         }
+
+        if (result.ctx.containsCodeUpdated) {
+          // Drop remaining pre-fetched results in this batch — they were
+          // decoded against the pre-upgrade registry. Reset the cache so the
+          // next fetchBlockContext call rediscovers the post-upgrade runtime
+          // at result.block + 1 via the slow path.
+          log.warn("CodeUpdated detected; draining batch", {
+            at: result.block,
+            dropped: batchTo - result.block,
+          });
+          runtimeVersion = undefined;
+          blocksSinceRevalidate = 0;
+          nextBatchFrom = result.block + 1;
+          break;
+        }
+
+        await maybeRevalidate(result.ctx.substrateBlockHash);
       }
+
+      batchFrom = nextBatchFrom;
     }
   }
 

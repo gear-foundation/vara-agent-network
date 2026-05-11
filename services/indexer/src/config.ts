@@ -49,6 +49,10 @@ export const config = {
   processorReconnectMaxMs: optionalInt("PROCESSOR_RECONNECT_MAX_MS", 60_000),
   processorPrunedRpcBackfillDepth: optionalInt("PROCESSOR_PRUNED_RPC_BACKFILL_DEPTH", 0),
   processorBackfillFetchConcurrency: optionalInt("PROCESSOR_BACKFILL_FETCH_CONCURRENCY", 10),
+  processorRuntimeRevalidateEveryNBlocks: optionalInt(
+    "PROCESSOR_RUNTIME_REVALIDATE_EVERY_N_BLOCKS",
+    1000,
+  ),
   logLevel: (optional("LOG_LEVEL", "info") as "debug" | "info" | "warn" | "error"),
 } as const;
 
