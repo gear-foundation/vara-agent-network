@@ -93,22 +93,37 @@ export async function createProcessor(hooks: ProcessorHooks) {
   // Tracks blocks applied since the last revalidation probe. Reset every
   // `revalidateEveryN` applied blocks.
   let blocksSinceRevalidate = 0;
+  // Single-flight gate. Without this, the first batch of N parallel fetchInner
+  // calls all observe `runtimeVersion === undefined` and each does its own
+  // slow-path discovery — wasting N-1 redundant RPCs at boot and after every
+  // CodeUpdated drain. Verified: with concurrency=10, discoveryCount went 1→10
+  // on the first batch before this gate; with the gate, exactly 1.
+  let runtimeDiscoveryInFlight: Promise<void> | null = null;
 
   async function discoverRuntimeAt(blockHash: Hex): Promise<void> {
-    // Slow path: forces polkadot.js to fetch chain.getHeader + state.getRuntimeVersion
-    // for this hash (see @polkadot/api/base/Init.js:_getBlockRegistryViaHash).
-    // After this call, the resolved (specName, specVersion) lives in the
-    // #registries array and matches against `api.at(blockHash, runtimeVersion)`
-    // hit the fast path.
-    const apiAt = await api.at(blockHash);
-    runtimeVersion = apiAt.runtimeVersion as CachedRuntimeVersion;
-    runtimeDiscoveryCount += 1;
-    log.info("runtime discovered", {
-      blockHash,
-      specName: runtimeVersion.specName.toString(),
-      specVersion: runtimeVersion.specVersion.toNumber(),
-      discoveryCount: runtimeDiscoveryCount,
-    });
+    if (runtimeVersion) return;
+    if (!runtimeDiscoveryInFlight) {
+      runtimeDiscoveryInFlight = (async () => {
+        // Slow path: forces polkadot.js to fetch chain.getHeader +
+        // state.getRuntimeVersion for this hash (see
+        // @polkadot/api/base/Init.js:_getBlockRegistryViaHash). After this
+        // call, the resolved (specName, specVersion) lives in the #registries
+        // array and matches against api.at(blockHash, runtimeVersion) hit
+        // the fast path.
+        const apiAt = await api.at(blockHash);
+        runtimeVersion = apiAt.runtimeVersion as CachedRuntimeVersion;
+        runtimeDiscoveryCount += 1;
+        log.info("runtime discovered", {
+          blockHash,
+          specName: runtimeVersion.specName.toString(),
+          specVersion: runtimeVersion.specVersion.toNumber(),
+          discoveryCount: runtimeDiscoveryCount,
+        });
+      })().finally(() => {
+        runtimeDiscoveryInFlight = null;
+      });
+    }
+    await runtimeDiscoveryInFlight;
   }
 
   function isPrunedBlockError(error: unknown): boolean {
