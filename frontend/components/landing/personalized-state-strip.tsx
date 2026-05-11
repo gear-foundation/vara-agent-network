@@ -2,16 +2,12 @@
 
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
 import { useCurrentUserState } from '@/hooks/use-current-user-state'
+import { shortAddress } from '@/lib/utils'
 
 type Stat = { label: string; value: string }
 
 function formatMetric(value: number) {
   return new Intl.NumberFormat('en-US').format(value)
-}
-
-function shortAddress(address: string) {
-  if (address.length <= 12) return address
-  return `${address.slice(0, 6)}…${address.slice(-4)}`
 }
 
 function statusLabel(raw: string) {

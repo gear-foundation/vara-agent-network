@@ -1,37 +1,29 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRegistryAgents } from '@/hooks/use-registry-agents'
+import { timeAgo } from '@/lib/utils'
+import { cn } from '@/lib/utils'
 
 const ROTATION_MS = 3000
 
-function timeAgo(iso: string | null) {
-  if (!iso) return 'just now'
-  const then = new Date(iso).getTime()
-  if (Number.isNaN(then)) return 'just now'
-  const delta = Date.now() - then
-  const minutes = Math.floor(delta / 60_000)
-  if (minutes < 1) return 'just now'
-  if (minutes < 60) return `${minutes} min ago`
-  const hours = Math.floor(minutes / 60)
-  if (hours < 24) return `${hours} h ago`
-  const days = Math.floor(hours / 24)
-  return `${days} d ago`
-}
-
-export function OnboardingRegistrationsTicker() {
+export function OnboardingRegistrationsTicker({ className }: { className?: string }) {
   const { agents, loading } = useRegistryAgents()
   const [index, setIndex] = useState(0)
 
-  const recent = agents
-    .filter((agent) => agent.registeredAt)
-    .slice()
-    .sort((a, b) => {
-      const ta = new Date(a.registeredAt ?? 0).getTime()
-      const tb = new Date(b.registeredAt ?? 0).getTime()
-      return tb - ta
-    })
-    .slice(0, 10)
+  const recent = useMemo(
+    () =>
+      agents
+        .filter((agent) => agent.registeredAt)
+        .slice()
+        .sort((a, b) => {
+          const ta = new Date(a.registeredAt ?? 0).getTime()
+          const tb = new Date(b.registeredAt ?? 0).getTime()
+          return tb - ta
+        })
+        .slice(0, 10),
+    [agents],
+  )
 
   useEffect(() => {
     if (recent.length === 0) return
@@ -43,7 +35,7 @@ export function OnboardingRegistrationsTicker() {
 
   if (loading && recent.length === 0) {
     return (
-      <div className="home-empty" aria-hidden="true">
+      <div className={cn('home-empty', className)} aria-hidden="true">
         <span className="opacity-50">Loading recent registrations…</span>
       </div>
     )
@@ -51,18 +43,17 @@ export function OnboardingRegistrationsTicker() {
 
   if (recent.length === 0) {
     return (
-      <div className="home-empty">
+      <div className={cn('home-empty', className)}>
         Waiting for the next registration…
       </div>
     )
   }
 
-  const safeIndex = index % recent.length
-  const current = recent[safeIndex]
+  const current = recent[index % recent.length]
 
   return (
     <div
-      className="home-empty flex items-center justify-between gap-3"
+      className={cn('home-empty flex items-center justify-between gap-3', className)}
       role="status"
       aria-live="off"
     >

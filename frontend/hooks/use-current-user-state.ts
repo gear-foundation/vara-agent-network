@@ -27,22 +27,21 @@ export function useCurrentUserState(): {
   const { agents, loading: agentsLoading } = useRegistryAgents()
   const [ownerActorId, setOwnerActorId] = useState<string | null>(null)
 
+  const address = account?.address ?? null
   useEffect(() => {
     let active = true
 
-    if (!account) {
+    if (!address) {
       setOwnerActorId(null)
       return
     }
 
     void (async () => {
       try {
-        const actorId = await addressToActorId(account.address)
+        const actorId = await addressToActorId(address)
         if (active) setOwnerActorId(actorId)
       } catch (error) {
-        logError('user-state', 'addressToActorId failed', error, {
-          address: account.address,
-        })
+        logError('user-state', 'addressToActorId failed', error, { address })
         if (active) setOwnerActorId(null)
       }
     })()
@@ -50,7 +49,7 @@ export function useCurrentUserState(): {
     return () => {
       active = false
     }
-  }, [account])
+  }, [address])
 
   if (!account) {
     return { state: { kind: 'disconnected' }, loading: false }

@@ -2,12 +2,13 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Check, ChevronDown, Copy, Loader2, ArrowRight } from 'lucide-react'
-import { useToast } from '@/hooks/use-toast'
+import { Check, ChevronDown, Loader2, ArrowRight } from 'lucide-react'
+import { toast } from '@/hooks/use-toast'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { formatDappError } from '@/lib/debug'
 import { env } from '@/lib/env'
 import { isGithubUrl, postChatMessage } from '@/lib/vara-program'
+import { CopyableCodeLine } from './copyable-code-line'
 import { OnboardingRegistrationsTicker } from './onboarding-registrations-ticker'
 
 const HANDLE_MIN = 3
@@ -28,75 +29,7 @@ const VARA_SKILLS_CMD = 'npx skills add gear-foundation/vara-skills -g --all -y'
 const WALLET_CMD = 'npm install -g vara-wallet'
 const AI_PROMPT = 'Use vara-agent-network-skills to onboard me as a new participant.'
 
-function copyText(
-  text: string,
-  toast: ReturnType<typeof useToast>['toast'],
-  onSuccess?: () => void,
-) {
-  if (typeof navigator === 'undefined' || !navigator.clipboard?.writeText) return
-  void navigator.clipboard.writeText(text).then(
-    () => {
-      toast({ title: 'Copied' })
-      onSuccess?.()
-    },
-    () => {
-      /* silent no-op */
-    },
-  )
-}
-
-function CodeLine({
-  children,
-  onCopy,
-}: {
-  children: string
-  onCopy?: () => void
-}) {
-  const { toast } = useToast()
-  return (
-    <div className="home-code-line flex items-center justify-between gap-3">
-      <span className="font-mono text-xs sm:text-sm overflow-x-auto whitespace-pre">
-        <span className="text-muted-foreground">$ </span>
-        {children}
-      </span>
-      <button
-        type="button"
-        onClick={() => copyText(children, toast, onCopy)}
-        aria-label={`Copy: ${children}`}
-        className="shrink-0 rounded-md border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function PromptLine({
-  children,
-  onCopy,
-}: {
-  children: string
-  onCopy?: () => void
-}) {
-  const { toast } = useToast()
-  return (
-    <div className="home-code-line flex items-start justify-between gap-3">
-      <span className="font-mono text-xs sm:text-sm whitespace-pre-wrap">
-        {children}
-      </span>
-      <button
-        type="button"
-        onClick={() => copyText(children, toast, onCopy)}
-        aria-label="Copy prompt"
-        className="shrink-0 rounded-md border border-border bg-card p-1.5 text-muted-foreground hover:text-foreground hover:border-primary/40 transition-colors"
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  )
-}
-
-function ClaimHandleForm({ onSuccess }: { onSuccess: () => void }) {
+function ClaimHandleForm() {
   const {
     status,
     account,
@@ -105,13 +38,11 @@ function ClaimHandleForm({ onSuccess }: { onSuccess: () => void }) {
     connect,
     registerCurrentParticipant,
   } = useVaraWallet()
-  const { toast } = useToast()
 
   const [form, setForm] = React.useState({ handle: '', github: '' })
   const [touched, setTouched] = React.useState({ handle: false, github: false })
   const [submitted, setSubmitted] = React.useState(false)
   const [registering, setRegistering] = React.useState(false)
-  const [registrationDone, setRegistrationDone] = React.useState(false)
   const [formMessage, setFormMessage] = React.useState<string | null>(null)
 
   const normalizedHandle = form.handle.trim().replace(/^@/, '').toLowerCase()
@@ -135,7 +66,7 @@ function ClaimHandleForm({ onSuccess }: { onSuccess: () => void }) {
   const showGithubError = (touched.github || submitted) && Boolean(githubError)
   const programConfigured = Boolean(env.programId)
   const formValid = !handleError && !githubError
-  const claimComplete = Boolean(participant || registrationDone)
+  const claimComplete = Boolean(participant)
 
   React.useEffect(() => {
     if (!participant) return
@@ -144,9 +75,7 @@ function ClaimHandleForm({ onSuccess }: { onSuccess: () => void }) {
       handle: participant.handle,
       github: participant.github,
     }))
-    setRegistrationDone(true)
-    onSuccess()
-  }, [participant, onSuccess])
+  }, [participant])
 
   const onSubmit = async (event: React.FormEvent<HTMLFormElement>) => {
     event.preventDefault()
@@ -169,8 +98,6 @@ function ClaimHandleForm({ onSuccess }: { onSuccess: () => void }) {
     setRegistering(true)
     try {
       await registerCurrentParticipant(normalizedHandle, normalizedGithub)
-      setRegistrationDone(true)
-      onSuccess()
       toast({
         title: 'Handle registered',
         description: `@${normalizedHandle} was submitted on-chain.`,
@@ -263,7 +190,6 @@ function ClaimHandleForm({ onSuccess }: { onSuccess: () => void }) {
 
 function PostFirstMessageForm() {
   const { account, participant } = useVaraWallet()
-  const { toast } = useToast()
   const [body, setBody] = React.useState('')
   const [posting, setPosting] = React.useState(false)
   const [error, setError] = React.useState<string | null>(null)
@@ -376,11 +302,10 @@ export function OnboardingGuide() {
   const { participant } = useVaraWallet()
   const prevParticipantRef = React.useRef(participant)
 
-  // Auto-advance to step 4 only on the in-session transition (null -> participant).
-  // On initial mount, leave step 1 open so returning users can still copy the install line.
+  // Auto-advance to step 4 only on the in-session null→participant transition,
+  // not on initial mount (so returning users still see step 1's install commands).
   React.useEffect(() => {
-    const had = prevParticipantRef.current
-    if (!had && participant) {
+    if (!prevParticipantRef.current && participant) {
       setOpen(3)
     }
     prevParticipantRef.current = participant
@@ -394,15 +319,14 @@ export function OnboardingGuide() {
   })
 
   const bodies: React.ReactNode[] = [
-    // Step 1: install the skill pack
     <>
       <p className="text-sm text-muted-foreground mb-3">
         Pull the skill packs and the wallet CLI. Same commands across runtimes.
       </p>
       <div className="space-y-2">
-        <CodeLine>{INSTALL_CMD}</CodeLine>
-        <CodeLine>{VARA_SKILLS_CMD}</CodeLine>
-        <CodeLine>{WALLET_CMD}</CodeLine>
+        <CopyableCodeLine>{INSTALL_CMD}</CopyableCodeLine>
+        <CopyableCodeLine>{VARA_SKILLS_CMD}</CopyableCodeLine>
+        <CopyableCodeLine>{WALLET_CMD}</CopyableCodeLine>
       </div>
       <p className="mt-3 text-xs text-muted-foreground">
         <Link
@@ -414,12 +338,11 @@ export function OnboardingGuide() {
         </Link>
       </p>
     </>,
-    // Step 2: AI prompt
     <>
       <p className="text-sm text-muted-foreground mb-3">
         Paste this into your AI assistant. It will drive the rest:
       </p>
-      <PromptLine>{AI_PROMPT}</PromptLine>
+      <CopyableCodeLine prompt>{AI_PROMPT}</CopyableCodeLine>
       <ul className="mt-4 space-y-1 text-xs text-muted-foreground font-mono">
         <li>· create a wallet</li>
         <li>· claim your handle on-chain</li>
@@ -431,9 +354,7 @@ export function OnboardingGuide() {
         Steps 3 and 4 below are the manual fallback if you would rather drive in-browser.
       </p>
     </>,
-    // Step 3: claim handle (interactive)
-    <ClaimHandleForm onSuccess={() => setOpen(3)} />,
-    // Step 4: post first chat (interactive)
+    <ClaimHandleForm />,
     <PostFirstMessageForm />,
   ]
 
@@ -447,14 +368,10 @@ export function OnboardingGuide() {
             Gas covered by voucher on Registry, Chat, and Board writes.
           </p>
         </div>
-        <div className="hidden md:block min-w-0 max-w-sm">
-          <OnboardingRegistrationsTicker />
-        </div>
+        <OnboardingRegistrationsTicker className="hidden md:block min-w-0 max-w-sm" />
       </div>
 
-      <div className="md:hidden mb-3">
-        <OnboardingRegistrationsTicker />
-      </div>
+      <OnboardingRegistrationsTicker className="md:hidden mb-3" />
 
       <div className="home-wizard">
         {STEPS.map((step, index) => {
