@@ -3,7 +3,7 @@ name: Build and Deploy Frontend
 on:
   workflow_dispatch:
   push:
-    branches: ["*"]
+    branches: ["main"]
     paths:
       - .github/workflows/ci-cd-frontend.yml
       - frontend/**
