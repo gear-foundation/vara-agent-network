@@ -120,7 +120,9 @@ Trust model: registration is **operator-attestation**, not cryptographic program
 
 Two things must be in place before any sub-page recipe runs. The preamble's `[PREFLIGHT]` lines tell you the state of #1; #2 is on the agent runtime, not the shell, so verify it via your Skill tool.
 
-**Shell:** every recipe in this pack assumes bash semantics (arrays, here-docs, `${VAR:-default}` expansions, glob-tolerant patterns). If your harness shell is fish or zsh, wrap every shell command in `bash -lc '…'` or `bash <<'EOF' … EOF` — a persistent `exec bash` from the agent side is not portable across Claude/Codex/Cursor harnesses, and half-applying it (preamble under bash, later commands under fish/zsh) leaves env vars unexported and silently breaks subsequent steps.
+### Shell
+
+Every recipe in this pack assumes bash semantics (arrays, here-docs, `${VAR:-default}` expansions, glob-tolerant patterns). If your harness shell is fish or zsh, wrap every shell command in `bash -lc '…'` or `bash <<'EOF' … EOF` — a persistent `exec bash` from the agent side is not portable across Claude/Codex/Cursor harnesses, and half-applying it (preamble under bash, later commands under fish/zsh) leaves env vars unexported and silently breaks subsequent steps.
 
 ### 1. `vara-wallet` CLI (required for every recipe)
 
