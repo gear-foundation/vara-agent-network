@@ -3464,28 +3464,196 @@
   max-width: 900px;
 }
 
-.hack-timeline {
+.hack-build-brief {
   display: grid;
-  overflow: hidden;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   margin-top: 24px;
+}
+
+.hack-build-brief__intro {
+  border: 1px solid color-mix(in oklch, var(--primary) 20%, var(--border));
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 8%, transparent), transparent 48%),
+    var(--card);
+  padding: 16px 18px;
+}
+
+.hack-build-brief__intro {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.hack-build-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.hack-build-steps article {
+  position: relative;
+  display: flex;
+  min-height: 168px;
+  flex-direction: column;
+  align-items: flex-start;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  background: var(--card);
+  background:
+    radial-gradient(260px 120px at 0 0, color-mix(in oklch, var(--primary) 7%, transparent), transparent 72%),
+    var(--card);
+  padding: 18px;
+}
+
+.hack-build-steps article > span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.hack-build-steps h3 {
+  margin: 14px 0 8px;
+  color: var(--foreground);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.hack-build-steps p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.hack-tip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: baseline;
+}
+
+.hack-tip__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--primary) 8%, transparent);
+  padding: 0;
+  color: var(--primary);
+  cursor: help;
+}
+
+.hack-build-steps article > .hack-tip,
+.hack-timeline__col > .hack-tip,
+.hack-track-card > .hack-tip,
+.hack-info-grid article > .hack-tip {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.hack-tip__trigger:hover,
+.hack-tip__trigger:focus-visible {
+  border-color: color-mix(in oklch, var(--primary) 56%, var(--border));
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+  outline: none;
+}
+
+.hack-tip__bubble {
+  position: absolute;
+  z-index: 20;
+  display: none;
+  left: 0;
+  bottom: calc(100% + 10px);
+  width: min(330px, calc(100vw - 36px));
+  border: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border));
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 9%, transparent), transparent 52%),
+    oklch(0.115 0 0);
+  box-shadow: 0 18px 46px oklch(0 0 0 / 0.46);
+  padding: 12px 14px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.hack-build-steps article > .hack-tip .hack-tip__bubble,
+.hack-timeline__col > .hack-tip .hack-tip__bubble,
+.hack-track-card > .hack-tip .hack-tip__bubble,
+.hack-info-grid article > .hack-tip .hack-tip__bubble {
+  right: 0;
+  left: auto;
+}
+
+.hack-build-steps article > .hack-tip .hack-tip__bubble::after,
+.hack-timeline__col > .hack-tip .hack-tip__bubble::after,
+.hack-track-card > .hack-tip .hack-tip__bubble::after,
+.hack-info-grid article > .hack-tip .hack-tip__bubble::after {
+  right: 8px;
+  left: auto;
+}
+
+.hack-build-steps .hack-tip__bubble,
+.hack-judging-list .hack-tip__bubble,
+.hack-info-grid .hack-tip__bubble,
+.hack-track-card .hack-tip__bubble,
+.hack-timeline .hack-tip__bubble {
+  position: absolute;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  opacity: 0;
+}
+
+.hack-tip__bubble::after {
+  position: absolute;
+  left: 18px;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border));
+  border-bottom: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border));
+  background: oklch(0.115 0 0);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.hack-tip:hover .hack-tip__bubble,
+.hack-tip__trigger:focus-visible + .hack-tip__bubble {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hack-timeline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+  margin-top: 24px;
 }
 
 .hack-timeline__col {
+  position: relative;
   display: flex;
-  min-height: 260px;
   flex-direction: column;
   gap: 10px;
-  border-right: 1px solid oklch(0.245 0 0 / 0.78);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   background: var(--card);
-  padding: 22px 20px;
-}
-
-.hack-timeline__col:last-child {
-  border-right: 0;
+  padding: 22px 54px 22px 20px;
 }
 
 .hack-timeline__col[data-current="true"] {
@@ -3512,11 +3680,11 @@
   color: var(--foreground);
   font-size: 19px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  line-height: 1.25;
 }
 
 .hack-timeline ul {
-  margin: auto 0 0;
+  margin: 4px 0 0;
   padding-left: 18px;
   color: var(--muted-foreground);
   font-size: 14px;
@@ -3524,15 +3692,22 @@
 }
 
 .hack-timeline li {
-  margin: 2px 0;
+  margin: 6px 0;
   list-style: disc;
 }
 
 .hack-timeline p {
   margin: 2px 0 0;
   color: var(--muted-foreground);
-  font-size: 14.5px;
-  line-height: 1.68;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.hack-timeline__closing {
+  border-top: 1px dashed oklch(0.245 0 0 / 0.78);
+  padding-top: 12px;
+  color: var(--foreground) !important;
+  font-weight: 700;
 }
 
 .hack-accordion {
@@ -3623,6 +3798,7 @@
 
 .hack-track-card {
   --tone: var(--primary);
+  position: relative;
   display: flex;
   min-height: 224px;
   flex-direction: column;
@@ -3631,7 +3807,7 @@
   background:
     radial-gradient(360px 160px at 0 0, color-mix(in oklch, var(--tone) 8%, transparent), transparent 72%),
     var(--card);
-  padding: 24px;
+  padding: 24px 58px 24px 24px;
   transition: border-color 0.15s, transform 0.15s;
 }
 
@@ -3699,6 +3875,15 @@
 .hack-track-card__foot strong {
   color: var(--tone);
   font-size: 15px;
+}
+
+.hack-track-card__success {
+  margin-top: 14px !important;
+  border-top: 1px dashed oklch(0.245 0 0 / 0.82);
+  padding-top: 14px;
+  color: var(--foreground) !important;
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
 }
 
 .hack-split-grid,
@@ -4176,11 +4361,22 @@
 }
 
 .hack-judging-list strong {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
   color: var(--foreground);
   font-size: 15.5px;
   line-height: 1.35;
+}
+
+.hack-judging-list__title .hack-tip {
+  flex: 0 0 auto;
+}
+
+.hack-judging-list__title .hack-tip__trigger {
+  width: 22px;
+  height: 22px;
 }
 
 .hack-judging-list li div span {
@@ -4323,18 +4519,19 @@
 
 .hack-info-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
   margin-top: 24px;
 }
 
 .hack-info-grid article {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background:
     radial-gradient(280px 120px at 100% 0, color-mix(in oklch, var(--primary) 6%, transparent), transparent 72%),
     var(--card);
-  padding: 24px;
+  padding: 24px 58px 24px 24px;
 }
 
 .hack-info-grid span {
@@ -4631,14 +4828,12 @@
     grid-template-columns: 1fr;
   }
 
-  .hack-timeline__col {
-    min-height: auto;
-    border-right: 0;
-    border-bottom: 1px solid oklch(0.245 0 0 / 0.78);
+  .hack-build-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .hack-timeline__col:last-child {
-    border-bottom: 0;
+.hack-timeline__col {
+    min-height: auto;
   }
 
   .hack-track-grid {
@@ -4788,6 +4983,15 @@
   .hack-track-card {
     min-height: 0;
     padding: 20px;
+  }
+
+  .hack-build-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .hack-build-brief__intro,
+  .hack-build-steps article {
+    padding: 18px;
   }
 
   .hack-track-card__foot {
