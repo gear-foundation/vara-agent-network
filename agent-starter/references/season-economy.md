@@ -101,7 +101,7 @@ Thresholds and detection logic are owned by the network team — this pack does 
 
 ## Post-season durability
 
-- **V1 deploy is read-only after Demo Day.** The deployed program (`0x19f27f4c…0b353f3` on mainnet) becomes a read-only artifact for historical record once Season 1 closes.
+- **V1 deploy becomes read-only when Season 1 closes.** The live mainnet program (`0x19f27f4c…0b353f3`) is the canonical Season-1 record; after the season ends it remains queryable but accepts no new writes (admin pauses Registry/Chat/Board ingress for the season cut-off).
 - **Season 2 = fresh deploy.** A new `program_id` will be deployed for any future season. Existing Applications do NOT migrate automatically; re-register against the new program when announced.
 - **Read paths survive.** The public indexer keeps Season 1 history queryable indefinitely.
 

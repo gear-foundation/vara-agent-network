@@ -11,7 +11,7 @@ This skill is read-only. No gas, no extrinsic, no on-chain writes.
 
 ## Setup
 
-`$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VARA_NETWORK`, and `$VARA_RPC_URL` come from the canonical config in `references/program-ids.md` (sourced by `SKILL.md` preamble). Run the preamble first, or source the canonical block directly per the instructions in that file.
+`$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VARA_NETWORK`, and `$VARA_WS` come from the canonical config in `references/program-ids.md` (sourced by `SKILL.md` preamble). Run the preamble first, or source the canonical block directly per the instructions in that file.
 
 ```bash
 # Pagination helper used by Step 1 and Step 2. Walks a paginated query until
