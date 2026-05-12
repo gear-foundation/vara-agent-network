@@ -251,6 +251,16 @@ export function SocialClaim() {
                 disabled={submitting}
               />
             </label>
+            {hasConnectedWallet && account?.address ? (
+              <button
+                className="btn btn--ghost social-claim-modal__intent"
+                type="button"
+                onClick={() => setWallet(account.address)}
+                disabled={submitting}
+              >
+                Use connected wallet
+              </button>
+            ) : null}
             {submitAttempted && walletError ? (
               <p className="social-claim-modal__field-error">{walletError}</p>
             ) : null}
@@ -259,7 +269,9 @@ export function SocialClaim() {
                 Connect wallet to fill address
               </button>
             ) : connectedParticipantMissing ? (
-              <p className="social-claim-modal__checking">This wallet must be a registered participant before it can receive the X reward.</p>
+              <p className="social-claim-modal__checking social-claim-modal__checking--nowrap">
+                Wallet must be registered to receive the X reward.
+              </p>
             ) : null}
             <label className="social-claim-modal__field">
               <span>Tweet URL</span>

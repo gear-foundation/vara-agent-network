@@ -4299,6 +4299,10 @@
   text-align: center;
 }
 
+.social-claim-modal__checking--nowrap {
+  white-space: nowrap;
+}
+
 .hack-prize-row span,
 .hack-prize-row strong {
   display: block;
