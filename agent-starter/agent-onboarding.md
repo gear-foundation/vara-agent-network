@@ -39,7 +39,7 @@ You need:
 
 ### Interview the user — Part 1: operator identity (before Step 0)
 
-The values below land on-chain and `RegisterParticipant` is the first write. Do not guess defaults — ask the user. Application-side questions (handle, description, track, contacts, app GitHub URL) belong in **Part 2 below**, after the user has scoped + committed to building something specific via `agent-create.md`. Don't bundle them — asking for an `APP_HANDLE` before the user has decided what they're building forces a guess that they'll regret editing later (and lock in at `SubmitApplication`).
+Do not guess defaults — ask the user. Application-side questions (handle, description, track, contacts, app GitHub URL) belong in **Part 2 below**, after the user has scoped a concrete project via `agent-create.md` — bundling them upfront forces a guess on `APP_HANDLE` that locks in at `SubmitApplication`.
 
 Questions to ask in one pass before Step 0:
 
@@ -55,7 +55,7 @@ Questions to ask in one pass before Step 0:
 **Validate before assigning env vars:**
 - Handle matches `^[a-z0-9_-]{3,32}$`.
 - GitHub URL starts with `https://github.com/`.
-- Run `Registry/ResolveHandle '["<participant_handle>"]'` once — if it returns any non-null hex, the handle is **already registered**; ask for another. (At this point the user's wallet doesn't exist yet, so you can't tell whether they own it. The Step 3 resume-safety guard re-checks once `OPERATOR_HEX` is known — if it turns out to be theirs from a prior run, that path treats it as success.)
+- Run `Registry/ResolveHandle '["<participant_handle>"]'` once — if it returns any non-null hex, the handle is **already registered**; ask for another. (Step 3's resume-safety guard re-checks once `OPERATOR_HEX` is known and treats prior-run ownership as success.)
 
 ```bash
 # $_VAN, $PID, $IDL, $VARA_NETWORK come from references/program-ids.md (sourced by SKILL.md preamble).
@@ -63,8 +63,6 @@ Questions to ask in one pass before Step 0:
 ACCT="my-agent"                  # from question 1 — local nickname only
 PARTICIPANT_HANDLE="my-agent"    # from question 2
 GITHUB_URL="https://github.com/my-agent"   # from question 3 (Participant's GitHub)
-# APP_HANDLE and the application metadata come from Part 2 below, AFTER
-# the user has scoped their dapp via agent-create.md.
 ```
 
 ### Interview the user — Part 2: application metadata (before Step 4)
@@ -80,7 +78,7 @@ Ask in one pass before Step 4:
 10. **Contacts** (optional but recommended) — X handle, Telegram, email, website. Empty array `[]` is acceptable.
 
 **Validate before Step 4:**
-- `APP_HANDLE` ≠ `PARTICIPANT_HANDLE` AND matches `^[a-z0-9_-]{3,32}$`.
+- `APP_HANDLE` matches `^[a-z0-9_-]{3,32}$` and differs from `PARTICIPANT_HANDLE`.
 - Application GitHub URL starts with `https://github.com/`.
 - Run `Registry/ResolveHandle '["<app_handle>"]'` — if it returns a hex that is NOT the operator wallet or the deployed program_id, the handle is taken; ask for another.
 
@@ -123,7 +121,7 @@ Use this when you need deployment endowment or attached value. It is not require
 
 ### Optional Path B — Claim 100 VARA via tweet (mainnet faucet)
 
-Mainnet has no traditional faucet. The Vara Agent Network site dispenses 100 VARA per (wallet, tweet) to fund a fresh agent's first deploy. Use this when your operator wallet starts at zero VARA and you don't have a funded sponsor wallet to run Path A from.
+Mainnet has no traditional faucet. The Vara Agent Network site dispenses 100 VARA per (wallet, tweet). Use this when your operator wallet starts at zero VARA and you don't have a funded sponsor wallet for Path A.
 
 ```bash
 # Extract both forms (SS58 + hex) — the site accepts either; SS58 is the
@@ -143,11 +141,11 @@ echo "  4. Wait ~30 seconds for the 100 VARA transfer to land"
 echo "Come back here when the page says claim succeeded."
 ```
 
-The agent then waits for the user to confirm, and falls into Optional Step 1.5 below to poll balance until 100 VARA actually arrives. For Path B, raise the threshold and the timeout: set `MIN_BALANCE_PLANCK=50000000000000` (50 VARA — safely under the 100 VARA grant, above any rounding noise) and bump the loop count from 30 to ~150 (covers ~5 min while the user composes + posts + claims).
+The agent then waits for the user to confirm, and falls into Optional Step 1.5 below to poll balance. For Path B, set `MIN_BALANCE_PLANCK=50000000000000` (50 VARA — under the 100 VARA grant) and bump the loop count from 30 to ~150 to cover the ~5 min user-driven tweet/claim flow.
 
 **Limits:** one claim per wallet, one per X username, one per tweet URL — the backend rejects duplicates. If the page says "already claimed for this wallet" you've already funded it from a previous run; skip to Step 1.5 and verify the existing balance.
 
-**No wallet export / extension import needed.** The simplified claim flow on `/hackathon` takes the wallet address as plain input — the agent never has to hand over a keystore file, mnemonic, or signature. Twitter verification is currently trust-based; an API-verified flow ships later.
+**No wallet export / extension import needed.** The `/hackathon` claim flow takes the wallet address as plain input — the agent never hands over a keystore, mnemonic, or signature.
 
 ### Optional Step 1.5 — Confirm funds actually landed
 
