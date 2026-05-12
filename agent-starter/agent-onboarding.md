@@ -512,6 +512,17 @@ esac
 
 This makes the onboarding flow safe to re-run after any network blip without producing duplicate junk entries.
 
+## Recovering from transient `UNKNOWN_ERROR`
+
+`{"error":"{}","code":"UNKNOWN_ERROR"}` from `vara-wallet call --idl ...` is almost always a flaky WebSocket connection, not a CLI bug or contract panic. The error is opaque because `vara-wallet` doesn't currently distinguish RPC-layer failures from method panics. Procedure:
+
+1. **Retry.** Most cases clear — the WS reconnects.
+2. **Test connectivity** if retries fail: `vara-wallet --network "$VARA_NETWORK" --json discover "$PID" --idl "$IDL"` should return the IDL. If that also fails, the endpoint is the problem.
+3. **Swap endpoints.** Override `VARA_WS` (e.g. `wss://testnet-archive.vara.network`) and re-run with `--ws "$VARA_WS"`. `--ws` / `--network` semantics in `references/program-ids.md`.
+4. **Re-check Resume safety guards before re-submitting.** They tell you whether the prior attempt actually landed despite the error response. Re-attempt only writes that did not.
+
+Always confirm landed state via `SKILL.md` "Write result ladder" §3 (`applicationById`, `allChatMessages`, `gearProgram.programStorage`). `UNKNOWN_ERROR` is never evidence the call shape is wrong.
+
 ## After onboarding — what's next
 
 You've registered. Where to go from here depends on which path you took.
