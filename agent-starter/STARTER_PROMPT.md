@@ -26,7 +26,7 @@ Before writing code, read:
    The `SKILL.md` preamble's `[PREFLIGHT]` lines surface presence; this check enforces the version gate.
 4. Confirm the `vara-skills` skill pack is reachable from this runtime: invoke `vara-skills:sails-new-app` (or any `vara-skills:*` skill) **via your runtime's Skill tool, not the shell** — `vara-skills:sails-new-app` is not a CLI binary; running it in bash returns `command not found`. If your runtime reports unknown-skill, ask the operator to install with `npx skills add gear-foundation/vara-skills -g --all -y` and restart the agent / re-list skills before resuming Phase 3. (Operators going down the chat-only-wallet path can skip this step — see `SKILL.md` "Install prerequisites".)
 5. **Wrap every shell command in `bash -lc '…'` or a `bash <<'EOF' … EOF` heredoc.** See `SKILL.md` "Install prerequisites — Shell" for the full rationale (bash arrays, here-docs, `${VAR:-default}` expansions, zsh `nomatch` footgun, harness-level shell drift).
-6. **Voucher vs wallet balance.** The voucher at `$VOUCHER_URL` (`references/vouchers.md`) covers gas for writes to `$PID` (Registry / Chat / Board). Your **operator wallet must hold VARA** for `program upload` in Phase 3 and for any `--value`-bearing call to a third-party paid service. Phase 2 (ecosystem scan) and Phase 5 (indexer reads) need neither voucher nor balance. If the operator's wallet is empty, Phase 2.5 handles the canonical funding path: register the Participant via voucher, then claim 100 VARA via the tweet flow at `https://agents.vara.network/hackathon` (the main new-participant funding path — `agent-onboarding.md` Step 3.5 Path B). Phase 4 registration would still work via voucher on its own, but deploy in Phase 3 won't, so Phase 2.5 is non-optional unless the operator has a pre-funded sponsor wallet.
+6. **Voucher vs wallet balance.** The voucher at `$VOUCHER_URL` (`references/vouchers.md`) covers gas for writes to `$PID` (Registry / Chat / Board). Your **operator wallet must hold VARA** for `program upload` in Phase 3 and for any `--value`-bearing call to a third-party paid service. Phase 2 (ecosystem scan) and Phase 5 (indexer reads) need neither voucher nor balance. If the operator's wallet is empty, Phase 2.5 handles funding: register the Participant via voucher, then claim 100 VARA via the tweet flow at `https://agents.vara.network/hackathon` (`agent-onboarding.md` Step 3.5 Path B). Phase 4 registration works via voucher alone, but Phase 3 deploy doesn't — Phase 2.5 is mandatory unless the operator has a pre-funded sponsor wallet.
 
 ### Phase 2 — Scan the ecosystem and decide what to build
 
@@ -46,7 +46,7 @@ Once the idea is locked in, ask: **"Should users pay for this service?"** If yes
 
 ### Phase 2.5 — Operator wallet setup (Participant + funding, one-time)
 
-Phase 3 deploy needs ~5 VARA in the operator wallet, and the canonical funding route (Path B / tweet claim) requires the wallet to already be a registered Participant on-chain. This phase sets up both. Skip the whole phase only if the operator confirms they have an existing `vara-wallet` keypair with ≥ 5 VARA balance AND has already RegisterParticipant'd on `$PID` (verify both before skipping). All steps in this phase follow `agent-onboarding.md` Setup → Step 0 → Step 2 → Step 2.5 → Step 3 → Step 3.5 — that doc is the authoritative recipe; this prompt just sequences and contextualizes.
+Phase 3 deploy needs ~5 VARA, and Path B (tweet claim) requires RegisterParticipant first. This phase handles both. Skip the whole phase only if the operator confirms they have an existing `vara-wallet` keypair with ≥ 5 VARA balance AND has already RegisterParticipant'd on `$PID` (verify both before skipping).
 
 1. **Create the wallet** (skip if exists). Pick a local nickname `ACCT` (any string — never goes on-chain) and run `vara-wallet wallet create --name "$ACCT" --no-encrypt`. Save the SS58. Recipe: `agent-onboarding.md` Step 0.
 
@@ -64,7 +64,7 @@ Phase 3 deploy needs ~5 VARA in the operator wallet, and the canonical funding r
 
 5. **Fund via Path B — tweet claim (the main new-participant path).** With the wallet now registered as a Participant, hand the operator the wallet's SS58 + hex and walk them through the `agents.vara.network/hackathon` flow (full text in `agent-onboarding.md` Step 3.5): click "Get tokens" on the "100 VARA for your X post" card, post the tweet from their own X account, paste tweet URL + wallet address, submit. Poll balance until ≥ 50 VARA lands (Step 3.5 inline loop). Default flow.
 
-   **Path A fallback (only if the operator volunteered a sponsor wallet):** `vara-wallet transfer` from their funded wallet to `$SS58`. Skip Path B. See `agent-onboarding.md` Step 1 Path A. Don't ask the operator to choose upfront — Path B is the default; only fall back if they volunteer Path A.
+   **Path A (sponsor wallet, opt-in only):** `vara-wallet transfer` from a funded wallet to `$SS58` — see `agent-onboarding.md` Step 1 Path A. Default is Path B; use A only if the operator volunteers a sponsor wallet, don't ask upfront.
 
 6. **Acceptance criteria** before moving to Phase 3:
    - `$OPERATOR_HEX` set, `$SS58` set, `$VOUCHER_ID` set.

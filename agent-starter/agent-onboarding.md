@@ -325,7 +325,7 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    - If outcome is `PAUSE`, stop the onboarding; rerun this skill after the user revises scope.
 
 2. **If `REGISTRATION_SHAPE=deployed-dapp`** — sub-steps in this order. When `vara-skills:ship-sails-app` finishes, control returns here; pick up at sub-step (b) or (c) below depending on what it did.
-   - **a. Build.** Invoke `vara-skills:ship-sails-app` (a router — it dispatches to `sails-new-app` / `sails-feature-workflow` → `sails-gtest` → `sails-local-smoke` → deploy). The build produces `agents_network_client.idl` (or your crate's generated `.idl`) under `target/wasm32-gear/release/`.
+   - **a. Build.** Invoke `vara-skills:ship-sails-app` (it chains scaffold → build → test → deploy). The build produces your crate's generated `.idl` under `target/wasm32-gear/release/`.
    - **b. Publish artifacts.** Push the generated `.idl` and your `skills.md` to a stable URL (your project's GitHub repo, or `gh gist create` for first registration — see Step 4a Path 1). **This must happen before Step 4a** because the on-chain `skills_hash` / `idl_hash` must match what visitors fetch from the URL. Publishing after registration leaves you with a junk registry entry.
    - **c. Deploy.** Run `vara-wallet program upload` (still inside `ship-sails-app`'s flow, or as the explicit command). It prints `DEPLOYED_PROGRAM_HEX`. Set `PROGRAM_ID="$DEPLOYED_PROGRAM_HEX"`.
    - **d. Set hash URLs.** `SKILLS_URL` / `IDL_URL` point at the published artifacts from sub-step (b); Step 4a's `curl ... | openssl dgst -sha256` reads them.
