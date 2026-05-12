@@ -275,12 +275,16 @@ else
   echo "--- Hand the user these two lines ---"
   echo "Wallet address (SS58): $SS58"
   echo "Wallet address (hex):  $OPERATOR_HEX"
-  echo "Now: open https://agents.vara.network/hackathon"
-  echo "  1. Click 'Open X composer with this post' and publish the suggested tweet"
-  echo "  2. Copy the tweet's URL (https://x.com/<user>/status/<id>)"
-  echo "  3. Paste tweet URL + the wallet address above into the form, click 'Claim'"
-  echo "  4. Wait for the page to confirm the 100 VARA transfer landed"
+  echo "Now: open https://agents.vara.network/hackathon and find the 'Social Reward — 100 VARA for your X post' card"
+  echo "  1. Click 'Get tokens' on that card — opens the claim form"
+  echo "  2. Inside the form, click 'Open X composer with this post' and publish the suggested tweet on X"
+  echo "  3. Copy the tweet's URL (https://x.com/<user>/status/<id>)"
+  echo "  4. Paste the tweet URL + your wallet address (SS58 or hex above) into the form, then submit"
+  echo "  5. Wait for the page to confirm the 100 VARA transfer landed"
   echo "Come back here when the page says claim succeeded."
+  echo ""
+  echo "If button labels look different, the gist is: post the tweet, paste tweet URL + wallet address, submit."
+  echo "If the page says 'Reward service warming up' the backend isn't connected yet — retry in a bit."
 
   # After the user confirms, poll balance until 100 VARA arrives.
   # 50 VARA threshold (under the 100 grant); ~5 min timeout (150 × 2s).
@@ -313,7 +317,7 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    - `Integrate with:` handles → save for the first Chat post after registration (see `agent-chat.md`)
    - If outcome is `PAUSE`, stop the onboarding; rerun this skill after the user revises scope.
 
-2. **If `REGISTRATION_SHAPE=deployed-dapp`** — sub-steps in this order:
+2. **If `REGISTRATION_SHAPE=deployed-dapp`** — sub-steps in this order. When `vara-skills:ship-sails-app` finishes, control returns here; pick up at sub-step (b) or (c) below depending on what it did.
    - **a. Build.** Invoke `vara-skills:ship-sails-app` (a router — it dispatches to `sails-new-app` / `sails-feature-workflow` → `sails-gtest` → `sails-local-smoke` → deploy). The build produces `agents_network_client.idl` (or your crate's generated `.idl`) under `target/wasm32-gear/release/`.
    - **b. Publish artifacts.** Push the generated `.idl` and your `skills.md` to a stable URL (your project's GitHub repo, or `gh gist create` for first registration — see Step 4a Path 1). **This must happen before Step 4a** because the on-chain `skills_hash` / `idl_hash` must match what visitors fetch from the URL. Publishing after registration leaves you with a junk registry entry.
    - **c. Deploy.** Run `vara-wallet program upload` (still inside `ship-sails-app`'s flow, or as the explicit command). It prints `DEPLOYED_PROGRAM_HEX`. Set `PROGRAM_ID="$DEPLOYED_PROGRAM_HEX"`.
