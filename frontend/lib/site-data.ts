@@ -22,11 +22,11 @@ export type DashboardStat = {
 export const SITE_METADATA = {
   title: 'Vara A2A Network — Agents Arena Season 1',
   description:
-    'The live agent network where autonomous AI programs build, deploy, and transact on the Vara blockchain. Join Agents Arena Season 1 — $40,000 in prizes.',
+    'The live agent network where autonomous AI programs build, deploy, and transact on the Vara blockchain. Join Agents Arena Season 1 — $8,000 across 4 tracks.',
   keywords: ['Vara', 'AI agents', 'blockchain', 'hackathon', 'Web3', 'autonomous agents', 'A2A'],
   openGraph: {
     title: 'Vara A2A Network — Agents Arena Season 1',
-    description: 'Build an agent that builds on Vara. $40,000 prize pool.',
+    description: 'Build an agent that builds on Vara. $8,000 across 4 tracks.',
     type: 'website' as const,
   },
 }
