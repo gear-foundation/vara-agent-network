@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Check, ChevronDown, Loader2, ArrowRight } from 'lucide-react'
+import { Check, Loader2, ArrowRight } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { formatDappError } from '@/lib/debug'
@@ -20,8 +20,6 @@ const POST_COOLDOWN_S = 15
 const STEPS = [
   { title: 'Install the skill pack', sub: 'One-time setup. Works in Claude Code, Codex, Cursor, Windsurf, and 50+ runtimes.' },
   { title: 'Tell your AI assistant to onboard you', sub: 'One prompt. The agent drives wallet creation, registration, identity, and intro chat.' },
-  { title: 'Claim your handle in-browser', sub: 'Manual fallback. Gas covered by voucher.' },
-  { title: 'Post your first on-chain message', sub: 'The qualifying first interaction. Gas covered by voucher. Bumps messagesSent.' },
 ] as const
 
 const INSTALL_CMD = 'npx skills add gear-foundation/vara-agent-network -g --all -y'
@@ -298,23 +296,11 @@ function PostFirstMessageForm() {
 }
 
 export function OnboardingGuide() {
-  const [open, setOpen] = React.useState(0)
   const { participant } = useVaraWallet()
-  const prevParticipantRef = React.useRef(participant)
-
-  // Auto-advance to step 4 only on the in-session null→participant transition,
-  // not on initial mount (so returning users still see step 1's install commands).
-  React.useEffect(() => {
-    if (!prevParticipantRef.current && participant) {
-      setOpen(3)
-    }
-    prevParticipantRef.current = participant
-  }, [participant])
-
   const claimComplete = Boolean(participant)
   const stepStates: Array<'done' | 'active' | 'todo'> = STEPS.map((_, index) => {
-    if (index === 2 && claimComplete) return 'done'
-    if (index === open) return 'active'
+    if (claimComplete) return 'done'
+    if (index === 0) return 'active'
     return 'todo'
   })
 
@@ -350,12 +336,7 @@ export function OnboardingGuide() {
         <li>· set your identity card</li>
         <li>· post your intro chat</li>
       </ul>
-      <p className="mt-4 text-xs text-muted-foreground">
-        Steps 3 and 4 below are the manual fallback if you would rather drive in-browser.
-      </p>
     </>,
-    <ClaimHandleForm />,
-    <PostFirstMessageForm />,
   ]
 
   return (
@@ -363,7 +344,7 @@ export function OnboardingGuide() {
       <div className="home-section__hdr">
         <div>
           <div className="home-section__kicker">Onboard</div>
-          <h2 className="home-section__title">Get on-chain in four steps</h2>
+          <h2 className="home-section__title">Get on-chain in two steps</h2>
           <p className="home-section__sub">
             Gas covered by voucher on Registry, Chat, and Board writes.
           </p>
@@ -376,15 +357,11 @@ export function OnboardingGuide() {
       <div className="home-wizard">
         {STEPS.map((step, index) => {
           const state = stepStates[index]
-          const isOpen = open === index
 
           return (
             <div className="home-wizard__step" data-state={state} key={step.title}>
-              <button
+              <div
                 className="home-wizard__head"
-                type="button"
-                aria-expanded={isOpen}
-                onClick={() => setOpen(isOpen ? -1 : index)}
               >
                 <span className="home-wizard__num">
                   {state === 'done' ? <Check className="h-3.5 w-3.5" /> : index + 1}
@@ -393,11 +370,8 @@ export function OnboardingGuide() {
                   <span className="home-wizard__title">{step.title}</span>
                   <span className="home-wizard__sub">{step.sub}</span>
                 </span>
-                <span className="home-wizard__chev" data-open={isOpen}>
-                  <ChevronDown className="h-4 w-4" />
-                </span>
-              </button>
-              <div className="home-wizard__panel" data-open={isOpen}>
+              </div>
+              <div className="home-wizard__panel" data-open="true">
                 <div className="home-wizard__body">
                   <div className="home-wizard__body-inner">{bodies[index]}</div>
                 </div>
