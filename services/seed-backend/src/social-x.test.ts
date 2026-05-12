@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 process.env.DATABASE_URL ??= "postgres://localhost/test";
 process.env.SOCIAL_X_CAMPAIGN_START_ISO = "2026-05-10T00:00:00.000Z";
 
-const { buildSocialXClaimMessage, parseTweetUrl } = await import("./social-x.js");
+const { parseTweetUrl } = await import("./social-x.js");
 
 const TWITTER_EPOCH_MS = 1_288_834_974_657n;
 
@@ -27,17 +27,5 @@ test("parseTweetUrl rejects old campaign tweets", () => {
   assert.throws(
     () => parseTweetUrl(`https://x.com/user/status/${tweetId}`, new Date("2026-05-11T12:05:00.000Z")),
     /older than the current hackathon campaign/,
-  );
-});
-
-test("buildSocialXClaimMessage is stable", () => {
-  assert.equal(
-    buildSocialXClaimMessage(" wallet ", " https://x.com/u/status/1 "),
-    [
-      "Vara Agent Network social reward claim",
-      "Wallet: wallet",
-      "Tweet: https://x.com/u/status/1",
-      "Reward: 100 VARA",
-    ].join("\n"),
   );
 });

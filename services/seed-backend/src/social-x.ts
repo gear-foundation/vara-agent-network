@@ -1,6 +1,5 @@
 import { createHash } from "node:crypto";
 import type { Pool, PoolClient } from "pg";
-import { signatureVerify } from "@polkadot/util-crypto";
 import { config, varaToPlanck } from "./config.js";
 import { pool, getParticipantByWallet, type ParticipantRow } from "./db.js";
 import { requireAddress } from "./address.js";
@@ -47,15 +46,6 @@ export class ClaimRequestError extends Error {
     super(message);
     this.statusCode = statusCode;
   }
-}
-
-export function buildSocialXClaimMessage(wallet: string, tweetUrl: string): string {
-  return [
-    "Vara Agent Network social reward claim",
-    `Wallet: ${wallet.trim()}`,
-    `Tweet: ${tweetUrl.trim()}`,
-    `Reward: ${config.socialXRewardVara} VARA`,
-  ].join("\n");
 }
 
 export function parseTweetUrl(input: string, now = new Date()): ParsedTweetUrl {
@@ -134,24 +124,9 @@ export class SocialXClaimService {
     if (!body || typeof body !== "object") throw new ClaimRequestError("request body is required");
     const walletRaw = requireBodyString(body, "wallet");
     const tweetUrlRaw = requireBodyString(body, "tweetUrl");
-    const signature = requireBodyString(body, "signature");
     const wallet = requireAddress(walletRaw, "wallet");
     const parsed = parseTweetUrl(tweetUrlRaw);
     const ipShape = ipFingerprint(ip);
-
-    const expectedMessage = buildSocialXClaimMessage(walletRaw, tweetUrlRaw);
-    const verified = signatureVerify(expectedMessage, signature, walletRaw);
-    if (!verified.isValid) {
-      await recordAttempt(null, {
-        wallet,
-        parsed,
-        ipHash: ipShape.hash,
-        ipSubnet: ipShape.subnet,
-        outcome: "rejected",
-        reason: "bad_signature",
-      });
-      throw new ClaimRequestError("signature does not match wallet");
-    }
 
     const participant = await getParticipantByWallet(wallet);
     if (!participant) {

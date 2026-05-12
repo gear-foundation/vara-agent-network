@@ -3,9 +3,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
 import { CheckCircle2, ExternalLink, Loader2, Send } from 'lucide-react'
+import { decodeAddress } from '@polkadot/util-crypto'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { toast } from '@/hooks/use-toast'
-import { buildSocialXClaimMessage, type SocialXClaim } from '@/lib/social-x-claim'
+import type { SocialXClaim } from '@/lib/social-x-claim'
 
 type ClaimResponse = {
   claim: SocialXClaim | null
@@ -31,10 +32,10 @@ export function SocialClaim() {
     participant,
     participantLoading,
     connect,
-    signMessage,
   } = useVaraWallet()
   const [claim, setClaim] = useState<SocialXClaim | null>(null)
   const [rewardVara, setRewardVara] = useState(100)
+  const [wallet, setWallet] = useState('')
   const [tweetUrl, setTweetUrl] = useState('')
   const [modalOpen, setModalOpen] = useState(false)
   const [loadingClaim, setLoadingClaim] = useState(false)
@@ -52,9 +53,15 @@ export function SocialClaim() {
     [tweetText],
   )
   const tweetUrlError = useMemo(() => validateTweetUrl(tweetUrl), [tweetUrl])
+  const walletError = useMemo(() => validateWallet(wallet), [wallet])
+
+  useEffect(() => {
+    if (account?.address && !wallet) setWallet(account.address)
+  }, [account?.address, wallet])
 
   const refreshClaim = useCallback(async () => {
-    if (!account) {
+    const cleanWallet = wallet.trim()
+    if (!cleanWallet || validateWallet(cleanWallet)) {
       setClaim(null)
       return
     }
@@ -63,7 +70,7 @@ export function SocialClaim() {
     setError(null)
     setServiceUnavailable(false)
     try {
-      const res = await fetch(`/api/social/x-claim/${encodeURIComponent(account.address)}`, { cache: 'no-store' })
+      const res = await fetch(`/api/social/x-claim/${encodeURIComponent(cleanWallet)}`, { cache: 'no-store' })
       const data = await readClaimResponse(res)
       if (res.status === 503) {
         setServiceUnavailable(true)
@@ -83,19 +90,19 @@ export function SocialClaim() {
     } finally {
       setLoadingClaim(false)
     }
-  }, [account])
+  }, [wallet])
 
   useEffect(() => {
     void refreshClaim()
   }, [refreshClaim])
 
   useEffect(() => {
-    if (!account || !claim || claim.status === 'SENT') return
+    if (!wallet.trim() || !claim || claim.status === 'SENT') return
     const id = window.setInterval(() => {
       void refreshClaim()
     }, 10_000)
     return () => window.clearInterval(id)
-  }, [account, claim, refreshClaim])
+  }, [wallet, claim, refreshClaim])
 
   useEffect(() => {
     setPortalReady(true)
@@ -112,29 +119,24 @@ export function SocialClaim() {
 
   async function submitClaim() {
     setSubmitAttempted(true)
-    if (!account) {
-      await connect()
-      return
-    }
-    if (!participant) return
 
     setSubmitting(true)
     setChecking(false)
     setError(null)
     try {
+      const cleanWallet = wallet.trim()
+      const localWalletError = validateWallet(cleanWallet)
+      if (localWalletError) throw new Error(localWalletError)
       const cleanTweetUrl = tweetUrl.trim()
       const localError = validateTweetUrl(cleanTweetUrl)
       if (localError) throw new Error(localError)
-      const message = buildSocialXClaimMessage(account.address, cleanTweetUrl, rewardVara)
-      const signature = await signMessage(message)
       setChecking(true)
       const res = await fetch('/api/social/x-claim', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({
-          wallet: account.address,
+          wallet: cleanWallet,
           tweetUrl: cleanTweetUrl,
-          signature,
         }),
       })
       const data = await readClaimResponse(res)
@@ -157,9 +159,9 @@ export function SocialClaim() {
     }
   }
 
-  const disabled = Boolean(claim) || submitting || checking || participantLoading || loadingClaim || serviceUnavailable
-  const needsWallet = walletStatus !== 'connected' || !account
-  const needsParticipant = !needsWallet && !participant && !participantLoading
+  const disabled = Boolean(claim) || submitting || checking || loadingClaim || serviceUnavailable
+  const hasConnectedWallet = walletStatus === 'connected' && Boolean(account)
+  const connectedParticipantMissing = hasConnectedWallet && !participant && !participantLoading
 
   return (
     <article className="social-claim">
@@ -173,7 +175,7 @@ export function SocialClaim() {
       </div>
 
       <div className="social-claim__status" data-state={claim?.status ?? 'ready'}>
-        {loadingClaim || participantLoading ? (
+        {loadingClaim ? (
           <>
             <Loader2 size={18} className="social-claim__spin" />
             <span>Checking reward status</span>
@@ -195,10 +197,8 @@ export function SocialClaim() {
           </>
         ) : serviceUnavailable ? (
           <span>Reward service warming up</span>
-        ) : needsParticipant ? (
-          <span>Register as a participant first</span>
         ) : (
-          <span>Awaiting tweet URL</span>
+          <span>Ready to claim</span>
         )}
       </div>
 
@@ -207,19 +207,15 @@ export function SocialClaim() {
           <ExternalLink size={16} />
           View submitted post
         </a>
-      ) : needsWallet ? (
-        <button className="btn btn--primary" type="button" onClick={() => void connect()}>
-          Connect wallet
-        </button>
       ) : (
         <button
           className="btn btn--primary"
           type="button"
-          disabled={disabled || needsParticipant}
+          disabled={disabled}
           onClick={() => setModalOpen(true)}
         >
           <Send size={16} />
-          Submit tweet
+          Get tokens
         </button>
       )}
 
@@ -236,16 +232,35 @@ export function SocialClaim() {
               <span aria-hidden="true">×</span>
             </button>
             <div className="section__kicker">X reward</div>
-            <h3 id="social-claim-title">Post, paste the link, sign</h3>
+            <h3 id="social-claim-title">Post, paste the link, get tokens</h3>
             <div className="social-claim-modal__steps">
               <span>1. Create the post</span>
-              <span>2. Paste its URL</span>
+              <span>2. Add wallet + URL</span>
             </div>
             <div className="social-claim-modal__tweet">{tweetText}</div>
             <a className="btn btn--primary social-claim-modal__intent" href={tweetIntentUrl} target="_blank" rel="noreferrer">
               <ExternalLink size={16} />
               Open X composer with this post
             </a>
+            <label className="social-claim-modal__field">
+              <span>Agent wallet address</span>
+              <input
+                value={wallet}
+                onChange={(event) => setWallet(event.target.value)}
+                placeholder="0x... or Vara SS58 address"
+                disabled={submitting}
+              />
+            </label>
+            {submitAttempted && walletError ? (
+              <p className="social-claim-modal__field-error">{walletError}</p>
+            ) : null}
+            {!hasConnectedWallet ? (
+              <button className="btn btn--ghost social-claim-modal__intent" type="button" onClick={() => void connect()} disabled={submitting}>
+                Connect wallet to fill address
+              </button>
+            ) : connectedParticipantMissing ? (
+              <p className="social-claim-modal__checking">This wallet must be a registered participant before it can receive the X reward.</p>
+            ) : null}
             <label className="social-claim-modal__field">
               <span>Tweet URL</span>
               <input
@@ -263,9 +278,14 @@ export function SocialClaim() {
             {(tweetUrlTouched || submitAttempted) && tweetUrlError ? (
               <p className="social-claim-modal__field-error">{tweetUrlError}</p>
             ) : null}
-            <button className="btn btn--primary social-claim-modal__submit" type="button" onClick={() => void submitClaim()} disabled={submitting || Boolean(tweetUrlError)}>
+            <button
+              className="btn btn--primary social-claim-modal__submit"
+              type="button"
+              onClick={() => void submitClaim()}
+              disabled={submitting || Boolean(tweetUrlError) || Boolean(walletError)}
+            >
               {submitting ? <Loader2 size={16} className="social-claim__spin" /> : <Send size={16} />}
-              {checking ? 'Checking your tweet' : submitting ? 'Signing claim' : 'I posted it'}
+              {checking ? 'Checking your tweet' : submitting ? 'Submitting claim' : 'Get tokens'}
             </button>
             {checking ? (
               <p className="social-claim-modal__checking">We are validating the tweet link and queueing your reward.</p>
@@ -300,6 +320,18 @@ function validateTweetUrl(value: string): string | null {
   }
 
   return null
+}
+
+function validateWallet(value: string): string | null {
+  const clean = value.trim()
+  if (!clean) return 'Paste the agent wallet address to continue.'
+  if (/^0x[0-9a-fA-F]{64}$/.test(clean)) return null
+  try {
+    if (decodeAddress(clean).length === 32) return null
+  } catch {
+    // Fall through to the user-facing validation error.
+  }
+  return 'Wallet address must be a valid Vara SS58 or 32-byte hex address.'
 }
 
 async function readClaimResponse(res: Response): Promise<ClaimResponse> {

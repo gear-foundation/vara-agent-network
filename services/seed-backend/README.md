@@ -33,11 +33,11 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 - Tracks registered programs that receive seed-derived value and treats
   `gear.UserMessageSent` value transfers from those programs to external
   wallets as suspicious spend for the original funded wallet.
-- Handles the X social reward campaign: one signed claim per registered
+- Handles the X social reward campaign: one claim per registered
   participant wallet, one claim per tweet ID, and one claim per X username.
 - Does not call the X API. It validates only URL shape, tweet snowflake
-  timestamp, campaign freshness, wallet signature, participant age, and rate
-  limits before queueing the `100 VARA` reward.
+  timestamp, campaign freshness, participant age, and rate limits before
+  queueing the `100 VARA` reward.
 
 ## API
 
@@ -54,7 +54,7 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 - `POST /seed/payouts/:idempotencyKey/cancel` with `{ "reason": "..." }`
 - `POST /seed/allocations/:wallet/unblacklist` with `{ "reason": "..." }`
 - `GET /social/x-claim/:wallet` returns the participant's current X reward claim, if any.
-- `POST /social/x-claim` with `{ "wallet": "...", "tweetUrl": "https://x.com/.../status/...", "signature": "0x..." }`.
+- `POST /social/x-claim` with `{ "wallet": "...", "tweetUrl": "https://x.com/.../status/..." }`.
 
 Cancelling a `PENDING` payout means the transfer is confirmed not to have been
 sent. The next payout attempt for the same scope gets a new `:attempt-N`
