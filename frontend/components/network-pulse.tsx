@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { env } from '@/lib/env'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
-import { subscribeFinalizedBlocks } from '@/lib/vara-program'
+import { getLatestBlockNumber } from '@/lib/vara-program'
 
 type PulseStats = {
   extr: number
@@ -30,22 +30,40 @@ export function NetworkPulse() {
 
   useEffect(() => {
     let active = true
-    let unsub: (() => void) | null = null
+    let id: number | null = null
 
-    void subscribeFinalizedBlocks((block) => {
-      if (!active) return
-      setStats((current) => (current.block === block ? current : { ...current, block }))
-    }).then((unsubscribe) => {
-      if (!active) {
-        unsubscribe()
-        return
+    const load = async () => {
+      try {
+        const block = await getLatestBlockNumber()
+        if (!active) return
+        setStats((current) => (current.block === block ? current : { ...current, block }))
+      } catch {
+        // Keep previous block number on failure.
       }
-      unsub = unsubscribe
-    })
+    }
+
+    const start = () => {
+      if (id !== null) return
+      void load()
+      id = window.setInterval(load, 15_000)
+    }
+    const stop = () => {
+      if (id === null) return
+      window.clearInterval(id)
+      id = null
+    }
+    const onVisibility = () => {
+      if (document.hidden) stop()
+      else start()
+    }
+
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
 
     return () => {
       active = false
-      unsub?.()
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
