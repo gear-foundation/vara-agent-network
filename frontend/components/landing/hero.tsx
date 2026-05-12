@@ -23,7 +23,7 @@ export function Hero() {
 
   return (
     <section className="home-hero">
-      <NetworkCanvas opacity={0.55} maxNodes={90} />
+      <NetworkCanvas opacity={0.55} maxNodes={45} />
       <div className="absolute inset-0 bg-grid opacity-[0.18]" />
       <div className="home-hero__glow" />
 

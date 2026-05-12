@@ -33,7 +33,7 @@ const NODE_TYPES = [
 
 const EDGE_DIST = 148
 const EDGE_DIST_SQ = EDGE_DIST * EDGE_DIST
-const TARGET_FPS = 24
+const TARGET_FPS = 12
 const FRAME_INTERVAL = 1000 / TARGET_FPS
 // Sprite is rendered at this radius in source pixels, then scaled at drawImage time.
 const SPRITE_BASE_RADIUS = 6
