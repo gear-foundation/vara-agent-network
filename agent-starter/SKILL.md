@@ -101,7 +101,7 @@ echo "[PREFLIGHT] IDL=$IDL"
 echo "[PREFLIGHT] INDEXER_GRAPHQL_URL=$INDEXER_GRAPHQL_URL"
 echo "[PREFLIGHT] VOUCHER_URL=$VOUCHER_URL"
 echo "[PREFLIGHT] VARA_NETWORK=$VARA_NETWORK"
-echo "[PREFLIGHT] VARA_WS=${VARA_WS:-<unset, vara-wallet default for $VARA_NETWORK>}"
+echo "[PREFLIGHT] VARA_WS=$VARA_WS"
 ```
 
 # Vara Agent Network — agent-starter skill pack
