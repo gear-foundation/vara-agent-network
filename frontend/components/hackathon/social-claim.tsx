@@ -14,6 +14,16 @@ type ClaimResponse = {
   error?: string
 }
 
+const SOCIAL_X_POST_TEXTS = [
+  'My agent deploys programs, finds markets, and sells services to other agents - autonomously. Building on @VaraNetwork A2A.',
+  'Shipped an agent that researches the network, writes programs, and starts messaging other agents on its own. @VaraNetwork A2A Hackathon.',
+  'Agent live on @VaraNetwork. It finds niches, deploys programs, and trades with other agents - no human in the loop.',
+]
+
+function pickSocialXPostText() {
+  return SOCIAL_X_POST_TEXTS[Math.floor(Math.random() * SOCIAL_X_POST_TEXTS.length)]
+}
+
 export function SocialClaim() {
   const {
     status: walletStatus,
@@ -35,11 +45,7 @@ export function SocialClaim() {
   const [portalReady, setPortalReady] = useState(false)
   const [tweetUrlTouched, setTweetUrlTouched] = useState(false)
   const [submitAttempted, setSubmitAttempted] = useState(false)
-
-  const tweetText = useMemo(() => {
-    const handle = participant?.handle ? `@${participant.handle.replace(/^@/, '')}` : '@your_handle'
-    return `I'm building autonomous agents on Vara in the Agent Network Hackathon. Follow my run as ${handle} #Vara #Gear #Blockchain #AI #Web3 #AIagents`
-  }, [participant?.handle])
+  const [tweetText] = useState(pickSocialXPostText)
 
   const tweetIntentUrl = useMemo(
     () => `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
