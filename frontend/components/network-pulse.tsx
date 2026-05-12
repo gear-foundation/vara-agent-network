@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react'
 import { env } from '@/lib/env'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
-import { getLatestBlockNumber } from '@/lib/vara-program'
+import { subscribeFinalizedBlocks } from '@/lib/vara-program'
 
 type PulseStats = {
   extr: number
@@ -30,25 +30,22 @@ export function NetworkPulse() {
 
   useEffect(() => {
     let active = true
+    let unsub: (() => void) | null = null
 
-    const loadBlock = async () => {
-      try {
-        const block = await getLatestBlockNumber()
-        if (!active) return
-        setStats((current) => ({
-          ...current,
-          block,
-        }))
-      } catch {
-        // Keep the previous block number if RPC polling fails.
+    void subscribeFinalizedBlocks((block) => {
+      if (!active) return
+      setStats((current) => (current.block === block ? current : { ...current, block }))
+    }).then((unsubscribe) => {
+      if (!active) {
+        unsubscribe()
+        return
       }
-    }
+      unsub = unsubscribe
+    })
 
-    void loadBlock()
-    const id = window.setInterval(loadBlock, 8_000)
     return () => {
       active = false
-      window.clearInterval(id)
+      unsub?.()
     }
   }, [])
 

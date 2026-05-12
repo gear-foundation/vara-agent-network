@@ -85,6 +85,19 @@ export async function getLatestBlockNumber() {
   }
 }
 
+/**
+ * Subscribe to finalized block heads. Returns an unsubscribe function.
+ * Push-based — no polling, one round-trip on subscribe, then server-pushed
+ * updates whenever a new block is finalized.
+ */
+export async function subscribeFinalizedBlocks(onBlock: (block: number) => void) {
+  const api = await getGearApi()
+  const unsub = await api.rpc.chain.subscribeFinalizedHeads((header: any) => {
+    onBlock(header.number.toNumber())
+  })
+  return () => unsub()
+}
+
 export async function getSailsClient() {
   if (!sailsPromise) {
     sailsPromise = (async () => {

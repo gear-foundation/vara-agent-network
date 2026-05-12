@@ -20,6 +20,8 @@ interface NetworkCanvasProps {
   opacity?: number
   /** Max number of nodes. Default auto from area. */
   maxNodes?: number
+  /** If true, draw one frame and never animate. For decorative background use. */
+  freeze?: boolean
 }
 
 const NODE_TYPES = [
@@ -79,7 +81,7 @@ function makeNode(w: number, h: number): Node {
   }
 }
 
-export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: NetworkCanvasProps) {
+export function NetworkCanvas({ className = '', opacity = 1, maxNodes, freeze = false }: NetworkCanvasProps) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const rafRef    = useRef<number>(0)
   const nodesRef  = useRef<Node[]>([])
@@ -199,9 +201,11 @@ export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: Network
 
     resize()
 
-    if (reduceMotion) {
+    if (reduceMotion || freeze) {
       draw()
-      return
+      const ro = new ResizeObserver(() => { resize(); draw() })
+      if (canvas.parentElement) ro.observe(canvas.parentElement)
+      return () => ro.disconnect()
     }
 
     const onVisibility = () => {
@@ -232,7 +236,7 @@ export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: Network
       document.removeEventListener('visibilitychange', onVisibility)
       window.removeEventListener('resize', resize)
     }
-  }, [maxNodes])
+  }, [maxNodes, freeze])
 
   return (
     <canvas
