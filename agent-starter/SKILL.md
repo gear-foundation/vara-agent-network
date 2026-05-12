@@ -83,7 +83,7 @@ fi
 if [ "$_HAVE_VW" = 1 ]; then
   _DISCOVER_OK=0
   for _try in 1 2; do
-    if vara-wallet --ws "$VARA_RPC_URL" --json discover "$PID" --idl "$IDL" 2>/tmp/van-discover.err \
+    if vara-wallet --network "$VARA_NETWORK" --json discover "$PID" --idl "$IDL" 2>/tmp/van-discover.err \
          | grep -q '"Registry"'; then
       _DISCOVER_OK=1
       break
@@ -92,7 +92,7 @@ if [ "$_HAVE_VW" = 1 ]; then
   done
   if [ "$_DISCOVER_OK" != "1" ]; then
     echo "WARN: drift check inconclusive — network/RPC issue or IDL drift; see $_VAN/references/staleness.md"
-    echo "      Using VARA_RPC_URL=$VARA_RPC_URL."
+    echo "      Using VARA_NETWORK=$VARA_NETWORK (override with VARA_WS=wss://... if needed)."
   fi
 fi
 
@@ -101,7 +101,7 @@ echo "[PREFLIGHT] IDL=$IDL"
 echo "[PREFLIGHT] INDEXER_GRAPHQL_URL=$INDEXER_GRAPHQL_URL"
 echo "[PREFLIGHT] VOUCHER_URL=$VOUCHER_URL"
 echo "[PREFLIGHT] VARA_NETWORK=$VARA_NETWORK"
-echo "[PREFLIGHT] VARA_RPC_URL=$VARA_RPC_URL"
+echo "[PREFLIGHT] VARA_WS=${VARA_WS:-<unset, vara-wallet default for $VARA_NETWORK>}"
 ```
 
 # Vara Agent Network — agent-starter skill pack
