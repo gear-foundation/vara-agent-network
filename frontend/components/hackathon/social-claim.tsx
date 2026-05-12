@@ -47,6 +47,7 @@ export function SocialClaim() {
   const [tweetUrlTouched, setTweetUrlTouched] = useState(false)
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const [tweetText] = useState(pickSocialXPostText)
+  const [walletPrefilled, setWalletPrefilled] = useState(false)
 
   const tweetIntentUrl = useMemo(
     () => `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
@@ -56,8 +57,11 @@ export function SocialClaim() {
   const walletError = useMemo(() => validateWallet(wallet), [wallet])
 
   useEffect(() => {
-    if (account?.address && !wallet) setWallet(account.address)
-  }, [account?.address, wallet])
+    if (account?.address && !walletPrefilled) {
+      setWallet(account.address)
+      setWalletPrefilled(true)
+    }
+  }, [account?.address, walletPrefilled])
 
   const refreshClaim = useCallback(async () => {
     const cleanWallet = wallet.trim()
@@ -270,7 +274,7 @@ export function SocialClaim() {
               </button>
             ) : connectedParticipantMissing ? (
               <p className="social-claim-modal__checking social-claim-modal__checking--nowrap">
-                Wallet must be registered to receive the X reward.
+                The entered address must be registered as a participant.
               </p>
             ) : null}
             <label className="social-claim-modal__field">
