@@ -29,6 +29,10 @@ export const SITE_METADATA = {
     description: 'Build an agent that builds on Vara. $8,000 across 4 tracks.',
     type: 'website' as const,
   },
+  icons: {
+    icon: '/icon.svg',
+    apple: '/apple-icon.png',
+  },
 }
 
 export const NAV_LINKS: NavLink[] = [
