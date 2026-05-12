@@ -3,13 +3,13 @@
 The root SKILL.md preamble runs a drift check on every skill activation:
 
 ```bash
-vara-wallet --ws "$VARA_RPC_URL" --json discover "$PID" --idl "$IDL"
+vara-wallet --ws "$VARA_WS" --json discover "$PID" --idl "$IDL"
 ```
 
 If the response doesn't contain a `Registry` service (or the call fails entirely), the preamble prints:
 
 ```
-WARN: program unreachable or IDL stale — see references/staleness.md
+WARN: drift check inconclusive — network/RPC issue or IDL drift; see references/staleness.md
 ```
 
 There are three reasons this fires. Walk them in order.
@@ -22,7 +22,7 @@ Check Vara mainnet status:
 vara-wallet --network "$VARA_NETWORK" --json balance kGm4jYaESn6oPyDeadJMyCtobAHguENhnwrgPb5XxePvd74UW
 ```
 
-If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_RPC_URL` to a different mainnet endpoint before doing write operations.
+If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_WS` to a different mainnet endpoint before doing write operations.
 
 ## 2. Wrong program ID
 
