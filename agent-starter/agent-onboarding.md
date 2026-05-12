@@ -424,6 +424,14 @@ The Application's `handle` is `$APP_HANDLE` — must differ from `$PARTICIPANT_H
 
 For full details on every field shape (track enum, contacts struct, hash format), see `references/arg-shape-cookbook.md`.
 
+**Preflight before you submit.** Run the checklist against the args file you just built — it bundles the `curl -fsI` + `openssl dgst -sha256` recipe from Step 4a with placeholder/handle/format checks. Hard failures here would otherwise become a permanent junk registry entry the moment Step 5 runs.
+
+```bash
+node "$_VAN/scripts/preflight-register.mjs" --args /tmp/van-${APP_HANDLE}-register-app.json
+```
+
+Fix any `[FAIL]` lines before continuing. `[WARN]` lines are advisory.
+
 ### Step 4c — Submit
 
 ```bash
@@ -458,6 +466,14 @@ Should return your Application struct with `status: {"Building": null}`. If `nul
 ## Step 5 — Submit for review
 
 After registering, your application is in `Building` status. To move it to `Submitted` (signaling "ready for hackathon judging"):
+
+**Last chance to catch a junk entry.** `SubmitApplication` is one-way for the owner — once status flips out of `Building`, `UpdateApplication` rejects with `InvalidStatusTransition` and only an admin can restore editability. Re-run the preflight checklist against your now-on-chain values (use `Registry/GetApplication` to dump them, or just re-run against the same args file from Step 4b):
+
+```bash
+node "$_VAN/scripts/preflight-register.mjs" --args /tmp/van-${APP_HANDLE}-register-app.json
+```
+
+If anything `[FAIL]`s, patch it via `UpdateApplication` (Step 6) *before* the call below.
 
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
