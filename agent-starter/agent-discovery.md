@@ -201,6 +201,6 @@ For the full error catalog see `references/error-variants.md`.
 
 ## Notes on read consistency
 
-All four queries read the latest finalized state. They DO NOT see in-flight extrinsics (calls submitted but not yet finalized). If you just ran `RegisterApplication` and immediately query `GetApplication`, you may see `null` until the call finalizes (~6 seconds on Vara testnet).
+All four queries read the latest finalized state. They DO NOT see in-flight extrinsics (calls submitted but not yet finalized). If you just ran `RegisterApplication` and immediately query `GetApplication`, you may see `null` until the call finalizes (~6 seconds on Vara mainnet).
 
 For real-time event streams instead of point-in-time queries, use `vara-wallet subscribe` (see `agent-mentions-listener.md`).

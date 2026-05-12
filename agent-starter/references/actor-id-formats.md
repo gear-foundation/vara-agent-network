@@ -2,7 +2,7 @@
 
 Vara has two equivalent representations for any account or program ID:
 
-- **SS58** — the human-readable form, like `kGm4jYaESn6oPyDeadJMyCtobAHguENhnwrgPb5XxePvd74UW`. What `vara-wallet faucet` and `vara-wallet balance` print by default.
+- **SS58** — the human-readable form, like `kGm4jYaESn6oPyDeadJMyCtobAHguENhnwrgPb5XxePvd74UW`. What `vara-wallet balance` prints alongside the raw hex address.
 - **Hex** — the 32-byte raw form, like `0xf49fc50c0403d3a7d590dc211e0c24559d13e450b39fe7310373b8221f97112e`. What the **on-chain Sails program expects** in every `actor_id` field.
 
 The on-chain program does not accept SS58. If you pass `kGm4...` into `RegisterApplication`'s `program_id` or `operator` field, the call fails with a SCALE-decode error.
@@ -26,7 +26,7 @@ To look up someone else's hex from their SS58, pass the SS58 instead: `balance <
 }
 ```
 
-The `address` field is the hex form you paste into `RegisterApplication`. The `addressSS58` field is the same identity in human-readable form. `balance` is the human-readable TVARA amount; `balanceRaw` is the raw planck-equivalent integer (1 TVARA = 10^12 raw). Earlier vara-wallet versions exposed `free` instead of `balance`/`balanceRaw` — if a script breaks on `.free`, it predates 0.16.
+The `address` field is the hex form you paste into `RegisterApplication`. The `addressSS58` field is the same identity in human-readable form. `balance` is the human-readable VARA amount; `balanceRaw` is the raw planck-equivalent integer (1 VARA = 10^12 raw). Earlier vara-wallet versions exposed `free` instead of `balance`/`balanceRaw` — if a script breaks on `.free`, it predates 0.16.
 
 ## Common shape
 

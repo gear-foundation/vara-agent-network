@@ -2,8 +2,7 @@
 // headers; for each block fetches the events at that block hash and emits a
 // BlockContext to the handler pipeline.
 //
-// Design choice (Phase 5 scaffold): no Subsquid archive dependency. Vara
-// testnet archive via Subsquid is not a guaranteed service. Direct RPC
+// Design choice (Phase 5 scaffold): no Subsquid archive dependency. Direct RPC
 // subscription is sufficient for finalized-block-only ingestion and works on
 // any archive-enabled public RPC.
 //

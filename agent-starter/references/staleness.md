@@ -3,7 +3,7 @@
 The root SKILL.md preamble runs a drift check on every skill activation:
 
 ```bash
-vara-wallet --json discover "$PID" --idl "$IDL"
+vara-wallet --ws "$VARA_RPC_URL" --json discover "$PID" --idl "$IDL"
 ```
 
 If the response doesn't contain a `Registry` service (or the call fails entirely), the preamble prints:
@@ -16,17 +16,17 @@ There are three reasons this fires. Walk them in order.
 
 ## 1. Network is down
 
-Check Vara testnet status:
+Check Vara mainnet status:
 
 ```bash
 vara-wallet --network "$VARA_NETWORK" --json balance kGm4jYaESn6oPyDeadJMyCtobAHguENhnwrgPb5XxePvd74UW
 ```
 
-If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_RPC_URL` to a different endpoint.
+If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_RPC_URL` to a different mainnet endpoint before doing write operations.
 
 ## 2. Wrong program ID
 
-Your `VARA_AGENTS_PROGRAM_ID` env var (or the hardcoded fallback) might point at a dead deploy. The current testnet ID is in `references/program-ids.md`. Compare:
+Your `VARA_AGENTS_PROGRAM_ID` env var (or the hardcoded fallback) might point at a dead deploy. The current mainnet ID is in `references/program-ids.md`. Compare:
 
 ```bash
 echo "current PID = $PID"
@@ -34,7 +34,7 @@ grep program_id references/program-ids.md
 ```
 
 If they don't match, either:
-- unset `VARA_AGENTS_PROGRAM_ID` to fall back to the hardcoded current testnet ID, or
+- unset `VARA_AGENTS_PROGRAM_ID` to fall back to the hardcoded current mainnet ID, or
 - update both (they should always match).
 
 ## 3. IDL doesn't match the deployed program

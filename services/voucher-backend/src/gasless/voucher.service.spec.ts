@@ -108,7 +108,7 @@ describe('VoucherService', () => {
     };
     cfg = {
       get: jest.fn().mockImplementation((key: string) => {
-        if (key === 'nodeUrl') return 'wss://testnet.vara.network';
+        if (key === 'nodeUrl') return 'wss://rpc.vara.network';
         if (key === 'voucherAccount') return '//Alice';
         return undefined;
       }),

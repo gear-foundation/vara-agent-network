@@ -73,6 +73,14 @@ pub enum RegistryEvent {
     ApplicationUpdated {
         program_id: ActorId,
         patch: ApplicationPatch,
+        application: Application,
+        season_id: u32,
+    },
+    ApplicationDeleted {
+        program_id: ActorId,
+        owner: ActorId,
+        handle: Handle,
+        deleted_at: u64,
         season_id: u32,
     },
     /// Owner/program self-call: marks the application ready for review.
@@ -282,8 +290,12 @@ impl<'a> RegistryService<'a> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_user_mutations_allowed(&config)?;
         guards::check_application_patch(
+            patch.handle.as_ref(),
             patch.description.as_ref(),
+            patch.github_url.as_ref(),
+            patch.skills_hash.as_ref(),
             patch.skills_url.as_ref(),
+            patch.idl_hash.as_ref(),
             patch.idl_url.as_ref(),
             patch.contacts.as_ref(),
         )?;
@@ -291,14 +303,25 @@ impl<'a> RegistryService<'a> {
         let caller = msg::source();
         let mut reg = self.registry.borrow_mut();
 
-        let app = reg
-            .applications
-            .get_mut(&program_id)
-            .ok_or(ContractError::UnknownApplication)?;
+        let (owner, current_handle, status) = {
+            let app = reg
+                .applications
+                .get(&program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            (app.owner, app.handle.clone(), app.status)
+        };
 
-        // Auth: operator wallet OR program self-call.
-        if caller != app.owner && caller != program_id {
+        // Auth: only the registered owner/operator wallet may edit draft metadata.
+        if caller != owner {
             return Err(ContractError::NotOwner);
+        }
+        if status != AppStatus::Building {
+            return Err(ContractError::InvalidStatusTransition);
+        }
+        if let Some(new_handle) = patch.handle.as_ref() {
+            if new_handle != &current_handle && reg.handles.contains_key(new_handle) {
+                return Err(ContractError::HandleTaken);
+            }
         }
 
         // Apply each Some(_) arm and build the `applied` patch we emit.
@@ -306,21 +329,58 @@ impl<'a> RegistryService<'a> {
         // hit state; None arms stay None so the indexer knows which fields
         // didn't change on this call.
         let mut applied = ApplicationPatch::default();
-        if let Some(d) = patch.description {
-            app.description = d.clone();
-            applied.description = Some(d);
+        let mut new_handle = None;
+        if let Some(h) = patch.handle {
+            if h != current_handle {
+                new_handle = Some(h.clone());
+                applied.handle = Some(h);
+            }
         }
-        if let Some(u) = patch.skills_url {
-            app.skills_url = u.clone();
-            applied.skills_url = Some(u);
-        }
-        if let Some(u) = patch.idl_url {
-            app.idl_url = u.clone();
-            applied.idl_url = Some(u);
-        }
-        if let Some(contacts) = patch.contacts {
-            app.contacts = contacts.clone();
-            applied.contacts = Some(contacts);
+        let application = {
+            let app = reg
+                .applications
+                .get_mut(&program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            if let Some(h) = new_handle.as_ref() {
+                app.handle = h.clone();
+            }
+            if let Some(d) = patch.description {
+                app.description = d.clone();
+                applied.description = Some(d);
+            }
+            if let Some(t) = patch.track {
+                app.track = t;
+                applied.track = Some(t);
+            }
+            if let Some(u) = patch.github_url {
+                app.github_url = u.clone();
+                applied.github_url = Some(u);
+            }
+            if let Some(hash) = patch.skills_hash {
+                app.skills_hash = hash;
+                applied.skills_hash = Some(hash);
+            }
+            if let Some(u) = patch.skills_url {
+                app.skills_url = u.clone();
+                applied.skills_url = Some(u);
+            }
+            if let Some(hash) = patch.idl_hash {
+                app.idl_hash = hash;
+                applied.idl_hash = Some(hash);
+            }
+            if let Some(u) = patch.idl_url {
+                app.idl_url = u.clone();
+                applied.idl_url = Some(u);
+            }
+            if let Some(contacts) = patch.contacts {
+                app.contacts = contacts.clone();
+                applied.contacts = Some(contacts);
+            }
+            app.clone()
+        };
+        if let Some(h) = new_handle {
+            reg.handles.remove(&current_handle);
+            reg.handles.insert(h, HandleRef::Application(program_id));
         }
         let season_id = self.current_season;
         drop(reg);
@@ -328,9 +388,50 @@ impl<'a> RegistryService<'a> {
         self.emit_event(RegistryEvent::ApplicationUpdated {
             program_id,
             patch: applied,
+            application,
             season_id,
         })
         .expect("emit ApplicationUpdated failed");
+
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn delete_application(&mut self, program_id: ActorId) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+
+        let caller = msg::source();
+        let mut reg = self.registry.borrow_mut();
+        let app = reg
+            .applications
+            .get(&program_id)
+            .ok_or(ContractError::UnknownApplication)?
+            .clone();
+
+        let admin = self.admin.borrow().admin;
+        if caller != app.owner && caller != admin {
+            return Err(ContractError::NotOwner);
+        }
+
+        reg.applications.remove(&program_id);
+        if reg.handles.get(&app.handle) == Some(&HandleRef::Application(program_id)) {
+            reg.handles.remove(&app.handle);
+        }
+        drop(reg);
+
+        self.board.borrow_mut().remove_application(program_id);
+
+        let deleted_at = exec::block_timestamp();
+        let season_id = self.current_season;
+        self.emit_event(RegistryEvent::ApplicationDeleted {
+            program_id,
+            owner: app.owner,
+            handle: app.handle,
+            deleted_at,
+            season_id,
+        })
+        .expect("emit ApplicationDeleted failed");
 
         Ok(())
     }

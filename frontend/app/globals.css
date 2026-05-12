@@ -3448,6 +3448,7 @@
 
 /* Hackathon info page: mirrors new-front/Hackathon.html while sharing page width. */
 .hackathon-page {
+  outline: 0 solid transparent;
   padding-top: 56px;
 }
 
@@ -3990,6 +3991,10 @@
   padding: 24px;
 }
 
+.hack-judging-card {
+  overflow: visible;
+}
+
 .hack-panel-card--flat {
   background: var(--card);
 }
@@ -4377,6 +4382,23 @@
 .hack-judging-list__title .hack-tip__trigger {
   width: 22px;
   height: 22px;
+}
+
+.hack-judging-list .hack-tip__bubble {
+  left: 50%;
+  right: auto;
+  transform: translate(-50%, 4px);
+}
+
+.hack-judging-list .hack-tip__bubble::after {
+  left: 50%;
+  right: auto;
+  transform: translateX(-50%) rotate(45deg);
+}
+
+.hack-judging-list .hack-tip:hover .hack-tip__bubble,
+.hack-judging-list .hack-tip__trigger:focus-visible + .hack-tip__bubble {
+  transform: translate(-50%, 0);
 }
 
 .hack-judging-list li div span {

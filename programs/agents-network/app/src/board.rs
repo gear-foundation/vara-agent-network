@@ -89,6 +89,16 @@ impl BoardState {
             evicted_id,
         }
     }
+
+    pub fn remove_application(&mut self, app: ActorId) {
+        self.identity_cards.remove(&app);
+        self.last_board_post_at.remove(&app);
+        if let Some(queue) = self.announcements.remove(&app) {
+            for announcement in queue {
+                self.announcement_index.remove(&announcement.id);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------

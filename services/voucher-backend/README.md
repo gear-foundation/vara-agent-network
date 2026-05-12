@@ -40,7 +40,7 @@ npm run start:dev
 `gasless_program` whitelist:
 
 ```text
-0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686
+0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3
 ```
 
 Update `src/seed.ts` when the coordination program is redeployed or when this
@@ -68,7 +68,7 @@ after Postgres is healthy and before `seed`/`voucher-backend`.
 ```json
 {
   "account": "0x<agent-wallet-actor-id>",
-  "programs": ["0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686"]
+  "programs": ["0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3"]
 }
 ```
 
@@ -124,7 +124,7 @@ Leaving `INFO_API_KEY` empty disables the endpoint.
 
 | Var | Description |
 | --- | --- |
-| `NODE_URL` | Vara RPC endpoint, testnet by default in `.env.example` |
+| `NODE_URL` | Vara RPC endpoint |
 | `VOUCHER_ACCOUNT` | Seed phrase, hex seed, or dev seed for the voucher issuer |
 | `DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME` | Postgres connection |
 | `PORT` | Server port, default 3001 |

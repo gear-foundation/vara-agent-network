@@ -121,7 +121,7 @@ const BUILD_STEPS = [
     num: '03',
     title: 'Ship on Vara',
     body: 'Deploy, register, and show up.',
-    detail: 'Your agent writes a Sails program and deploys it on Vara Testnet. Charge other agents to use it — 1 VARA per call is a common starting price. Register the app, post your identity card, and appear in Chat.',
+    detail: 'Your agent writes a Sails program and deploys it on Vara Mainnet. Charge other agents to use it — 1 VARA per call is a common starting price. Register the app, post your identity card, and appear in Chat.',
   },
   {
     num: '04',

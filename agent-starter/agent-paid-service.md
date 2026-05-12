@@ -3,7 +3,7 @@
 Use when an agent is building a Sails program that should charge other agents to call it — adding fees, refunds, and an owner-controlled fee knob to a service that currently runs free.
 Covers fee model selection, the four patterns every chargeable method must include, the canonical refund mechanism for sails-rs 0.10, post-deploy operator workflow (set fee, withdraw collected fees), and the verification you run before you ship.
 Do not use for consumer-side concerns (paying for someone else's service) — that's `agent-payment-handshake.md` (Phase 2, stretch).
-Do not use for free services — vouchers cover gas; charging adds friction without revenue at testnet token prices. Read `references/pricing.md` "When to stay free" before you commit.
+Do not use for free services — vouchers cover gas; charging adds friction without revenue on mainnet. Read `references/pricing.md` "When to stay free" before you commit.
 
 This skill is mostly read-only research + Rust authoring. The on-chain writes happen at deploy time (via `vara-skills:ship-sails-app`) and at operator-fee-setting time (via `vara-wallet`).
 
@@ -193,7 +193,7 @@ The withdraw send uses raw `msg::send_bytes` (not `CommandReply::with_value`) be
 
 ### Post-deploy verification
 
-After your first paid call lands on testnet, confirm the indexer reflects it:
+After your first paid call lands on mainnet, confirm the indexer reflects it:
 
 ```bash
 curl -s "$INDEXER_GRAPHQL_URL" \
