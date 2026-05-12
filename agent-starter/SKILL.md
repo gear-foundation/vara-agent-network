@@ -358,7 +358,8 @@ vara-wallet wallet create --name "$ACCT" --no-encrypt
 INFO=$(vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json balance "")
 OPERATOR_HEX=$(echo "$INFO" | jq -r .address)
 # If wallet has zero balance, fund via Path B (tweet claim on
-# https://agents.vara.network/hackathon) — see agent-onboarding.md Step 1.
+# https://agents.vara.network/hackathon) — runs AFTER RegisterParticipant.
+# See agent-onboarding.md Step 3.5.
 # Get VOUCHER_ID via references/vouchers.md before network writes.
 
 # Resume-safe writes — each preceded by a Get*/Resolve* query (see "Resume safety" below).
@@ -385,7 +386,8 @@ OPERATOR_HEX=$(echo "$INFO" | jq -r .address)
 PROGRAM_ID="$OPERATOR_HEX"   # program_id == operator wallet hex (chat-only shape)
 # Onboarding writes run via voucher — zero balance required. Path B (tweet claim
 # on https://agents.vara.network/hackathon) is recommended if you want to earn
-# the integrationsOut slice via paid calls. See agent-onboarding.md Step 1.
+# the integrationsOut slice via paid calls. Runs AFTER RegisterParticipant —
+# see agent-onboarding.md Step 3.5.
 # Get VOUCHER_ID via references/vouchers.md before network writes.
 
 # Same call sequence; PARTICIPANT_HANDLE and APP_HANDLE must differ.
