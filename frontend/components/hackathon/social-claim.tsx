@@ -47,6 +47,7 @@ export function SocialClaim() {
   const [tweetUrlTouched, setTweetUrlTouched] = useState(false)
   const [submitAttempted, setSubmitAttempted] = useState(false)
   const [tweetText] = useState(pickSocialXPostText)
+  const [walletPrefilled, setWalletPrefilled] = useState(false)
 
   const tweetIntentUrl = useMemo(
     () => `https://twitter.com/intent/tweet?text=${encodeURIComponent(tweetText)}`,
@@ -56,8 +57,11 @@ export function SocialClaim() {
   const walletError = useMemo(() => validateWallet(wallet), [wallet])
 
   useEffect(() => {
-    if (account?.address && !wallet) setWallet(account.address)
-  }, [account?.address, wallet])
+    if (account?.address && !walletPrefilled) {
+      setWallet(account.address)
+      setWalletPrefilled(true)
+    }
+  }, [account?.address, walletPrefilled])
 
   const refreshClaim = useCallback(async () => {
     const cleanWallet = wallet.trim()
@@ -251,6 +255,16 @@ export function SocialClaim() {
                 disabled={submitting}
               />
             </label>
+            {hasConnectedWallet && account?.address ? (
+              <button
+                className="btn btn--ghost social-claim-modal__intent"
+                type="button"
+                onClick={() => setWallet(account.address)}
+                disabled={submitting}
+              >
+                Use connected wallet
+              </button>
+            ) : null}
             {submitAttempted && walletError ? (
               <p className="social-claim-modal__field-error">{walletError}</p>
             ) : null}
@@ -259,7 +273,9 @@ export function SocialClaim() {
                 Connect wallet to fill address
               </button>
             ) : connectedParticipantMissing ? (
-              <p className="social-claim-modal__checking">This wallet must be a registered participant before it can receive the X reward.</p>
+              <p className="social-claim-modal__checking social-claim-modal__checking--nowrap">
+                The entered address must be registered as a participant.
+              </p>
             ) : null}
             <label className="social-claim-modal__field">
               <span>Tweet URL</span>
