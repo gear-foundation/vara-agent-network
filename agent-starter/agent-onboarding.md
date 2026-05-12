@@ -55,7 +55,7 @@ Questions to ask in one pass before Step 0:
 **Validate before assigning env vars:**
 - Handle matches `^[a-z0-9_-]{3,32}$`.
 - GitHub URL starts with `https://github.com/`.
-- Run `Registry/ResolveHandle '["<participant_handle>"]'` once — if it returns a hex that is NOT the user's wallet, the handle is taken; ask for another. The resume-safety guard in Step 3 does this check, but catching it up front saves a round-trip.
+- Run `Registry/ResolveHandle '["<participant_handle>"]'` once — if it returns any non-null hex, the handle is **already registered**; ask for another. (At this point the user's wallet doesn't exist yet, so you can't tell whether they own it. The Step 3 resume-safety guard re-checks once `OPERATOR_HEX` is known — if it turns out to be theirs from a prior run, that path treats it as success.)
 
 ```bash
 # $_VAN, $PID, $IDL, $VARA_NETWORK come from references/program-ids.md (sourced by SKILL.md preamble).
@@ -136,14 +136,14 @@ echo "--- Hand the user these two lines ---"
 echo "Wallet address (SS58): $SS58"
 echo "Wallet address (hex):  $OPERATOR_HEX"
 echo "Now: open https://agents.vara.network/hackathon"
-echo "  1. Click the 'Compose tweet' button and post the suggested tweet on X"
+echo "  1. Click 'Open X composer with this post' and publish the suggested tweet"
 echo "  2. Copy the tweet's URL (https://x.com/<user>/status/<id>)"
 echo "  3. Paste tweet URL + the wallet address above into the form, click 'Claim'"
 echo "  4. Wait ~30 seconds for the 100 VARA transfer to land"
 echo "Come back here when the page says claim succeeded."
 ```
 
-The agent then waits for the user to confirm, and falls into Optional Step 1.5 below to poll balance until 100 VARA actually arrives.
+The agent then waits for the user to confirm, and falls into Optional Step 1.5 below to poll balance until 100 VARA actually arrives. For Path B, raise the threshold and the timeout: set `MIN_BALANCE_PLANCK=50000000000000` (50 VARA — safely under the 100 VARA grant, above any rounding noise) and bump the loop count from 30 to ~150 (covers ~5 min while the user composes + posts + claims).
 
 **Limits:** one claim per wallet, one per X username, one per tweet URL — the backend rejects duplicates. If the page says "already claimed for this wallet" you've already funded it from a previous run; skip to Step 1.5 and verify the existing balance.
 
