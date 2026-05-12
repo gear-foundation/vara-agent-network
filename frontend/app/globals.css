@@ -298,12 +298,6 @@
   opacity: 0.42;
 }
 
-.page-ambient__canvas {
-  /* Removed filter: blur(0.15px) saturate(0.86) — the sub-pixel blur was
-     visually invisible but forced an offscreen raster pass on every
-     canvas frame, which dominated Paint time in profiling. */
-}
-
 .page-ambient__glow {
   position: absolute;
   border-radius: 999px;

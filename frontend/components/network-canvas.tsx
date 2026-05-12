@@ -38,12 +38,11 @@ const SPRITE_BASE_RADIUS = 6
 const SPRITE_HALO_MULT = 5
 const SPRITE_PADDING = 2
 
-type Sprite = { canvas: HTMLCanvasElement; offset: number }
+type Sprite = { canvas: HTMLCanvasElement; baseDrawSize: number }
 
 function buildSprite(rgb: string, dpr: number): Sprite {
   const halo = SPRITE_BASE_RADIUS * SPRITE_HALO_MULT
   const size = Math.ceil((halo + SPRITE_PADDING) * 2 * dpr)
-  const offset = size / 2
   const c = document.createElement('canvas')
   c.width = size
   c.height = size
@@ -61,7 +60,7 @@ function buildSprite(rgb: string, dpr: number): Sprite {
   cx.beginPath()
   cx.arc(center, center, SPRITE_BASE_RADIUS, 0, Math.PI * 2)
   cx.fill()
-  return { canvas: c, offset: offset / dpr }
+  return { canvas: c, baseDrawSize: size / dpr }
 }
 
 function makeNode(w: number, h: number): Node {
@@ -89,7 +88,7 @@ export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: Network
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
-    const ctx = canvas.getContext('2d', { alpha: true })
+    const ctx = canvas.getContext('2d')
     if (!ctx) return
 
     const reduceMotion =
@@ -118,14 +117,20 @@ export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: Network
     let intersecting = true
 
     function step(now: number) {
-      rafRef.current = requestAnimationFrame(step)
       if (!visible || !intersecting) {
-        lastDraw = now
+        rafRef.current = 0
         return
       }
+      rafRef.current = requestAnimationFrame(step)
       if (now - lastDraw < FRAME_INTERVAL) return
       lastDraw = now
       draw()
+    }
+
+    function ensureRunning() {
+      if (visible && intersecting && rafRef.current === 0) {
+        rafRef.current = requestAnimationFrame(step)
+      }
     }
 
     function draw() {
@@ -144,7 +149,7 @@ export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: Network
           const dsq = dx * dx + dy * dy
           if (dsq < EDGE_DIST_SQ) {
             const alpha = (1 - Math.sqrt(dsq) / EDGE_DIST) * 0.38
-            ctx!.strokeStyle = `rgba(74,222,128,${alpha.toFixed(3)})`
+            ctx!.strokeStyle = `rgba(74,222,128,${alpha})`
             ctx!.beginPath()
             ctx!.moveTo(ni.x, ni.y)
             ctx!.lineTo(nj.x, nj.y)
@@ -178,11 +183,9 @@ export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: Network
         n.phase += n.phaseSpeed
         const pr = n.r * (1 + Math.sin(n.phase) * 0.22)
         const sprite = sprites[n.typeIndex]
-        const scale = pr / SPRITE_BASE_RADIUS
-        const drawW = sprite.canvas.width / dpr * scale
-        const drawH = sprite.canvas.height / dpr * scale
+        const drawSize = sprite.baseDrawSize * pr / SPRITE_BASE_RADIUS
         ctx!.globalAlpha = n.alpha
-        ctx!.drawImage(sprite.canvas, n.x - drawW / 2, n.y - drawH / 2, drawW, drawH)
+        ctx!.drawImage(sprite.canvas, n.x - drawSize / 2, n.y - drawSize / 2, drawSize, drawSize)
 
         n.x += n.vx
         n.y += n.vy
@@ -198,17 +201,19 @@ export function NetworkCanvas({ className = '', opacity = 1, maxNodes }: Network
 
     if (reduceMotion) {
       draw()
-      return () => {}
+      return
     }
 
     const onVisibility = () => {
       visible = !document.hidden
+      ensureRunning()
     }
     document.addEventListener('visibilitychange', onVisibility)
 
     const io = new IntersectionObserver(
       (entries) => {
         intersecting = entries[0]?.isIntersecting ?? true
+        ensureRunning()
       },
       { threshold: 0 }
     )
