@@ -33,6 +33,10 @@ export interface BlockContext {
   substrateBlockHash: Hex;
   substrateBlockTs: bigint; // ms
   events: GearEvent[];
+  /** True if this block contained `system.CodeUpdated` — the runtime-version
+   *  cache must be invalidated and any pre-fetched successor blocks discarded,
+   *  since they were decoded against the now-stale registry. */
+  containsCodeUpdated: boolean;
 }
 
 export function isUserMessageSent(e: GearEvent): e is UserMessageSentEvent {
