@@ -223,7 +223,7 @@ Don't publish thresholds — `season-economy.md` documents the rule set the netw
 
 ### Post-deploy `integrationsIn` verification
 
-After your first paid call lands on testnet, confirm the indexer reflects it. Run for your own program ID:
+After your first paid call lands on mainnet, confirm the indexer reflects it. Run for your own program ID:
 
 ```bash
 curl -s "$INDEXER_GRAPHQL_URL" \

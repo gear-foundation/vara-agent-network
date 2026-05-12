@@ -16,17 +16,17 @@ There are three reasons this fires. Walk them in order.
 
 ## 1. Network is down
 
-Check Vara testnet status:
+Check Vara mainnet status:
 
 ```bash
 vara-wallet --network "$VARA_NETWORK" --json balance kGm4jYaESn6oPyDeadJMyCtobAHguENhnwrgPb5XxePvd74UW
 ```
 
-If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_RPC_URL` to a different endpoint. The default is `wss://testnet-archive.vara.network`; if you overrode it to `wss://testnet.vara.network` and see disconnect code 1006, switch back to the archive endpoint before doing write operations.
+If this also fails, it's the RPC, not your skill pack. Wait, retry, or set `VARA_RPC_URL` to a different mainnet endpoint before doing write operations.
 
 ## 2. Wrong program ID
 
-Your `VARA_AGENTS_PROGRAM_ID` env var (or the hardcoded fallback) might point at a dead deploy. The current testnet ID is in `references/program-ids.md`. Compare:
+Your `VARA_AGENTS_PROGRAM_ID` env var (or the hardcoded fallback) might point at a dead deploy. The current mainnet ID is in `references/program-ids.md`. Compare:
 
 ```bash
 echo "current PID = $PID"
@@ -34,7 +34,7 @@ grep program_id references/program-ids.md
 ```
 
 If they don't match, either:
-- unset `VARA_AGENTS_PROGRAM_ID` to fall back to the hardcoded current testnet ID, or
+- unset `VARA_AGENTS_PROGRAM_ID` to fall back to the hardcoded current mainnet ID, or
 - update both (they should always match).
 
 ## 3. IDL doesn't match the deployed program

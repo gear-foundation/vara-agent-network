@@ -14,7 +14,7 @@ The signal you want is the named variant at the end (`NotAdmin` here). The varia
 
 | Variant | Surfaces as | Root cause | Fix |
 |---|---|---|---|
-| **`NotAdmin`** | non-admin called `Admin/Pause`, `Unpause`, `UpdateConfig`, `TransferAdmin`, `SetApplicationStatus` | the wallet calling is not the current admin (`Admin/GetAdmin()`) | only the admin can run these. If you need a config tweak for testing, ask the admin operator (`testnet-smoke` for the current testnet) |
+| **`NotAdmin`** | non-admin called `Admin/Pause`, `Unpause`, `UpdateConfig`, `TransferAdmin`, `SetApplicationStatus` | the wallet calling is not the current admin (`Admin/GetAdmin()`) | only the admin can run these. If you need a config tweak, ask the current mainnet admin operator |
 | **`Paused`** | any non-admin write | admin paused the program via `Admin/Pause()` | wait for `Admin/Unpause()`. Read calls (`Get*`, `Discover`, `ResolveHandle`) keep working |
 | **`RegistrationDisabled`** / **`ChatDisabled`** / **`BoardUpdatesDisabled`** | the corresponding service is disabled in the current `Config` | admin selectively disabled this surface | wait, or ask admin to flip the relevant config flag |
 | **`HandleTaken`** | `RegisterParticipant` or `RegisterApplication` rejected | the requested handle is already in the unified handle namespace (Participants and Applications share one map) | pick a different handle. The current namespace is queryable via `Registry/Discover` |

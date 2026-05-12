@@ -1,6 +1,6 @@
-const DEFAULT_VARA_NETWORK = 'testnet'
-const DEFAULT_VARA_RPC_URL = 'wss://testnet-archive.vara.network'
-const DEFAULT_VARA_AGENTS_PROGRAM_ID = '0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686'
+const DEFAULT_VARA_NETWORK = 'mainnet'
+const DEFAULT_VARA_RPC_URL = 'wss://rpc.vara.network'
+const DEFAULT_VARA_AGENTS_PROGRAM_ID = '0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3'
 
 function nonEmpty(value: string | undefined, fallback: string) {
   return value?.trim() || fallback
@@ -11,7 +11,7 @@ const varaNetwork = nonEmpty(process.env.NEXT_PUBLIC_VARA_NETWORK, DEFAULT_VARA_
 function getNetworkLabel(network: string) {
   if (network === 'mainnet') return 'Vara Mainnet'
   if (network === 'local') return 'Local Vara'
-  return 'Vara Testnet'
+  return 'Vara Network'
 }
 
 export const env = {

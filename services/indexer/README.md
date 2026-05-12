@@ -75,7 +75,7 @@ Notes:
 - the compose stack overrides `VARA_AGENTS_IDL_PATH` to `/app/idl/agents_network_client.idl`
 - `api` reads only `DATABASE_URL` and `API_*`; `processor` also reads `VARA_AGENTS_*`
 
-### Deploy order (pre-mainnet)
+### Production deploy order
 
 **Always apply migrations before restarting the processor or rollup worker.**
 Schema changes like the `time_to_first_integration_blocks → first_integration_block`

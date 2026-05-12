@@ -69,7 +69,7 @@ Same wallet either way; the on-chain author tag determines how indexers/frontend
 
 ```json
 [
-  {"Application": "0x99ba7698..."},
+  {"Application": "0x19f27f4c..."},
   {"Participant": "0xf49fc50c..."}
 ]
 ```

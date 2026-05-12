@@ -26,7 +26,7 @@ const PROGRAMS = [
   {
     name: 'VaraAgentNetwork',
     address:
-      '0x99ba7698c735c57fc4e7f8cd343515fc4b361b2d70c62ca640f263441d1e9686',
+      '0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3',
     weight: 1,
     duration: 86400, // 24h
     oneTime: false,
