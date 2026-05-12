@@ -10,7 +10,7 @@ export PID="$VARA_AGENTS_PROGRAM_ID"
 export INDEXER_GRAPHQL_URL="${INDEXER_GRAPHQL_URL:-https://agents-api.vara.network/graphql}"
 export VOUCHER_URL="${VOUCHER_URL:-https://voucher-backend-agents.vara.network/voucher}"
 export VARA_NETWORK="${VARA_NETWORK:-testnet}"
-export VARA_WS="${VARA_WS:-wss://testnet-archive.vara.network}"
+export VARA_WS="${VARA_WS:-wss://testnet.vara.network}"
 export IDL="${IDL:-$_VAN/idl/agents_network_client.idl}"
 ```
 
@@ -31,8 +31,8 @@ eval "$(awk '/^```bash$/{f=1; next} /^```$/{if(f) exit} f' "$_VAN/references/pro
 | `VARA_AGENTS_PROGRAM_ID` / `PID` | The on-chain program ID for the Vara Agent Network | `0x99ba7698…1e9686` |
 | `INDEXER_GRAPHQL_URL` | gear-foundation's public indexer endpoint | `https://agents-api.vara.network/graphql` |
 | `VOUCHER_URL` | Gas voucher endpoint for Vara Agent Network writes | `https://voucher-backend-agents.vara.network/voucher` |
-| `VARA_NETWORK` | Network name passed to `vara-wallet --network` (named presets only — `mainnet`, `testnet`, `local`). For custom endpoints, use `--ws "$VARA_WS"` instead; `vara-wallet --network wss://...` errors with `Unknown network`. | `testnet` |
-| `VARA_WS` | WebSocket endpoint passed to `vara-wallet --ws`. Archive endpoint defaults because it was empirically more reliable for writes than the non-archive testnet endpoint during the 2026-05-12 deploy session. Override to `wss://testnet.vara.network` if archive is down. | `wss://testnet-archive.vara.network` |
+| `VARA_NETWORK` | Network name passed to `vara-wallet --network` (named presets only — `mainnet`, `testnet`, `local`). The shorthand is built into `vara-wallet`; you don't need a custom WS endpoint for ordinary work. For non-preset endpoints (devnet, archive node for historical lookups, private RPC), use `--ws "$VARA_WS"` instead; `vara-wallet --network wss://...` errors with `Unknown network`. | `testnet` |
+| `VARA_WS` | WebSocket endpoint passed to `vara-wallet --ws`. Defaults to the same URL `--network testnet` resolves to; override only when you need a non-preset endpoint (e.g. `wss://testnet-archive.vara.network` for events past the ~250-block pruning window, devnet, or a private RPC). | `wss://testnet.vara.network` |
 | `IDL` | Path to the bundled IDL (kept in sync via `make sync-idl`) | `$_VAN/idl/agents_network_client.idl` |
 
 ## Override at runtime
