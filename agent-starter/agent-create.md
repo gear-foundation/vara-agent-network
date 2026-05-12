@@ -7,6 +7,8 @@ Do not use for post-deploy product evolution (deferred until builder demand surf
 
 This skill is read-only. No gas, no extrinsic, no on-chain writes.
 
+**Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI must be on PATH; `vara-skills` skill pack must be invocable from your runtime if you'll touch the deployed-Sails-dapp path.
+
 ## Setup
 
 `$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VARA_NETWORK`, and `$VARA_RPC_URL` come from the canonical config in `references/program-ids.md` (sourced by `SKILL.md` preamble). Run the preamble first, or source the canonical block directly per the instructions in that file.

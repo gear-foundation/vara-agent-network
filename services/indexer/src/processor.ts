@@ -15,7 +15,7 @@ import { decodeAddress } from "@polkadot/util-crypto";
 import { u8aToHex } from "@polkadot/util";
 import { eq } from "drizzle-orm";
 import { requireProcessorConfig } from "./config.js";
-import { log } from "./helpers/logger.js";
+import { formatError, log } from "./helpers/logger.js";
 import {
   type BlockContext,
   type GearEvent,
@@ -29,8 +29,43 @@ export interface ProcessorHooks {
 
 export async function createProcessor(hooks: ProcessorHooks) {
   const config = requireProcessorConfig();
+  const backfillFetchConcurrency = Math.max(1, config.processorBackfillFetchConcurrency);
   const provider = new WsProvider(config.varaRpcUrl);
-  const api = await ApiPromise.create({ provider });
+  let stopped = false;
+  let stopReason: Error | null = null;
+  let failProcessor!: (error: Error) => void;
+  const waitUntilStopped = new Promise<never>((_, reject) => {
+    failProcessor = reject;
+  });
+
+  function asError(reason: unknown): Error {
+    if (reason instanceof Error) return reason;
+    const meta = formatError(reason);
+    return new Error(typeof meta.message === "string" ? meta.message : String(reason));
+  }
+
+  function fail(reason: unknown): void {
+    if (stopped || stopReason) return;
+    stopReason = asError(reason);
+    failProcessor(stopReason);
+  }
+
+  provider.on("connected", () => {
+    log.info("rpc connected", { endpoint: config.varaRpcUrl });
+  });
+  provider.on("disconnected", () => {
+    log.warn("rpc disconnected", { endpoint: config.varaRpcUrl });
+    fail(new Error("RPC provider disconnected"));
+  });
+  provider.on("error", (error: unknown) => {
+    log.error("rpc provider error", { endpoint: config.varaRpcUrl, error: formatError(error) });
+    fail(error);
+  });
+
+  const api = await Promise.race([
+    ApiPromise.create({ provider }),
+    waitUntilStopped,
+  ]);
   const chain = (await api.rpc.system.chain()).toString();
   log.info("connected", { chain, endpoint: config.varaRpcUrl });
 
@@ -51,7 +86,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
     }
   }
 
-  async function processBlock(blockNumber: number): Promise<void> {
+  async function fetchBlockContext(blockNumber: number): Promise<BlockContext> {
     const blockHash = (await api.rpc.chain.getBlockHash(blockNumber)).toHex() as Hex;
     const apiAt = await api.at(blockHash);
     const rawEvents = await apiAt.query.system.events();
@@ -138,14 +173,19 @@ export async function createProcessor(hooks: ProcessorHooks) {
       idx++;
     }
 
-    const ctx: BlockContext = {
+    return {
       substrateBlockNumber: blockNumber,
       substrateBlockHash: blockHash,
       substrateBlockTs: timestamp,
       events,
     };
-    await hooks.onBlock(ctx);
+  }
 
+  async function applyBlockContext(ctx: BlockContext): Promise<void> {
+    await hooks.onBlock(ctx);
+  }
+
+  async function updateCursor(blockNumber: number): Promise<void> {
     await db
       .insert(schema.processorCursor)
       .values({
@@ -159,6 +199,12 @@ export async function createProcessor(hooks: ProcessorHooks) {
       });
   }
 
+  async function processBlock(blockNumber: number): Promise<void> {
+    const ctx = await fetchBlockContext(blockNumber);
+    await applyBlockContext(ctx);
+    await updateCursor(blockNumber);
+  }
+
   async function resumePoint(): Promise<number> {
     const cursor = await db
       .select()
@@ -170,22 +216,20 @@ export async function createProcessor(hooks: ProcessorHooks) {
   }
 
   /** Most public Vara RPCs run with pruning — state reads older than ~256
-   *  blocks fail with "State already discarded". For an archive-backed RPC
-   *  we want to backfill from VARA_AGENTS_START_BLOCK. For a pruned RPC we
-   *  clamp backfill to a safe recent window so the indexer can still boot
-   *  and catch the tail of live activity.
-   *
-   *  PRODUCTION: point VARA_RPC_URL at an archive endpoint (or add a
-   *  Subsquid archive adapter to the processor) before mainnet deploy. */
-  const PRUNED_RPC_BACKFILL_DEPTH = 250;
+   *  blocks fail with "State already discarded". Production should use an
+   *  archive endpoint and replay every missing block. Local/dev pruned RPCs
+   *  may opt into clamping with PROCESSOR_PRUNED_RPC_BACKFILL_DEPTH. */
   async function clampedResumePoint(finalizedHeight: number): Promise<number> {
     const raw = await resumePoint();
-    const floor = Math.max(0, finalizedHeight - PRUNED_RPC_BACKFILL_DEPTH);
+    const depth = config.processorPrunedRpcBackfillDepth;
+    if (depth <= 0) return raw;
+    const floor = Math.max(0, finalizedHeight - depth);
     if (raw < floor) {
       log.warn("pruned RPC — clamping backfill", {
         wantedFrom: raw,
         clampedFrom: floor,
         finalized: finalizedHeight,
+        depth,
       });
       return floor;
     }
@@ -195,20 +239,8 @@ export async function createProcessor(hooks: ProcessorHooks) {
   async function runBackfill(toBlock: number): Promise<void> {
     let from = await clampedResumePoint(toBlock);
     if (from > toBlock) return;
-    log.info("backfill start", { from, to: toBlock });
-    for (let n = from; n <= toBlock; n++) {
-      try {
-        await processBlock(n);
-      } catch (err) {
-        const msg = String(err);
-        if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
-          log.warn("skipping pruned block", { block: n });
-          continue;
-        }
-        throw err;
-      }
-      if (n % 50 === 0) log.info("backfill progress", { at: n, to: toBlock });
-    }
+    log.info("backfill start", { from, to: toBlock, fetchConcurrency: backfillFetchConcurrency });
+    await processRange(from, toBlock, "backfill");
     log.info("backfill done", { at: toBlock });
   }
 
@@ -217,34 +249,58 @@ export async function createProcessor(hooks: ProcessorHooks) {
   // guard, two async callbacks would both read a stale cursor, both try to
   // process the same blocks, and race on cursor writes. (Finding #1.)
   let catchUpInFlight: Promise<void> | null = null;
+  let unsubscribeFinalizedHeads: (() => void) | null = null;
   async function catchUpTo(height: number): Promise<void> {
     const resume = await clampedResumePoint(height);
-    for (let n = resume; n <= height; n++) {
-      try {
-        await processBlock(n);
-      } catch (err) {
-        const msg = String(err);
-        if (msg.includes("State already discarded") || msg.includes("Unknown Block")) {
-          log.warn("skipping pruned block", { block: n });
-          // Skipped blocks still advance the cursor to avoid infinite retry.
-          await db
-            .insert(schema.processorCursor)
-            .values({ id: "main", lastProcessedBlock: n, updatedAt: BigInt(Date.now()) })
-            .onConflictDoUpdate({
-              target: schema.processorCursor.id,
-              set: { lastProcessedBlock: n, updatedAt: BigInt(Date.now()) },
-            });
-          continue;
+    await processRange(resume, height, "live");
+  }
+
+  function isPrunedBlockError(error: unknown): boolean {
+    const msg = String(error);
+    return msg.includes("State already discarded") || msg.includes("Unknown Block");
+  }
+
+  async function processRange(from: number, to: number, label: "backfill" | "live"): Promise<void> {
+    if (from > to) return;
+
+    for (let batchFrom = from; batchFrom <= to; batchFrom += backfillFetchConcurrency) {
+      const batchTo = Math.min(to, batchFrom + backfillFetchConcurrency - 1);
+      const fetched = await Promise.all(
+        Array.from({ length: batchTo - batchFrom + 1 }, async (_, i) => {
+          const block = batchFrom + i;
+          try {
+            return { block, ctx: await fetchBlockContext(block) } as const;
+          } catch (error) {
+            return { block, error } as const;
+          }
+        }),
+      );
+
+      for (const result of fetched) {
+        if ("error" in result) {
+          if (isPrunedBlockError(result.error)) {
+            log.warn("skipping pruned block", { block: result.block });
+            // Skipped blocks still advance the cursor to avoid infinite retry.
+            await updateCursor(result.block);
+            continue;
+          }
+          // Non-pruning error: bail without advancing so the next restart/head
+          // retries from the first unprocessed block.
+          throw result.error;
         }
-        // Non-pruning error: bail without advancing so next head triggers retry.
-        throw err;
+
+        await applyBlockContext(result.ctx);
+        await updateCursor(result.block);
+        if (label === "backfill" && result.block % 50 === 0) {
+          log.info("backfill progress", { at: result.block, to });
+        }
       }
     }
   }
 
   async function runLive(): Promise<void> {
     log.info("subscribing to finalized heads");
-    await api.rpc.chain.subscribeFinalizedHeads(async (header) => {
+    unsubscribeFinalizedHeads = await api.rpc.chain.subscribeFinalizedHeads(async (header) => {
       const height = header.number.toNumber();
       if (catchUpInFlight) {
         // A prior callback is still running. It will see the new head via its
@@ -257,7 +313,8 @@ export async function createProcessor(hooks: ProcessorHooks) {
         try {
           await catchUpTo(height);
         } catch (err) {
-          log.error("block processing failed", { block: height, error: String(err) });
+          log.error("block processing failed", { block: height, error: formatError(err) });
+          fail(err);
         } finally {
           catchUpInFlight = null;
         }
@@ -272,7 +329,13 @@ export async function createProcessor(hooks: ProcessorHooks) {
     resumePoint,
     runBackfill,
     runLive,
+    waitUntilStopped,
     async stop() {
+      stopped = true;
+      if (unsubscribeFinalizedHeads) {
+        unsubscribeFinalizedHeads();
+        unsubscribeFinalizedHeads = null;
+      }
       await api.disconnect();
     },
   };

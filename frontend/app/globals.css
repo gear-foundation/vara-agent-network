@@ -3464,28 +3464,196 @@
   max-width: 900px;
 }
 
-.hack-timeline {
+.hack-build-brief {
   display: grid;
-  overflow: hidden;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
   margin-top: 24px;
+}
+
+.hack-build-brief__intro {
+  border: 1px solid color-mix(in oklch, var(--primary) 20%, var(--border));
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 8%, transparent), transparent 48%),
+    var(--card);
+  padding: 16px 18px;
+}
+
+.hack-build-brief__intro {
+  margin: 0;
+  color: var(--foreground);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.hack-build-steps {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.hack-build-steps article {
+  position: relative;
+  display: flex;
+  min-height: 168px;
+  flex-direction: column;
+  align-items: flex-start;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
-  background: var(--card);
+  background:
+    radial-gradient(260px 120px at 0 0, color-mix(in oklch, var(--primary) 7%, transparent), transparent 72%),
+    var(--card);
+  padding: 18px;
+}
+
+.hack-build-steps article > span {
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  letter-spacing: 0.14em;
+}
+
+.hack-build-steps h3 {
+  margin: 14px 0 8px;
+  color: var(--foreground);
+  font-size: 17px;
+  line-height: 1.25;
+}
+
+.hack-build-steps p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.hack-tip {
+  position: relative;
+  display: inline-flex;
+  vertical-align: baseline;
+}
+
+.hack-tip__trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  margin: 0;
+  border: 1px solid color-mix(in oklch, var(--primary) 30%, var(--border));
+  border-radius: 999px;
+  background: color-mix(in oklch, var(--primary) 8%, transparent);
+  padding: 0;
+  color: var(--primary);
+  cursor: help;
+}
+
+.hack-build-steps article > .hack-tip,
+.hack-timeline__col > .hack-tip,
+.hack-track-card > .hack-tip,
+.hack-info-grid article > .hack-tip {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+}
+
+.hack-tip__trigger:hover,
+.hack-tip__trigger:focus-visible {
+  border-color: color-mix(in oklch, var(--primary) 56%, var(--border));
+  background: color-mix(in oklch, var(--primary) 14%, transparent);
+  outline: none;
+}
+
+.hack-tip__bubble {
+  position: absolute;
+  z-index: 20;
+  display: none;
+  left: 0;
+  bottom: calc(100% + 10px);
+  width: min(330px, calc(100vw - 36px));
+  border: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border));
+  border-radius: 14px;
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 9%, transparent), transparent 52%),
+    oklch(0.115 0 0);
+  box-shadow: 0 18px 46px oklch(0 0 0 / 0.46);
+  padding: 12px 14px;
+  color: var(--foreground);
+  font-size: 13px;
+  font-weight: 500;
+  line-height: 1.5;
+  opacity: 0;
+  pointer-events: none;
+  transform: translateY(4px);
+  transition: opacity 150ms ease, transform 150ms ease;
+}
+
+.hack-build-steps article > .hack-tip .hack-tip__bubble,
+.hack-timeline__col > .hack-tip .hack-tip__bubble,
+.hack-track-card > .hack-tip .hack-tip__bubble,
+.hack-info-grid article > .hack-tip .hack-tip__bubble {
+  right: 0;
+  left: auto;
+}
+
+.hack-build-steps article > .hack-tip .hack-tip__bubble::after,
+.hack-timeline__col > .hack-tip .hack-tip__bubble::after,
+.hack-track-card > .hack-tip .hack-tip__bubble::after,
+.hack-info-grid article > .hack-tip .hack-tip__bubble::after {
+  right: 8px;
+  left: auto;
+}
+
+.hack-build-steps .hack-tip__bubble,
+.hack-judging-list .hack-tip__bubble,
+.hack-info-grid .hack-tip__bubble,
+.hack-track-card .hack-tip__bubble,
+.hack-timeline .hack-tip__bubble {
+  position: absolute;
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  letter-spacing: 0;
+  opacity: 0;
+}
+
+.hack-tip__bubble::after {
+  position: absolute;
+  left: 18px;
+  bottom: -6px;
+  width: 10px;
+  height: 10px;
+  border-right: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border));
+  border-bottom: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border));
+  background: oklch(0.115 0 0);
+  content: "";
+  transform: rotate(45deg);
+}
+
+.hack-tip:hover .hack-tip__bubble,
+.hack-tip__trigger:focus-visible + .hack-tip__bubble {
+  display: block;
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.hack-timeline {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  align-items: start;
+  gap: 18px;
+  margin-top: 24px;
 }
 
 .hack-timeline__col {
+  position: relative;
   display: flex;
-  min-height: 260px;
   flex-direction: column;
   gap: 10px;
-  border-right: 1px solid oklch(0.245 0 0 / 0.78);
+  min-width: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
   background: var(--card);
-  padding: 22px 20px;
-}
-
-.hack-timeline__col:last-child {
-  border-right: 0;
+  padding: 22px 54px 22px 20px;
 }
 
 .hack-timeline__col[data-current="true"] {
@@ -3512,11 +3680,11 @@
   color: var(--foreground);
   font-size: 19px;
   font-weight: 700;
-  letter-spacing: -0.02em;
+  line-height: 1.25;
 }
 
 .hack-timeline ul {
-  margin: auto 0 0;
+  margin: 4px 0 0;
   padding-left: 18px;
   color: var(--muted-foreground);
   font-size: 14px;
@@ -3524,15 +3692,22 @@
 }
 
 .hack-timeline li {
-  margin: 2px 0;
+  margin: 6px 0;
   list-style: disc;
 }
 
 .hack-timeline p {
   margin: 2px 0 0;
   color: var(--muted-foreground);
-  font-size: 14.5px;
-  line-height: 1.68;
+  font-size: 14px;
+  line-height: 1.5;
+}
+
+.hack-timeline__closing {
+  border-top: 1px dashed oklch(0.245 0 0 / 0.78);
+  padding-top: 12px;
+  color: var(--foreground) !important;
+  font-weight: 700;
 }
 
 .hack-accordion {
@@ -3623,6 +3798,7 @@
 
 .hack-track-card {
   --tone: var(--primary);
+  position: relative;
   display: flex;
   min-height: 224px;
   flex-direction: column;
@@ -3631,7 +3807,7 @@
   background:
     radial-gradient(360px 160px at 0 0, color-mix(in oklch, var(--tone) 8%, transparent), transparent 72%),
     var(--card);
-  padding: 24px;
+  padding: 24px 58px 24px 24px;
   transition: border-color 0.15s, transform 0.15s;
 }
 
@@ -3699,6 +3875,15 @@
 .hack-track-card__foot strong {
   color: var(--tone);
   font-size: 15px;
+}
+
+.hack-track-card__success {
+  margin-top: 14px !important;
+  border-top: 1px dashed oklch(0.245 0 0 / 0.82);
+  padding-top: 14px;
+  color: var(--foreground) !important;
+  font-size: 13.5px !important;
+  line-height: 1.55 !important;
 }
 
 .hack-split-grid,
@@ -3850,6 +4035,265 @@
   text-align: center;
 }
 
+.social-claim {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 18px;
+  margin-top: 22px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 10%, transparent), transparent 48%),
+    var(--card);
+  padding: 22px;
+}
+
+.social-claim__copy h3 {
+  margin: 8px 0 8px;
+  color: var(--foreground);
+  font-size: 22px;
+  line-height: 1.25;
+}
+
+.social-claim__copy p,
+.social-claim-modal__checking {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.social-claim__status {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: clamp(205px, 18vw, 280px);
+  min-height: 42px;
+  gap: 9px;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: oklch(0.12 0 0);
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.25;
+  padding: 8px 14px;
+  text-align: center;
+}
+
+.social-claim__status[data-state="PENDING"] {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  color: var(--primary);
+}
+
+.social-claim__status[data-state="SENT"] {
+  border-color: color-mix(in oklch, var(--primary) 45%, var(--border));
+  background: color-mix(in oklch, var(--primary) 12%, transparent);
+  color: var(--primary);
+}
+
+.social-claim__status[data-state="FAILED"] {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  color: var(--primary);
+}
+
+.social-claim__tweet,
+.social-claim .btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.social-claim__tweet {
+  width: clamp(205px, 18vw, 280px);
+  min-height: 42px;
+  border-color: var(--border);
+  background: transparent;
+  padding: 8px 14px;
+  color: var(--primary);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.social-claim__tweet:hover {
+  border-color: color-mix(in oklch, var(--primary) 35%, var(--border));
+  background: color-mix(in oklch, var(--primary) 8%, transparent);
+  color: var(--primary);
+}
+
+.social-claim__error,
+.social-claim__muted {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 13px;
+}
+
+.social-claim__error {
+  color: var(--destructive);
+}
+
+.social-claim__muted {
+  color: var(--muted-foreground);
+  font-size: 13px;
+}
+
+.social-claim__spin {
+  animation: social-claim-spin 0.9s linear infinite;
+}
+
+@keyframes social-claim-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.social-claim-modal {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  overflow-y: auto;
+  padding: 18px;
+}
+
+.social-claim-modal__backdrop {
+  position: fixed;
+  inset: 0;
+  border: 0;
+  background: color-mix(in oklch, black 68%, transparent);
+  cursor: default;
+}
+
+.social-claim-modal__panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 520px);
+  max-height: min(720px, calc(100dvh - 36px));
+  overflow-y: auto;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background: var(--card);
+  box-shadow: 0 28px 90px rgba(0, 0, 0, 0.45);
+  padding: 24px;
+}
+
+.social-claim-modal__close {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  place-items: center;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--muted-foreground);
+  cursor: pointer;
+}
+
+.social-claim-modal__panel h3 {
+  margin: 10px 44px 18px 0;
+  color: var(--foreground);
+  font-size: 25px;
+  line-height: 1.2;
+}
+
+.social-claim-modal__steps {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 14px;
+}
+
+.social-claim-modal__steps span {
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: oklch(0.1 0 0);
+  color: var(--muted-foreground);
+  padding: 10px 12px;
+  font-size: 13px;
+  font-weight: 700;
+  text-align: center;
+}
+
+.social-claim-modal__steps span:first-child {
+  border-color: color-mix(in oklch, var(--primary) 34%, var(--border));
+  background: color-mix(in oklch, var(--primary) 10%, transparent);
+  color: var(--primary);
+}
+
+.social-claim-modal__tweet {
+  border: 1px solid color-mix(in oklch, var(--primary) 28%, var(--border));
+  border-radius: 14px;
+  background: color-mix(in oklch, var(--primary) 7%, transparent);
+  color: var(--foreground);
+  padding: 16px;
+  font-size: 15px;
+  line-height: 1.5;
+}
+
+.social-claim-modal__intent {
+  display: inline-flex;
+  justify-content: center;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 54px;
+  margin-top: 14px;
+  font-size: 16px;
+  font-weight: 800;
+}
+
+.social-claim-modal__field {
+  display: grid;
+  gap: 8px;
+  margin-top: 18px;
+}
+
+.social-claim-modal__field span {
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.social-claim-modal__field input {
+  width: 100%;
+  min-height: 46px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: oklch(0.1 0 0);
+  color: var(--foreground);
+  padding: 0 14px;
+  font-size: 14px;
+}
+
+.social-claim-modal__field-error {
+  margin: 8px 0 0;
+  color: var(--destructive);
+  font-size: 13px;
+  line-height: 1.45;
+}
+
+.social-claim-modal__submit {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  margin-top: 16px;
+}
+
+.social-claim-modal__checking {
+  margin-top: 12px;
+  text-align: center;
+}
+
 .hack-prize-row span,
 .hack-prize-row strong {
   display: block;
@@ -3917,11 +4361,22 @@
 }
 
 .hack-judging-list strong {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 8px;
   margin-bottom: 6px;
   color: var(--foreground);
   font-size: 15.5px;
   line-height: 1.35;
+}
+
+.hack-judging-list__title .hack-tip {
+  flex: 0 0 auto;
+}
+
+.hack-judging-list__title .hack-tip__trigger {
+  width: 22px;
+  height: 22px;
 }
 
 .hack-judging-list li div span {
@@ -4064,18 +4519,19 @@
 
 .hack-info-grid {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
   margin-top: 24px;
 }
 
 .hack-info-grid article {
+  position: relative;
   border: 1px solid var(--border);
   border-radius: var(--radius-xl);
   background:
     radial-gradient(280px 120px at 100% 0, color-mix(in oklch, var(--primary) 6%, transparent), transparent 72%),
     var(--card);
-  padding: 24px;
+  padding: 24px 58px 24px 24px;
 }
 
 .hack-info-grid span {
@@ -4372,14 +4828,12 @@
     grid-template-columns: 1fr;
   }
 
-  .hack-timeline__col {
-    min-height: auto;
-    border-right: 0;
-    border-bottom: 1px solid oklch(0.245 0 0 / 0.78);
+  .hack-build-steps {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
-  .hack-timeline__col:last-child {
-    border-bottom: 0;
+.hack-timeline__col {
+    min-height: auto;
   }
 
   .hack-track-grid {
@@ -4410,6 +4864,17 @@
 
   .hack-info-grid {
     grid-template-columns: 1fr;
+  }
+
+  .social-claim {
+    grid-template-columns: 1fr;
+    align-items: stretch;
+  }
+
+  .social-claim__status,
+  .social-claim .btn,
+  .social-claim__tweet {
+    width: 100%;
   }
 
   .hack-prize-grid {
@@ -4520,9 +4985,30 @@
     padding: 20px;
   }
 
+  .hack-build-steps {
+    grid-template-columns: 1fr;
+  }
+
+  .hack-build-brief__intro,
+  .hack-build-steps article {
+    padding: 18px;
+  }
+
   .hack-track-card__foot {
     align-items: flex-start;
     flex-direction: column;
+  }
+
+  .social-claim {
+    padding: 18px;
+  }
+
+  .social-claim-modal__panel {
+    padding: 20px;
+  }
+
+  .social-claim-modal__panel h3 {
+    font-size: 22px;
   }
 
   .hack-cta {

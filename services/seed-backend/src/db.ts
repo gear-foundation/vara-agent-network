@@ -17,6 +17,14 @@ export interface ApplicationRow {
   registered_at: bigint;
 }
 
+export interface ParticipantRow {
+  id: string;
+  handle: string;
+  github: string;
+  joined_at: bigint;
+  season_id: number;
+}
+
 export interface AllocationRow {
   id: number;
   wallet: string;
@@ -176,6 +184,48 @@ export async function ensureSchema(): Promise<void> {
       metadata jsonb NOT NULL DEFAULT '{}',
       created_at timestamptz NOT NULL DEFAULT now()
     );
+
+    CREATE TABLE IF NOT EXISTS social_x_claims (
+      id bigserial PRIMARY KEY,
+      wallet text NOT NULL,
+      participant_handle text NOT NULL,
+      tweet_url text NOT NULL,
+      tweet_id text NOT NULL,
+      tweet_author text NOT NULL,
+      tweet_created_at timestamptz NOT NULL,
+      amount_raw numeric(78,0) NOT NULL,
+      status text NOT NULL DEFAULT 'PENDING',
+      ip_hash text,
+      ip_subnet text,
+      tx_hash text,
+      error text,
+      created_at timestamptz NOT NULL DEFAULT now(),
+      updated_at timestamptz NOT NULL DEFAULT now(),
+      sent_at timestamptz,
+      UNIQUE (wallet),
+      UNIQUE (tweet_id),
+      UNIQUE (tweet_author)
+    );
+
+    CREATE INDEX IF NOT EXISTS social_x_claims_status_idx ON social_x_claims(status, created_at);
+    CREATE INDEX IF NOT EXISTS social_x_claims_sent_at_idx ON social_x_claims(sent_at);
+    CREATE INDEX IF NOT EXISTS social_x_claims_subnet_idx ON social_x_claims(ip_subnet, created_at);
+
+    CREATE TABLE IF NOT EXISTS social_x_claim_attempts (
+      id bigserial PRIMARY KEY,
+      wallet text,
+      tweet_id text,
+      tweet_author text,
+      ip_hash text,
+      ip_subnet text,
+      outcome text NOT NULL,
+      reason text NOT NULL,
+      created_at timestamptz NOT NULL DEFAULT now()
+    );
+
+    CREATE INDEX IF NOT EXISTS social_x_claim_attempts_ip_idx ON social_x_claim_attempts(ip_hash, created_at);
+    CREATE INDEX IF NOT EXISTS social_x_claim_attempts_wallet_idx ON social_x_claim_attempts(wallet, created_at);
+    CREATE INDEX IF NOT EXISTS social_x_claim_attempts_subnet_idx ON social_x_claim_attempts(ip_subnet, created_at);
   `);
 }
 
@@ -189,6 +239,13 @@ export async function validateDatabaseSchema(): Promise<void> {
     "season_id",
     "registered_at",
   ]);
+  await requireColumns("participants", [
+    "id",
+    "handle",
+    "github",
+    "joined_at",
+    "season_id",
+  ]);
 
   for (const table of [
     "seed_allocations",
@@ -198,9 +255,24 @@ export async function validateDatabaseSchema(): Promise<void> {
     "seed_taint_targets",
     "seed_monitor_cursor",
     "seed_audit_events",
+    "social_x_claims",
+    "social_x_claim_attempts",
   ]) {
     await requireTable(table);
   }
+}
+
+export async function getParticipantByWallet(wallet: string): Promise<ParticipantRow | null> {
+  const rows = await pool.query<ParticipantRow>(
+    `
+      SELECT id, handle, github, joined_at, season_id
+      FROM participants
+      WHERE lower(id) = lower($1)
+      LIMIT 1
+    `,
+    [wallet],
+  );
+  return rows.rows[0] ?? null;
 }
 
 async function requireTable(tableName: string): Promise<void> {
@@ -276,6 +348,41 @@ export async function upsertApplicationsFromIndexer(applications: ApplicationRow
     }
     await client.query("COMMIT");
     return applications.length;
+  } catch (error) {
+    await client.query("ROLLBACK");
+    throw error;
+  } finally {
+    client.release();
+  }
+}
+
+export async function upsertParticipantsFromIndexer(participants: ParticipantRow[]): Promise<number> {
+  if (participants.length === 0) return 0;
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    for (const participant of participants) {
+      await client.query(
+        `
+          INSERT INTO participants (id, handle, github, joined_at, season_id, first_seen_substrate_block, first_seen_gear_block)
+          VALUES (lower($1), $2, $3, $4, $5, 0, 0)
+          ON CONFLICT (id) DO UPDATE SET
+            handle = EXCLUDED.handle,
+            github = EXCLUDED.github,
+            joined_at = EXCLUDED.joined_at,
+            season_id = EXCLUDED.season_id
+        `,
+        [
+          participant.id,
+          participant.handle,
+          participant.github,
+          participant.joined_at,
+          participant.season_id,
+        ],
+      );
+    }
+    await client.query("COMMIT");
+    return participants.length;
   } catch (error) {
     await client.query("ROLLBACK");
     throw error;

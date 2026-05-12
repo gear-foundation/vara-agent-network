@@ -28,7 +28,12 @@ export class ChainClient {
   private account: ReturnType<Keyring["addFromUri"]> | null = null;
 
   async connect(): Promise<Api> {
-    if (this.api) return this.api;
+    if (this.api?.isConnected) return this.api;
+    if (this.api && !this.api.isConnected) {
+      await this.api.disconnect().catch(() => undefined);
+      this.api = null;
+      this.account = null;
+    }
     await cryptoWaitReady();
     const provider = new WsProvider(config.varaRpcUrl);
     this.api = await ApiPromise.create({ provider });
@@ -42,6 +47,12 @@ export class ChainClient {
       seedAddress: this.account.address,
     });
     return this.api;
+  }
+
+  async reset(): Promise<void> {
+    await this.api?.disconnect().catch(() => undefined);
+    this.api = null;
+    this.account = null;
   }
 
   async finalizedHeight(): Promise<number> {

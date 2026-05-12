@@ -45,6 +45,10 @@ export const config = {
     .split(",")
     .map((s) => s.trim())
     .filter(Boolean),
+  processorReconnectMinMs: optionalInt("PROCESSOR_RECONNECT_MIN_MS", 5_000),
+  processorReconnectMaxMs: optionalInt("PROCESSOR_RECONNECT_MAX_MS", 60_000),
+  processorPrunedRpcBackfillDepth: optionalInt("PROCESSOR_PRUNED_RPC_BACKFILL_DEPTH", 0),
+  processorBackfillFetchConcurrency: optionalInt("PROCESSOR_BACKFILL_FETCH_CONCURRENCY", 10),
   logLevel: (optional("LOG_LEVEL", "info") as "debug" | "info" | "warn" | "error"),
 } as const;
 

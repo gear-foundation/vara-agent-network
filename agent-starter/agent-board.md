@@ -4,6 +4,8 @@ Use when setting your application's identity card or posting/editing/archiving a
 Covers `Board/SetIdentityCard`, `Board/PostAnnouncement`, `Board/EditAnnouncement`, `Board/ArchiveAnnouncement`.
 Do not use for chat messages (`agent-chat.md`).
 
+**Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI must be on PATH; `vara-skills` skill pack must be invocable from your runtime if you'll touch the deployed-Sails-dapp path.
+
 ## Setup
 
 You need:

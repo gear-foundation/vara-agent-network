@@ -33,6 +33,11 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 - Tracks registered programs that receive seed-derived value and treats
   `gear.UserMessageSent` value transfers from those programs to external
   wallets as suspicious spend for the original funded wallet.
+- Handles the X social reward campaign: one signed claim per registered
+  participant wallet, one claim per tweet ID, and one claim per X username.
+- Does not call the X API. It validates only URL shape, tweet snowflake
+  timestamp, campaign freshness, wallet signature, participant age, and rate
+  limits before queueing the `100 VARA` reward.
 
 ## API
 
@@ -48,6 +53,8 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
 - `POST /seed/payouts/:idempotencyKey/mark-sent` with `{ "txHash": "0x..." }`
 - `POST /seed/payouts/:idempotencyKey/cancel` with `{ "reason": "..." }`
 - `POST /seed/allocations/:wallet/unblacklist` with `{ "reason": "..." }`
+- `GET /social/x-claim/:wallet` returns the participant's current X reward claim, if any.
+- `POST /social/x-claim` with `{ "wallet": "...", "tweetUrl": "https://x.com/.../status/...", "signature": "0x..." }`.
 
 Cancelling a `PENDING` payout means the transfer is confirmed not to have been
 sent. The next payout attempt for the same scope gets a new `:attempt-N`
@@ -58,6 +65,11 @@ Mutating endpoints require `Authorization: Bearer $SEED_API_KEY` when
 required at boot.
 Allocation and payout listing endpoints are admin/debug data and use the same
 API key guard.
+
+The social reward endpoint should normally be reached through the frontend
+proxy so `SEED_API_KEY` is never exposed to the browser. A submitted social
+claim is stored as `PENDING`; the worker pays it later when
+`SOCIAL_X_PAYOUT_INTERVAL_SEC > 0` and hourly/daily budget remains.
 
 ## Run
 
@@ -89,15 +101,16 @@ npm run build
 DATABASE_URL=postgres://seed_migrator:...@postgres:5432/indexer npm run migrate
 ```
 
-The migration creates only `seed_*` tables plus `seed_schema_migrations`; it
+The migration creates only `seed_*`/`social_x_*` tables plus `seed_schema_migrations`; it
 does not create or mutate indexer tables. The runtime service validates that
-the indexer-owned `applications` table exists with the required columns.
+the indexer-owned `applications` and `participants` tables exist with the
+required columns.
 
 Recommended database permissions:
 
-- migration role: `CREATE` on the target schema and write access to `seed_*`.
-- runtime role: `SELECT` on `applications` and `interactions`; read/write on
-  `seed_*`; no write access to indexer-owned tables.
+- migration role: `CREATE` on the target schema and write access to `seed_*`/`social_x_*`.
+- runtime role: `SELECT` on `applications`, `participants`, and `interactions`; read/write on
+  `seed_*`/`social_x_*`; no write access to indexer-owned tables.
 
 By default the monitor starts at the latest finalized block on first boot.
 Use an archive RPC and set an explicit `MONITOR_START_BLOCK` when historical
@@ -111,3 +124,21 @@ allocation rows.
 Set `AUTO_REFILL_INTERVAL_SEC=300` to automatically check active funded
 allocations for refill. Refill still respects cooldown, activity, balance
 trigger, risk state, daily caps, and lifetime caps.
+
+## Social X Reward Limits
+
+Defaults are intentionally conservative:
+
+- `SOCIAL_X_REWARD_VARA=100`
+- `SOCIAL_X_PARTICIPANT_MIN_AGE_SEC=900`
+- `SOCIAL_X_MAX_PAYOUTS_PER_HOUR=10`
+- `SOCIAL_X_MAX_PAYOUTS_PER_DAY=50`
+- `SOCIAL_X_GLOBAL_DAILY_LIMIT_VARA=5000`
+- `SOCIAL_X_IP_ATTEMPTS_PER_HOUR=5`
+- `SOCIAL_X_IP_ATTEMPTS_PER_DAY=20`
+- `SOCIAL_X_SUBNET_CLAIMS_PER_DAY=30`
+- `SOCIAL_X_PAYOUT_INTERVAL_SEC=60`
+- `SOCIAL_X_CAMPAIGN_START_ISO=2026-05-10T00:00:00.000Z`
+
+These limits mean a bot can create pending rows only within tight submission
+limits, and liquid VARA leaves the service gradually through the payout queue.
