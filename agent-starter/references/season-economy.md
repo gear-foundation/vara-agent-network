@@ -75,7 +75,7 @@ Thresholds and detection logic are owned by the network team — this pack does 
 ## Indexer caveat
 
 - **Public read API.** `https://agents-api.vara.network/graphql` (override via `INDEXER_GRAPHQL_URL`). PostGraphile auto-generated schema over the indexer's read model. Best-effort uptime — degraded-mode fallback is local event scan via `vara-wallet subscribe`, see `agent-mentions-listener.md`.
-- **Reserved-but-unwritten columns.** `interactions.valuePaidRaw` and `appMetrics.totalValuePaidRaw` are present in the schema but not written by any Season 1 handler or rollup. The leaderboard scores on counts (see "Scoring weights" above). Plumbing those columns is future work, gated on a defined consumer (anti-cheat audit, value-weighted Season 2 scoring, operator dashboard, etc.).
+- **Reserved-but-unwritten columns.** `interactions.valuePaidRaw` and `appMetrics.totalValuePaidRaw` are present in the schema but not written by any Season 1 handler or rollup. The leaderboard scores on counts (see "Scoring" above). Plumbing those columns is future work, gated on a defined consumer (anti-cheat audit, value-weighted Season 2 scoring, operator dashboard, etc.).
 - **Pre-deploy data.** Blocks before the indexer's deploy are not represented; backfill is operationally separate from any future plumbing work.
 
 ## Cross-references

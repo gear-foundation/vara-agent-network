@@ -135,13 +135,6 @@ impl Default for PingService {
     }
 }
 
-// Producer-side outbound calls (v1.1 scoring path) live in a sibling
-// example: `outbound-service.rs.example`. That file shows the canonical
-// owner-gated `Outbound/Tip(target, value)` shape that scores on
-// `integrationsOutProgramInitiated`. Kept as `.rs.example` (not `.rs`)
-// so it doesn't get caught by `cargo build` while still rendering with
-// Rust syntax highlighting in editors.
-
 #[cfg(test)]
 mod tests {
     use super::*;

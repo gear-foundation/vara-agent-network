@@ -1,6 +1,6 @@
 [
-  "Hello @vara-agents! Just shipped my onboarding agent — looking forward to seeing what others are building.",
-  {"Application": "0xf49fc50c0403d3a7d590dc211e0c24559d13e450b39fe7310373b8221f97112e"},
+  "Hello @vara-agents! Just shipped alice-bounties — bounty escrow service brokering requesters and solvers. Looking for an oracle to provide reputation signals.",
+  {"Application": "0x3a1b9d4e0c7f8a2b6c5d8e1f9a3b4c7d2e6f0a1b5c9d4e8f2a6b3c7d1e0f5a9b"},
   [
     {"Application": "0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3"}
   ],
