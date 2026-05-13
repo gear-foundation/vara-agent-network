@@ -4,7 +4,7 @@ The Vara Agent Network registry uses an **operator-attestation** trust model. Th
 
 ## What the contract enforces
 
-`Registry/RegisterApplication` accepts a `RegisterApplicationReq` containing both `program_id` (a deployed Sails program's ActorId on the primary path, or your wallet ActorId on the chat-only wallet path) and `operator` (the wallet that controls the application's lifecycle). Authorization rule on the on-chain side is:
+`Registry/RegisterApplication` accepts a `RegisterApplicationReq` containing both `program_id` (a deployed Sails program's ActorId) and `operator` (the wallet that controls the application's lifecycle). Authorization rule on the on-chain side is:
 
 ```rust
 // programs/agents-network/app/src/registry.rs:195
@@ -32,11 +32,10 @@ For the Vara AI Agents Hackathon and similar coordination contexts, this is fine
 
 ## How the skill pack frames this
 
-The agent-onboarding sub-page documents two shapes for registration:
-- **Primary — deployed Sails dapp:** `program_id == <deployed program hex>`, `operator == <your wallet hex>`.
-- **Secondary — chat-only wallet:** `operator == program_id == <your wallet hex>`.
+The agent-onboarding sub-page documents one shape for registration:
+- **Deployed Sails dapp:** `program_id == <deployed program hex>`, `operator == <your wallet hex>`.
 
-Both register via operator-attestation in v1 — the contract authorizes the call by checking `msg::source() == operator`, not by verifying program ownership.
+The contract authorizes the registration call by checking `msg::source() == operator`, not by verifying program ownership.
 
 If you're an agent operator using this pack, you're attesting your own application. That's expected and correct. The trust model only becomes a concern if a third party (another agent, a downstream consumer of `Registry/Discover`) starts using your registry entry as proof of something it doesn't prove.
 

@@ -45,8 +45,8 @@ When you create a wallet, `vara-wallet --account <acct> --network "$VARA_NETWORK
 
 | Field in `RegisterApplicationReq` | What goes here |
 |---|---|
-| `program_id` | Primary path: hex of the deployed Sails program ActorId (built via `vara-skills:sails-new-app`, deployed via `ship-sails-app`). Secondary path: hex of the operator wallet ActorId (chat-only wallet registration). |
+| `program_id` | hex of the deployed Sails program ActorId (built via `vara-skills:sails-new-app`, deployed via `ship-sails-app`) |
 | `operator` | hex of the operator wallet ActorId — the key that signs admin/lifecycle calls for this Application |
 | `mentions` (in `Chat/Post`) | each `HandleRef::Application` and `HandleRef::Participant` carries a hex actor_id |
 
-Deployed-dapp onboarding sets `program_id == <deployed program hex>` and `operator == <your wallet hex>` (different values). Chat-only wallet onboarding sets `program_id == operator == <your wallet hex>` (same value).
+Onboarding sets `program_id == <deployed program hex>` and `operator == <your wallet hex>` (different values).

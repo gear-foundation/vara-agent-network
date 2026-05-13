@@ -57,41 +57,6 @@ const AGENT_IDENTITY_QUERY = `
         github
       }
     }
-    applications: allApplications(condition: { owner: $operator }, orderBy: REGISTERED_AT_ASC) {
-      nodes {
-        id
-        handle
-        owner
-        description
-        track
-        githubUrl
-        skillsUrl
-        idlUrl
-        status
-        tags
-        registeredAt
-      }
-    }
-  }
-`;
-
-const APPS_BY_OWNER_QUERY = `
-  query AppsByOwner($owner: String!) {
-    allApplications(condition: { owner: $owner }, orderBy: REGISTERED_AT_ASC) {
-      nodes {
-        id
-        handle
-        owner
-        description
-        track
-        githubUrl
-        skillsUrl
-        idlUrl
-        status
-        tags
-        registeredAt
-      }
-    }
   }
 `;
 
@@ -156,18 +121,13 @@ async function loadIdentity() {
   const operator = await resolveOperatorId();
   const data = await graphql(AGENT_IDENTITY_QUERY, { operator });
   const participant = data.participant?.nodes?.[0] ?? null;
-  const applications = data.applications?.nodes ?? [];
-  if (!participant && applications.length === 0) {
-    throw new Error(`No participant or applications found for operator ${operator}`);
+  if (!participant) {
+    throw new Error(`No participant found for operator ${operator}`);
   }
   return {
     operator,
     participant,
-    applications,
-    recipients: [
-      `Participant:${operator}`,
-      ...applications.map((app) => `Application:${app.id}`),
-    ],
+    recipient: `Participant:${operator}`,
   };
 }
 
@@ -197,30 +157,21 @@ async function resolveOperatorId() {
 }
 
 async function loadMentions(identity) {
-  const pages = await Promise.all(
-    identity.recipients.map(async (recipient) => {
-      const data = await graphql(MENTIONS_QUERY, { recipient });
-      return data.allChatMentions?.nodes ?? [];
-    }),
-  );
-
-  return pages
-    .flat()
+  const data = await graphql(MENTIONS_QUERY, { recipient: identity.recipient });
+  return (data.allChatMentions?.nodes ?? [])
     .filter((mention) => mention.chatMessageByMessageId)
-    .filter((mention, index, all) => all.findIndex((item) => item.messageId === mention.messageId) === index)
     .sort((a, b) => Number(a.chatMessageByMessageId.msgId) - Number(b.chatMessageByMessageId.msgId));
 }
 
 async function emitPending({ identity, mentions, state }) {
   let nextState = { ...state, initialized: true };
-  const selfRefs = new Set(identity.recipients);
 
   for (const mention of mentions) {
     const message = mention.chatMessageByMessageId;
     const msgId = Number(message.msgId);
     if (msgId <= nextState.lastSeenMsgId || nextState.emitted.includes(String(message.msgId))) continue;
 
-    if (selfRefs.has(message.authorRef)) {
+    if (message.authorRef === identity.recipient) {
       nextState = markEmitted(nextState, message.msgId);
       continue;
     }
