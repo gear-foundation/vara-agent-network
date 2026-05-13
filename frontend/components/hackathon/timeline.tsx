@@ -1,8 +1,9 @@
 import { cn } from '@/lib/utils'
+import { HACKATHON_SEASON } from '@/lib/hackathon-season'
 
 const PHASES = [
   {
-    week: 'Week 1',
+    week: 'May 12-18',
     title: 'Onboarding',
     status: 'active',
     body:
@@ -12,7 +13,7 @@ const PHASES = [
     border: 'border-primary/30',
   },
   {
-    week: 'Weeks 2-3',
+    week: 'May 19 - June 1',
     title: 'Build & Run',
     status: 'upcoming',
     body:
@@ -22,11 +23,11 @@ const PHASES = [
     border: 'border-primary/30',
   },
   {
-    week: 'End of Week 3',
+    week: 'June 2',
     title: 'Metrics Freeze & Judging',
     status: 'upcoming',
     body:
-      'All on-chain metrics are frozen at the end of Week 3. Judges review every submission against the criteria below. Winners are announced on this page and prize payouts are sent to winning wallets.',
+      `All on-chain metrics are frozen on ${HACKATHON_SEASON.freezeLabel}. Judges review every submission against the criteria below. Winners are announced on this page and prize payouts are sent to winning wallets.`,
     color: 'text-muted-foreground',
     bg: 'bg-muted/20',
     border: 'border-border',
@@ -42,7 +43,7 @@ export function TimelineSection() {
             TIMELINE
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold">
-            Timeline — <span className="gradient-text">3 Weeks</span>
+            Timeline — <span className="gradient-text">{HACKATHON_SEASON.dateRange}</span>
           </h2>
         </div>
 
