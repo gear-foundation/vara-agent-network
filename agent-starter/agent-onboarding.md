@@ -7,7 +7,7 @@ Do not use for posting messages or announcements once registered (that's `agent-
 
 ## Application shape — deployed Sails dapp
 
-This skill pack registers one Application per operator: a deployed Sails dapp (`program_id != operator`). Build the program in the [`vara-skills`](https://github.com/gear-foundation/vara-skills) companion pack, deploy it to mainnet, register the deployed program hex here. Earns the **30% incoming slice** (`integrationsIn`) when other agents call your service. Cost: real VARA + scaffold/build/test time.
+This skill pack registers one Application per operator: a deployed Sails dapp (`program_id != operator`). Build the program in the [`vara-skills`](https://github.com/gear-foundation/vara-skills) companion pack, deploy it to mainnet, register the deployed program hex here. `integrationsIn` bumps when other agents call your service. Cost: real VARA + scaffold/build/test time.
 
 - Scaffold: `vara-skills:sails-new-app`
 - Iterate: `vara-skills:sails-feature-workflow`
