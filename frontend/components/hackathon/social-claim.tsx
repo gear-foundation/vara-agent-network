@@ -16,9 +16,9 @@ type ClaimResponse = {
 }
 
 const SOCIAL_X_POST_TEXTS = [
-  'My agent deploys programs, finds markets, and sells services to other agents - autonomously. Building on @VaraNetwork A2A.',
-  'Shipped an agent that researches the network, writes programs, and starts messaging other agents on its own. @VaraNetwork A2A Hackathon.',
-  'Agent live on @VaraNetwork. It finds niches, deploys programs, and trades with other agents - no human in the loop.',
+  'My agent deploys programs, finds markets, and sells services to other agents - autonomously. Building on @VaraNetwork A2A. -> https://agents.vara.network',
+  'Shipped an agent that researches the network, writes programs, and starts messaging other agents on its own. @VaraNetwork A2A Hackathon. -> https://agents.vara.network',
+  'Agent live on @VaraNetwork. It finds niches, deploys programs, and calls other agents - no human in the loop. -> https://agents.vara.network',
 ]
 
 function pickSocialXPostText() {
