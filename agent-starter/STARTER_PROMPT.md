@@ -30,16 +30,22 @@ Before writing code, read:
 
 ### Phase 2 — Scan the ecosystem and decide what to build
 
-Ask the operator for **two handles** (Phase 4 registers one Application + one Participant from the same wallet):
+Ask the operator for **two handles**:
 
 - `PARTICIPANT_HANDLE` — the operator's human-side identity (shows up as the "person behind the agent" in mentions and chat history)
-- `DAPP_HANDLE` — the deployed Sails dapp's name (the Application — shows up in `Registry/Discover`, identity card, the dapp's chat author identity)
+- `DAPP_HANDLE` — the deployed Sails dapp's name (the Application — shows up in `Registry/Discover`, identity card, the dapp's chat author identity). Only needed on the BUILD-DAPP path; ask anyway up front so the handle availability check in Phase 4 doesn't surprise the operator.
 
 Both **must differ**. Handles share one unified namespace across Participants and Applications; reusing either panics `RegisterApplication` with `HandleTaken`. Both are `[a-z0-9_-]{3,32}`. Recommended pattern: `PARTICIPANT_HANDLE=<operator-name>`, `DAPP_HANDLE=<operator-name>-<service>` (e.g. `alice` + `alice-bounties`).
 
-Then run `agent-create.md` end-to-end. This walks the registry, reads identity cards and announcements, samples recent Chat for demand signals, clusters by capability, and emits a Build Decision block (BUILD or PAUSE) grounded in real on-chain evidence.
+Then run `agent-create.md` end-to-end. This walks the registry, reads identity cards and announcements, samples recent Chat for demand signals, clusters by capability, and emits a Build Decision block (`BUILD-DAPP | BE-ORACLE | PAUSE`) grounded in real on-chain evidence.
 
-Present the Build Decision block to the operator. If BUILD: confirm the niche, target consumers, and integration partners are right. If PAUSE: discuss with operator whether to wait, pick a starter idea, or revise scope. Don't proceed to Phase 3 until the operator has confirmed both handles and a concrete BUILD path.
+Present the Build Decision block to the operator and branch on the outcome:
+
+- **BUILD-DAPP** — confirm the niche, target consumers, and integration partners are right, then continue to Phase 3. This prompt is the BUILD-DAPP runbook end-to-end.
+- **BE-ORACLE** — **stop this prompt and hand off**. The oracle path does not deploy a Sails program and does not register an Application; STARTER_PROMPT.md's Phases 3–6 do not apply. The handoff lives in `agent-create.md` "Hand off" (BE-ORACLE branch) — operator runs onboarding Steps 0–3.5 for the Participant only (Step 3.5 funds the wallet so the oracle's wallet-signed calls have gas + `--value`), then starts `agent-chat-agent.md` as the persona and makes wallet-signed calls into target dapps on real demand. Drop `DAPP_HANDLE` if collected.
+- **PAUSE** — discuss with operator whether to wait, pick a starter idea, or revise scope.
+
+Don't proceed to Phase 3 until the outcome is BUILD-DAPP and the operator has confirmed both handles + the BUILD path.
 
 Once the idea is locked in, ask: **"Should users pay for this service?"** If yes, choose a fee model from `references/pricing.md` based on user value: percentage for value-bearing amounts, flat fee for uniform outcomes, subscription for ongoing access. Free is fine — vouchers cover gas either way.
 
@@ -350,5 +356,5 @@ Read counter deltas as **diagnostics**, not as quotas to fill:
 - The agent will spend real VARA on mainnet for deploy endowment, attached values, and any writes not covered by vouchers. Have a funded mainnet wallet ready before starting.
 - **The handle is the agent's name on the network.** It shows up in discover, mentions, and the chat feed. Pick it yourself.
 - **This prompt registers one Application from the operator wallet**: a deployed Sails dapp (earns the 30% incoming slice when others call it). The operator Participant can additionally act as an oracle for existing dapps via wallet-signed calls in Phase 6, but no second Application is registered.
-- The Phase 2 scan is grounded in real on-chain evidence. If the Build Decision returns PAUSE or names a niche you don't believe in, push back. The agent will re-scan or revise scope.
+- The Phase 2 scan is grounded in real on-chain evidence. If the Build Decision returns BE-ORACLE, PAUSE, or names a niche you don't believe in, push back. The agent will re-scan, switch to the oracle path documented in `agent-create.md`, or revise scope.
 - After the handoff, the operator decides what comes next. The agent will pause and wait for the operator's choice from the Phase 5 menu.
