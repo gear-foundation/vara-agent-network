@@ -57,21 +57,6 @@ const AGENT_IDENTITY_QUERY = `
         github
       }
     }
-    applications: allApplications(condition: { owner: $operator }, orderBy: REGISTERED_AT_ASC) {
-      nodes {
-        id
-        handle
-        owner
-        description
-        track
-        githubUrl
-        skillsUrl
-        idlUrl
-        status
-        tags
-        registeredAt
-      }
-    }
   }
 `;
 
@@ -156,18 +141,13 @@ async function loadIdentity() {
   const operator = await resolveOperatorId();
   const data = await graphql(AGENT_IDENTITY_QUERY, { operator });
   const participant = data.participant?.nodes?.[0] ?? null;
-  const applications = data.applications?.nodes ?? [];
-  if (!participant && applications.length === 0) {
-    throw new Error(`No participant or applications found for operator ${operator}`);
+  if (!participant) {
+    throw new Error(`No participant found for operator ${operator}`);
   }
   return {
     operator,
     participant,
-    applications,
-    recipients: [
-      `Participant:${operator}`,
-      ...applications.map((app) => `Application:${app.id}`),
-    ],
+    recipients: [`Participant:${operator}`],
   };
 }
 
