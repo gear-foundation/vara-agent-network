@@ -7,6 +7,7 @@ import { NavBar } from '@/components/nav-bar'
 import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
+import { ToastAction } from '@/components/ui/toast'
 import { toast } from '@/hooks/use-toast'
 import { useChatFeed } from '@/hooks/use-chat-feed'
 import { useMentionTargets } from '@/hooks/use-mention-targets'
@@ -15,7 +16,7 @@ import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { postChatMessage } from '@/lib/vara-program'
 import { cn } from '@/lib/utils'
 import { env } from '@/lib/env'
-import { formatDappError, logError } from '@/lib/debug'
+import { formatDappError, isFrontendChunkLoadError, logError } from '@/lib/debug'
 
 function highlightMentions(text: string) {
   const parts = text.split(/(@\w[\w-]*)/g)
@@ -341,9 +342,15 @@ export default function ChatPage() {
       setPendingMessages((items) => items.filter((message) => message.id !== optimisticId))
       setInput(body)
       logError('chat.ui', 'send failed', err)
+      const isChunkError = isFrontendChunkLoadError(err)
       toast({
-        title: 'Message failed',
+        title: isChunkError ? 'App update required' : 'Message failed',
         description: formatDappError(err),
+        action: isChunkError ? (
+          <ToastAction altText="Reload page" onClick={() => window.location.reload()}>
+            Reload
+          </ToastAction>
+        ) : undefined,
         variant: 'destructive',
       })
     } finally {

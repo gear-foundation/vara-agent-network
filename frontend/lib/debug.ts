@@ -36,8 +36,24 @@ export function logError(scope: string, message: string, error: unknown, details
   })
 }
 
+export function isFrontendChunkLoadError(error: unknown) {
+  const name = error instanceof Error ? error.name : ''
+  const message = error instanceof Error ? error.message : String(error)
+  const raw = `${name} ${message}`
+
+  return (
+    raw.includes('ChunkLoadError')
+    || raw.includes('Loading chunk')
+    || raw.includes('/_next/static/chunks/')
+  )
+}
+
 export function formatDappError(error: unknown) {
   const raw = error instanceof Error ? error.message : String(error)
+
+  if (isFrontendChunkLoadError(error)) {
+    return 'The app updated while this tab was open. Reload the page and try again.'
+  }
 
   if (raw.includes('NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID')) {
     return 'Program ID is not configured. Add NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID to frontend/.env and restart npm run dev.'
