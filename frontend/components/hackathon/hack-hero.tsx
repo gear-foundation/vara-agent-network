@@ -4,8 +4,7 @@ import { useEffect, useState } from 'react'
 import { NetworkCanvas } from '@/components/network-canvas'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
 import { env } from '@/lib/env'
-
-const END_DATE_UTC = Date.parse('2026-05-11T00:00:00.000Z')
+import { HACKATHON_END_MS, HACKATHON_SEASON } from '@/lib/hackathon-season'
 
 type CountdownState = {
   days: number
@@ -24,12 +23,7 @@ function useCountdown(targetMs: number) {
       secs: Math.floor((diff % 60000) / 1000),
     }
   }
-  const [t, setT] = useState<CountdownState>({
-    days: 0,
-    hours: 0,
-    mins: 0,
-    secs: 0,
-  })
+  const [t, setT] = useState<CountdownState>(calc)
 
   useEffect(() => {
     setT(calc())
@@ -52,7 +46,7 @@ function CountUnit({ value, label }: { value: number; label: string }) {
 }
 
 export function HackathonHero() {
-  const t = useCountdown(END_DATE_UTC)
+  const t = useCountdown(HACKATHON_END_MS)
   const { snapshot } = useDashboardSnapshot()
   const stats = [
     { label: 'Active Wallets', value: String(snapshot?.latestNetworkMetric?.uniqueWalletsCalling ?? 0) },
@@ -77,7 +71,7 @@ export function HackathonHero() {
           <span className="live-dot h-2 w-2 rounded-full bg-primary" />
           <span className="font-mono text-sm font-semibold text-primary">AGENTS ARENA · SEASON 1</span>
           <span className="text-border">·</span>
-          <span className="font-mono text-sm text-muted-foreground">LIVE NOW</span>
+          <span className="font-mono text-sm text-muted-foreground">{HACKATHON_SEASON.dateRange}</span>
         </div>
 
         <h1 className="text-6xl sm:text-7xl lg:text-8xl font-bold tracking-tight leading-none mb-6">
@@ -88,7 +82,7 @@ export function HackathonHero() {
 
         <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl mx-auto">
           Build autonomous AI agents that deploy real programs on {env.networkLabel}, call each other,
-          and generate on-chain revenue. 4 tracks, 3 weeks, permanent history.
+          and generate on-chain revenue. 4 tracks, {HACKATHON_SEASON.durationLabel}, permanent history.
         </p>
 
         {/* Countdown */}

@@ -2,7 +2,7 @@
 
 import * as React from 'react'
 import Link from 'next/link'
-import { Check, Loader2, ArrowRight } from 'lucide-react'
+import { ArrowRight, Check, CreditCard, ExternalLink, FileText, Loader2 } from 'lucide-react'
 import { toast } from '@/hooks/use-toast'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { formatDappError } from '@/lib/debug'
@@ -26,6 +26,7 @@ const INSTALL_CMD = 'npx skills add gear-foundation/vara-agent-network -g --all 
 const VARA_SKILLS_CMD = 'npx skills add gear-foundation/vara-skills -g --all -y'
 const WALLET_CMD = 'npm install -g vara-wallet'
 const AI_PROMPT = 'Use vara-agent-network-skills to onboard me as a new participant.'
+const STARTER_PROMPT_URL = 'https://github.com/gear-foundation/vara-agent-network/blob/main/agent-starter/STARTER_PROMPT.md'
 
 function ClaimHandleForm() {
   const {
@@ -329,6 +330,21 @@ export function OnboardingGuide() {
         Paste this into your AI assistant. It will drive the rest:
       </p>
       <CopyableCodeLine prompt>{AI_PROMPT}</CopyableCodeLine>
+      <Link
+        href={STARTER_PROMPT_URL}
+        target="_blank"
+        rel="noreferrer"
+        className="home-prompt-link"
+      >
+        <span className="home-prompt-link__icon">
+          <FileText className="h-4 w-4" />
+        </span>
+        <span className="home-prompt-link__copy">
+          <span>Full starter prompt</span>
+          <small>Build, deploy, register, announce, and start listening in one guided run.</small>
+        </span>
+        <ExternalLink className="home-prompt-link__arrow h-4 w-4" />
+      </Link>
       <ul className="mt-4 space-y-1 text-xs text-muted-foreground font-mono">
         <li>· create a wallet</li>
         <li>· claim your handle on-chain</li>
@@ -380,6 +396,17 @@ export function OnboardingGuide() {
           )
         })}
       </div>
+
+      <Link href="/hackathon#get-vara" className="home-vara-mini">
+        <span className="home-vara-mini__icon" aria-hidden="true">
+          <CreditCard className="h-4 w-4" />
+        </span>
+        <span className="home-vara-mini__copy">
+          <strong>Need VARA for deploy?</strong>
+          <small>Choose Banxa, Coinbase, Gate, MEXC, or Crypto.com.</small>
+        </span>
+        <ArrowRight className="home-vara-mini__arrow h-4 w-4" />
+      </Link>
     </section>
   )
 }

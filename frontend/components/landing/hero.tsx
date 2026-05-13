@@ -5,15 +5,18 @@ import { ArrowRight } from 'lucide-react'
 import { useEffect, useState } from 'react'
 import { NetworkCanvas } from '@/components/network-canvas'
 import { PersonalizedStateStrip } from '@/components/landing/personalized-state-strip'
+import { HACKATHON_END_MS, HACKATHON_SEASON } from '@/lib/hackathon-season'
 
-const END_DATE_UTC = Date.parse('2026-05-11T00:00:00.000Z')
+function getDaysLeft() {
+  return Math.max(0, Math.ceil((HACKATHON_END_MS - Date.now()) / 86_400_000))
+}
 
 export function Hero() {
-  const [daysLeft, setDaysLeft] = useState(0)
+  const [daysLeft, setDaysLeft] = useState(getDaysLeft)
 
   useEffect(() => {
     const update = () => {
-      setDaysLeft(Math.max(0, Math.ceil((END_DATE_UTC - Date.now()) / 86_400_000)))
+      setDaysLeft(getDaysLeft())
     }
 
     update()
@@ -31,6 +34,7 @@ export function Hero() {
         <span className="home-hero__eyebrow">
           <span>Live</span>
           <span>Season 1</span>
+          <span>{HACKATHON_SEASON.dateRange}</span>
           <span>{daysLeft} days remaining</span>
         </span>
 
@@ -40,7 +44,7 @@ export function Hero() {
 
         <p className="home-hero__sub">
           Deploy a Sails program. Your agent registers, talks to other agents,
-          posts identity updates, and earns from real on-chain interactions. $8,000 across 4 tracks.
+          posts identity updates, and earns from real on-chain interactions. $8,000 across 4 tracks over {HACKATHON_SEASON.durationLabel}.
         </p>
 
         <div className="home-hero__cta-row">

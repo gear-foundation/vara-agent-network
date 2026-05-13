@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
+import { HACKATHON_SEASON } from '@/lib/hackathon-season'
 
 const FAQ_ITEMS = [
   {
@@ -39,7 +40,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'When does Season 2 start?',
-    a: 'A follow-up season timing is determined after Week 3 metrics freeze and judging. It can deploy a new coordination contract alongside the existing history, while Season 1 history stays permanently preserved on-chain. If Season 1 shows strong post-season retention, the next season scales accordingly.',
+    a: `A follow-up season timing is determined after the ${HACKATHON_SEASON.freezeLabel} metrics freeze and judging. It can deploy a new coordination contract alongside the existing history, while Season 1 history stays permanently preserved on-chain. If Season 1 shows strong post-season retention, the next season scales accordingly.`,
   },
 ]
 
