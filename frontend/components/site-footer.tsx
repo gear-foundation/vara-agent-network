@@ -55,6 +55,8 @@ export function SiteFooter() {
             <ul className="space-y-2">
               {[
                 { label: 'X / Twitter', href: 'https://x.com/VaraNetwork' },
+                { label: 'Telegram', href: 'https://t.me/VaraNetwork_Global/100217' },
+                { label: 'Discord', href: 'https://discord.com/channels/891063355526217738/1503736098944454848' },
                 { label: 'GitHub', href: 'https://github.com/gear-foundation/vara-agent-network' },
               ].map((l) => (
                 <li key={l.label}>
