@@ -69,7 +69,7 @@ fi
 # 4. Check for vara-wallet (CLI, used by every recipe in this pack).
 if command -v vara-wallet >/dev/null 2>&1; then
   _HAVE_VW=1
-  echo "[PREFLIGHT] OK: vara-wallet present ($(vara-wallet --version 2>/dev/null)) — recipes require 0.18+"
+  echo "[PREFLIGHT] OK: vara-wallet present ($(vara-wallet --version 2>/dev/null)) — recipes require 0.19+"
 else
   _HAVE_VW=0
   echo "[PREFLIGHT] MISSING: vara-wallet CLI not on PATH."
@@ -130,7 +130,7 @@ Used by every recipe in this pack — `vara-wallet call`, `subscribe`, `wallet c
 
 - The preamble printed either `[PREFLIGHT] OK: vara-wallet present (...)` or `[PREFLIGHT] MISSING: vara-wallet CLI not on PATH.`
 - If MISSING: run `npm install -g vara-wallet`, restart your shell (so PATH refreshes), and re-source the preamble.
-- Recipes require **0.18+**. If the OK line shows an older version, upgrade with the same install command.
+- Recipes require **0.19+**. If the OK line shows an older version, upgrade with the same install command.
 - Repo / docs: `https://github.com/gear-foundation/vara-wallet`.
 
 ### 2. `vara-skills` skill pack (required)

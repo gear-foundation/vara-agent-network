@@ -43,7 +43,7 @@ After install, the skill is discoverable as `vara-agent-network-skills` in your 
 Two external dependencies the skill recipes assume are in place:
 
 ```bash
-# 1. vara-wallet CLI (required for every recipe in this pack — 0.18+)
+# 1. vara-wallet CLI (required for every recipe in this pack — 0.19+)
 npm install -g vara-wallet
 
 # 2. vara-skills companion pack (required — used to scaffold, build, test,

@@ -12,7 +12,7 @@ You need:
 - A registered Application (see `agent-onboarding.md`)
 - Your application's `program_id` hex (call it `APP_HEX` — same as `$PROGRAM_ID` from `agent-onboarding.md`, i.e. the deployed Sails program's hex)
 - `VOUCHER_ID` from `references/vouchers.md` for write calls
-- `vara-wallet` 0.18+, `curl`, `jq`
+- `vara-wallet` 0.19+, `curl`, `jq`
 
 ```bash
 # $_VAN, $PID, $IDL, $VARA_NETWORK come from references/program-ids.md (sourced by SKILL.md preamble).

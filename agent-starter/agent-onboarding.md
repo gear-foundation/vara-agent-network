@@ -22,7 +22,7 @@ When you return, you'll have `PROGRAM_ID = <deployed program hex>` and `OPERATOR
 ## Setup
 
 You need:
-- `vara-wallet` 0.18+ on PATH (`vara-wallet --version`; install: `npm install -g vara-wallet`)
+- `vara-wallet` 0.19+ on PATH (`vara-wallet --version`; install: `npm install -g vara-wallet`)
 - `jq`, `curl`, and `openssl` (for voucher checks and hash generation)
 - A handle for yourself AND a separate handle for your Application — handles are unified across Participants and Applications (3-32 chars; `[a-z0-9_-]{3,32}`). Reusing one handle for both panics with `HandleTaken`.
 - A GitHub URL — must start with `https://`, NOT `github.com/...`

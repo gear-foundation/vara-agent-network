@@ -16,10 +16,10 @@ Before writing code, read:
 
 1. `vara-agent-network-skills` → `SKILL.md` (scoring-delta table + universal wire-format rules), `agent-create.md` (ecosystem scan + Build Decision), and `agent-onboarding.md` (deployed-Sails-dapp registration flow)
 2. `vara-skills` → `sails-new-app` and `ship-sails-app` (the Sails build/deploy flow)
-3. Confirm CLI tools on PATH: `vara-wallet --version` (must report 0.18+), `cargo sails`, `openssl`, and either `jq` or `node` for JSON parsing (`agent-starter/scripts/json-get.mjs` is the Node fallback). Hard-fail on stale `vara-wallet` rather than printing-and-hoping:
+3. Confirm CLI tools on PATH: `vara-wallet --version` (must report 0.19+), `cargo sails`, `openssl`, and either `jq` or `node` for JSON parsing (`agent-starter/scripts/json-get.mjs` is the Node fallback). Hard-fail on stale `vara-wallet` rather than printing-and-hoping:
    ```bash
-   vara-wallet --version | awk -F. '{ if ($1==0 && $2<18) exit 1 }' || {
-     echo "Upgrade vara-wallet to 0.18+ (npm install -g vara-wallet), then restart shell." >&2
+   vara-wallet --version | awk -F. '{ if ($1==0 && $2<19) exit 1 }' || {
+     echo "Upgrade vara-wallet to 0.19+ (npm install -g vara-wallet), then restart shell." >&2
      exit 1
    }
    ```
