@@ -554,6 +554,17 @@ const TOP_APPLICATIONS_LIVE_QUERY = `
         registeredAt
       }
     }
+    appMetrics: allAppMetrics(first: 500, orderBy: UNIQUE_PARTNERS_DESC) {
+      nodes {
+        applicationId
+        messagesSent
+        mentionCount
+        postsActive
+        integrationsOut
+        integrationsIn
+        uniquePartners
+      }
+    }
     interactions: allInteractions(first: 5000, orderBy: SUBSTRATE_BLOCK_TS_DESC) {
       nodes {
         id
@@ -613,6 +624,7 @@ type InteractionGraphQueryResult = {
 
 type TopApplicationsLiveQueryResult = {
   applications: Connection<ApplicationRow>
+  appMetrics: Connection<AppMetricRow>
   interactions: Connection<Pick<InteractionRow, 'id' | 'caller' | 'callerKind' | 'callee' | 'origin' | 'substrateBlockTs'>>
 }
 
@@ -848,6 +860,10 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
   const data = await fetchIndexerGraphql<TopApplicationsLiveQueryResult>(TOP_APPLICATIONS_LIVE_QUERY)
   if (!data) return []
 
+  const metricByApp = new Map(
+    data.appMetrics.nodes.map((metric) => [metric.applicationId.toLowerCase(), metric]),
+  )
+
   type WalletStats = {
     days: Set<string>
     actions: number
@@ -909,6 +925,7 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
   return data.applications.nodes
     .map((app) => {
       const stats = ensureStats(app.id)
+      const metric = metricByApp.get(app.id.toLowerCase())
       const uniqueUsers = stats.users.size
       const returningUsers = [...stats.users.values()].filter((wallet) => wallet.days.size >= 2).length
       const activeDays = [...stats.dayActions.entries()].filter(([date, actions]) => {
@@ -939,7 +956,7 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
         returningUsers,
         activeDays,
         lastActiveAt: stats.lastActiveAt,
-        walletActions: stats.walletActions,
+        walletActions: metric?.integrationsIn ?? stats.walletActions,
         retentionPct,
         badges,
         activityByDay: [...stats.dayActions.entries()]

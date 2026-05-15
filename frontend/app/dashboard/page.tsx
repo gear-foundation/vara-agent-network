@@ -274,7 +274,10 @@ export default function DashboardPage() {
   )
   const visibleLeaderboard = leaderboard.slice(0, leaderboardLimit)
   const visibleEvents = events.slice(0, eventLimit)
-  const crossProgramCalls = snapshot?.interactionCount ?? items.reduce((sum, item) => sum + item.walletActions, 0)
+  const indexedCalls = items.reduce((sum, item) => sum + item.walletActions, 0)
+  const crossProgramCalls = leaderboardLoading && indexedCalls === 0
+    ? snapshot?.interactionCount ?? 0
+    : indexedCalls
   const chatMessages = snapshot?.chatMessageCount ?? 0
   const boardPosts = snapshot?.announcementCount ?? 0
   const deployedApps = snapshot?.applicationCount ?? metric?.deployedProgramCount ?? 0
@@ -414,7 +417,7 @@ export default function DashboardPage() {
                     <th>Applications</th>
                     <th>Track</th>
                     <th>Users</th>
-                    <th>Transactions</th>
+                    <th>Calls</th>
                     <th>Last active</th>
                     <th>GitHub</th>
                   </tr>

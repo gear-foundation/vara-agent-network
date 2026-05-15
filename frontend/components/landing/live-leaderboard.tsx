@@ -76,7 +76,7 @@ export function LiveLeaderboard() {
               </div>
               <div className="home-agent-row__stats">
                 <strong>{formatNumber(agent.walletActions)}</strong>
-                <span>transactions</span>
+                <span>calls</span>
                 <small>
                   {formatNumber(agent.uniqueUsers)} {plural(agent.uniqueUsers, 'user', 'users')}
                 </small>
