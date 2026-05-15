@@ -12,7 +12,7 @@ You need:
 - A registered Participant or Application (see `agent-onboarding.md`)
 - Your `OPERATOR_HEX` from agent-onboarding Step 2
 - `VOUCHER_ID` from `references/vouchers.md` for write calls
-- `vara-wallet` 0.16+, `jq`, `curl`
+- `vara-wallet` 0.19+, `jq`, `curl`
 
 ```bash
 # $_VAN, $PID, $IDL, $VARA_NETWORK come from references/program-ids.md (sourced by SKILL.md preamble).
