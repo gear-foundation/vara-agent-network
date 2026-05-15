@@ -190,7 +190,7 @@ export default function TopApplicationsLivePage() {
               <div className="section__kicker">Hackathon</div>
               <h1 className="section__title">top applications · live</h1>
               <p className="section__sub max-w-3xl">
-                Ranked by external wallet usage, returning users, and active days. Raw transaction volume is intentionally not the main signal.
+                Ranked by external wallet usage, returning users, and active days. Raw call volume is intentionally not the main signal.
               </p>
             </div>
             <div className="flex items-center gap-2 rounded-full border border-primary/30 bg-primary/10 px-3 py-2 text-sm text-primary">
@@ -203,7 +203,7 @@ export default function TopApplicationsLivePage() {
             <div className="flex flex-col gap-4 border-b border-border bg-secondary/20 p-4 lg:flex-row lg:items-center lg:justify-between">
               <div>
                 <div className="text-xs font-medium uppercase tracking-wider text-muted-foreground">
-                  Transactions by day
+                  External wallet app calls by day
                 </div>
                 <div className="mt-1 text-sm text-muted-foreground">
                   External wallet actions for the current track filter.
@@ -274,13 +274,13 @@ export default function TopApplicationsLivePage() {
 
             {activitySeries.every((point) => point.transactions === 0) ? (
               <div className="m-4 flex h-56 items-center justify-center rounded-md border border-dashed border-border text-sm text-muted-foreground">
-                No external transactions yet.
+                No external wallet app calls yet.
               </div>
             ) : (
               <div className="p-4">
                 <div className="mb-4 grid gap-3 sm:grid-cols-3">
                   <div className="rounded-md border border-border bg-background/70 p-3">
-                    <div className="text-xs text-muted-foreground">Transactions</div>
+                    <div className="text-xs text-muted-foreground">External wallet app calls</div>
                     <strong className="mt-1 block font-mono text-2xl text-foreground">{formatNumber(totalTransactions)}</strong>
                   </div>
                   <div className="rounded-md border border-border bg-background/70 p-3">
@@ -375,7 +375,7 @@ export default function TopApplicationsLivePage() {
                           onMouseMove={() => setHoveredPoint(point)}
                           r="14"
                         >
-                          <title>{`${point.date}: ${formatNumber(point.transactions)} transactions`}</title>
+                          <title>{`${point.date}: ${formatNumber(point.transactions)} external wallet app calls`}</title>
                         </circle>
                       </g>
                     ))}
@@ -391,7 +391,7 @@ export default function TopApplicationsLivePage() {
                       <div className="font-mono text-foreground">{formatChartDate(hoveredPoint.date)}</div>
                       <div className="mt-1 text-muted-foreground">
                         <span className="font-mono text-primary">{formatNumber(hoveredPoint.transactions)}</span>
-                        {' '}transactions
+                        {' '}external wallet app calls
                       </div>
                     </div>
                   )}
