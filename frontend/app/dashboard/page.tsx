@@ -257,6 +257,11 @@ export default function DashboardPage() {
   const [track, setTrack] = useState<TrackFilter>('All')
   const [leaderboardLimit, setLeaderboardLimit] = useState(LEADERBOARD_PAGE_SIZE)
   const [eventLimit, setEventLimit] = useState(EVENT_FEED_PAGE_SIZE)
+  const [hoveredActivityPoint, setHoveredActivityPoint] = useState<{
+    point: ActivityPoint
+    index: number
+    total: number
+  } | null>(null)
 
   const metric = snapshot?.latestNetworkMetric
   const filteredItems = useMemo(() => {
@@ -278,10 +283,12 @@ export default function DashboardPage() {
   const chatMessages = snapshot?.chatMessageCount ?? 0
   const boardPosts = snapshot?.announcementCount ?? 0
   const deployedApps = snapshot?.applicationCount ?? metric?.deployedProgramCount ?? 0
+  const totalNetworkActivity = snapshot
+    ? snapshot.interactionCount + snapshot.chatMessageCount + snapshot.announcementCount
+    : 0
   const fallbackActivity = metric?.extrinsicsOnHackathonPrograms ?? 0
   const chartPoints = buildSevenDayPoints(activitySeries, fallbackActivity)
-  const currentActivity = chartPoints.at(-1)?.extrinsics ?? fallbackActivity
-  const maxActivity = Math.max(1, ...chartPoints.map((point) => point.extrinsics), currentActivity)
+  const maxActivity = Math.max(1, ...chartPoints.map((point) => point.extrinsics))
   const metricsLoading = !snapshot
 
   useEffect(() => {
@@ -324,8 +331,8 @@ export default function DashboardPage() {
           <div className="insights-metrics-grid">
             <article className="insights-metric-card insights-metric-card--featured">
               <span className="insights-metric-card__label">Network Activity</span>
-              <MetricNumber loading={activityLoading && activitySeries.length === 0} value={currentActivity} />
-              <span className="insights-metric-card__today">today</span>
+              <MetricNumber loading={metricsLoading} value={totalNetworkActivity} />
+              <span className="insights-metric-card__today">all time</span>
               <div className="insights-bar-chart" aria-label="Network activity over previous days">
                 {activityLoading && activitySeries.length === 0
                   ? Array.from({ length: 7 }, (_, index) => (
@@ -336,14 +343,31 @@ export default function DashboardPage() {
                   ))
                   : chartPoints.map((point, index, points) => (
                     <div className="insights-bar-chart__item insights-data-in" key={`${point.date}-${index}`}>
-                      <span
+                      <button
+                        aria-label={`${formatChartDate(point.date)}: ${formatNumber(point.extrinsics)} network activity`}
+                        className="insights-bar-chart__bar"
                         data-current={index === points.length - 1}
+                        onBlur={() => setHoveredActivityPoint(null)}
+                        onFocus={() => setHoveredActivityPoint({ point, index, total: points.length })}
+                        onMouseEnter={() => setHoveredActivityPoint({ point, index, total: points.length })}
+                        onMouseLeave={() => setHoveredActivityPoint(null)}
                         style={{ height: `${chartBarHeight(point.extrinsics, maxActivity)}px` }}
-                        title={`${point.date}: ${formatNumber(point.extrinsics)} extrinsics`}
+                        type="button"
                       />
                       <small>{formatChartDate(point.date)}</small>
                     </div>
                   ))}
+                {hoveredActivityPoint && (
+                  <div
+                    className="insights-bar-chart__tooltip"
+                    style={{
+                      left: `${((hoveredActivityPoint.index + 0.5) / hoveredActivityPoint.total) * 100}%`,
+                    }}
+                  >
+                    <strong>{formatNumber(hoveredActivityPoint.point.extrinsics)}</strong>
+                    <span>{formatChartDate(hoveredActivityPoint.point.date)}</span>
+                  </div>
+                )}
               </div>
             </article>
 
