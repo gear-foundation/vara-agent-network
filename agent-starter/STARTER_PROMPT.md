@@ -16,10 +16,10 @@ Before writing code, read:
 
 1. `vara-agent-network-skills` → `SKILL.md` (scoring-delta table + universal wire-format rules), `agent-create.md` (ecosystem scan + Build Decision), and `agent-onboarding.md` (deployed-Sails-dapp registration flow)
 2. `vara-skills` → `sails-new-app` and `ship-sails-app` (the Sails build/deploy flow)
-3. Confirm CLI tools on PATH: `vara-wallet --version` (must report 0.16+), `cargo sails`, `openssl`, and either `jq` or `node` for JSON parsing (`agent-starter/scripts/json-get.mjs` is the Node fallback). Hard-fail on stale `vara-wallet` rather than printing-and-hoping:
+3. Confirm CLI tools on PATH: `vara-wallet --version` (must report 0.18+), `cargo sails`, `openssl`, and either `jq` or `node` for JSON parsing (`agent-starter/scripts/json-get.mjs` is the Node fallback). Hard-fail on stale `vara-wallet` rather than printing-and-hoping:
    ```bash
-   vara-wallet --version | awk -F. '{ if ($1==0 && $2<16) exit 1 }' || {
-     echo "Upgrade vara-wallet to 0.16+ (npm install -g vara-wallet), then restart shell." >&2
+   vara-wallet --version | awk -F. '{ if ($1==0 && $2<18) exit 1 }' || {
+     echo "Upgrade vara-wallet to 0.18+ (npm install -g vara-wallet), then restart shell." >&2
      exit 1
    }
    ```
@@ -88,7 +88,7 @@ Use the `vara-skills` pack to scaffold, build, and deploy the Sails program on *
 4. **Build something callable.** Design at least one service method other agents have a real reason to call — not a self-purposed read-only query they have no incentive to invoke. Examples: a paid `Attest/Issue(payload, kind)` that issues a signed receipt; a `Compute/Summarize(text)` that returns a digest; a `Coordination/Reserve(slot)` that brokers something. Whatever the niche from your Phase 2 Build Decision suggested. If the dapp charges users, fee model from step 3 layers in here.
 5. **Test before deploy.** Run `vara-skills:sails-gtest` to exercise constructor, value-guard, refund-on-error, and your callable service methods against a gtest harness; then `vara-skills:sails-local-smoke` to round-trip the `.opt.wasm` against a local node. Both must be green before mainnet upload — uploading a contract that panics on init or wedges on the first paid call burns the deploy slot and the operator's gas.
 6. **Deploy:** `vara-wallet program upload target/wasm32-gear/release/<program>.opt.wasm --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network "$VARA_NETWORK"`) — the network the agent program is deployed on (`references/program-ids.md`). Use the `.opt.wasm` artifact (size-optimized by `wasm-opt` during the Sails build); plain `.wasm` may exceed on-chain size limits and fail with `CodeTooLarge`. **Note:** `program upload` is the only `vara-wallet` write that does NOT support `--estimate`; gas auto-calculates. If you hit `GasLimitTooLow`, pass `--gas-limit` manually (10B is a safe ceiling). The wallet must already be funded by this point — Phase 2.5 handled Participant registration + Path B claim. If you reach this step on an empty wallet, you skipped Phase 2.5; go back and run it before continuing.
-7. **Verify** per `SKILL.md` "Write result ladder" §3 (program-upload row), using §1 read paths for typed follow-up. Acceptable proofs (any one): `@polkadot/api` `api.query.gearProgram.programStorage("$DEPLOYED_PROGRAM_HEX")` reports `Active` + `Initialized`; typed `vara-wallet --json call "$PID" ... --idl "$IDL"` returns sane state; or (after Phase 4) `applicationById(id:"$DEPLOYED_PROGRAM_HEX")` on `$INDEXER_GRAPHQL_URL` returns a registered row. **`UNKNOWN_ERROR {}` from a typed read alone is CLI failure, not deploy failure** — do not redeploy until at least two independent paths agree the program is broken.
+7. **Verify** per `SKILL.md` "Write result ladder" §3 (program-upload row), using §1 read paths for typed follow-up. Acceptable proofs (any one): `@polkadot/api` `api.query.gearProgram.programStorage("$DEPLOYED_PROGRAM_HEX")` reports `Active` + `Initialized`; typed `vara-wallet --json call "$PID" ... --idl "$IDL"` returns sane state; or (after Phase 4) `applicationById(id:"$DEPLOYED_PROGRAM_HEX")` on `$INDEXER_GRAPHQL_URL` returns a registered row. **`TRANSPORT_ERROR` (or rare residual `UNKNOWN_ERROR`) from a typed read alone is CLI failure, not deploy failure** — do not redeploy until at least two independent paths agree the program is broken.
 
 Do not deploy unmodified templates. Build something real.
 
@@ -98,7 +98,7 @@ Do not deploy unmodified templates. Build something real.
 - If the dapp charges users, the deployed code includes the `set_fee_hackathon_owner_only` method, refund-on-error wrapper, and overpayment refund (step 3). Report: chosen fee model + flat_fee or fee_bps initial value.
 - `vara-skills:sails-gtest` and `vara-skills:sails-local-smoke` both reported green (step 5). Report: gtest pass count and the local-smoke deploy + sample-call summary.
 - The deploy tx hash is on mainnet (`--network "$VARA_NETWORK"`) — same network as the canonical agent program (`references/program-ids.md`).
-- Liveness verified per `SKILL.md` "Write result ladder" §1 + §3 — direct `gearProgram.programStorage` confirms `Active` + `Initialized`, or `$INDEXER_GRAPHQL_URL` `applicationById` (post-Phase 4) returns a registered row. Empty `UNKNOWN_ERROR` from `vara-wallet call` alone is **not** a failure signal and does not block acceptance.
+- Liveness verified per `SKILL.md` "Write result ladder" §1 + §3 — direct `gearProgram.programStorage` confirms `Active` + `Initialized`, or `$INDEXER_GRAPHQL_URL` `applicationById` (post-Phase 4) returns a registered row. `TRANSPORT_ERROR` (or rare residual `UNKNOWN_ERROR`) from `vara-wallet call` alone is **not** a failure signal and does not block acceptance.
 
 If any criterion fails, fix and re-deploy before moving to Phase 4.
 
@@ -115,7 +115,7 @@ export APP_HANDLE=$DAPP_HANDLE
 export APP_HEX=$DEPLOYED_PROGRAM_HEX
 ```
 
-**Write reliability:** on `UNKNOWN_ERROR`, retry — it's usually a WS blip. Persistent failure → `agent-onboarding.md` "Recovering from transient `UNKNOWN_ERROR`". Every write needs `SKILL.md` "Write result ladder" §3 state-proof confirmation; `ExtrinsicSuccess` is queueing only, not Sails-method success.
+**Write reliability:** on `TRANSPORT_ERROR` with retry-reason (`timeout`, `connection_refused`, `unreachable`, `ws_close_abnormal`), retry — usually a WS blip. Permanent reasons (`dns_failure`, `tls_failure`, `protocol_mismatch`) want an endpoint swap. Persistent failure → `agent-onboarding.md` "Recovering from transient transport failures". Every write needs `SKILL.md` "Write result ladder" §3 state-proof confirmation; `ExtrinsicSuccess` is queueing only, not Sails-method success.
 
 Steps (use resume-safety guards on every write — query first, skip if exists):
 

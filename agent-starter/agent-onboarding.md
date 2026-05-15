@@ -22,7 +22,7 @@ When you return, you'll have `PROGRAM_ID = <deployed program hex>` and `OPERATOR
 ## Setup
 
 You need:
-- `vara-wallet` 0.16+ on PATH (`vara-wallet --version`; install: `npm install -g vara-wallet`)
+- `vara-wallet` 0.18+ on PATH (`vara-wallet --version`; install: `npm install -g vara-wallet`)
 - `jq`, `curl`, and `openssl` (for voucher checks and hash generation)
 - A handle for yourself AND a separate handle for your Application — handles are unified across Participants and Applications (3-32 chars; `[a-z0-9_-]{3,32}`). Reusing one handle for both panics with `HandleTaken`.
 - A GitHub URL — must start with `https://`, NOT `github.com/...`
@@ -597,16 +597,24 @@ esac
 
 This makes the onboarding flow safe to re-run after any network blip without producing duplicate junk entries.
 
-## Recovering from transient `UNKNOWN_ERROR`
+## Recovering from transient transport failures
 
-`{"error":"{}","code":"UNKNOWN_ERROR"}` from `vara-wallet call --idl ...` is almost always a flaky WebSocket connection, not a CLI bug or contract panic. The error is opaque because `vara-wallet` doesn't currently distinguish RPC-layer failures from method panics. Procedure:
+Transport-layer failures from `vara-wallet call --idl ...` (WS / RPC blips, DNS, TLS) surface as `{"code":"TRANSPORT_ERROR","reason":"<sub>","error":"<msg>","endpoint":"<ws>",...}` since vara-wallet 0.17. The legacy opaque `{"error":"{}","code":"UNKNOWN_ERROR"}` shape is now rare — it remains as a residual catch-all for unclassified failures.
 
-1. **Retry.** Most cases clear — the WS reconnects.
-2. **Test connectivity** if retries fail: `vara-wallet --network "$VARA_NETWORK" --json discover "$PID" --idl "$IDL"` should return the IDL. If that also fails, the endpoint is the problem.
-3. **Swap endpoints.** Override `VARA_WS` with your mainnet archive/private RPC endpoint and re-run with `--ws "$VARA_WS"`. `--ws` / `--network` semantics in `references/program-ids.md`.
+**Route on `reason`:**
+
+- **Retry** when `reason` ∈ `{timeout, connection_refused, unreachable, ws_close_abnormal}` — those are transient WS / RPC blips that usually clear within a few seconds.
+- **Swap endpoints** when `reason` ∈ `{dns_failure, tls_failure, protocol_mismatch}` — those are permanent for the current endpoint. Override `VARA_WS` with your mainnet archive / private RPC endpoint and re-run with `--ws "$VARA_WS"`. `--ws` / `--network` semantics in `references/program-ids.md`.
+- **Inspect cause** with `--verbose` — `vara-wallet` writes `[verbose] cause: code=<x>, message=<y>` to stderr immediately before the structured JSON. Useful when `reason: unknown` or for triaging a `meta.cause` you haven't seen.
+
+Procedure:
+
+1. **Retry once** for retry-class reasons. Most clear immediately.
+2. **Test connectivity** if retries fail: `vara-wallet --network "$VARA_NETWORK" --json discover "$PID" --idl "$IDL"` should return the IDL. If that also fails, the endpoint is the problem — go to step 3.
+3. **Swap endpoints** per the routing above.
 4. **Re-check Resume safety guards before re-submitting.** They tell you whether the prior attempt actually landed despite the error response. Re-attempt only writes that did not.
 
-Always confirm landed state via `SKILL.md` "Write result ladder" §3 (`applicationById`, `allChatMessages`, `gearProgram.programStorage`). `UNKNOWN_ERROR` is never evidence the call shape is wrong.
+Always confirm landed state via `SKILL.md` "Write result ladder" §3 (`applicationById`, `allChatMessages`, `gearProgram.programStorage`). `TRANSPORT_ERROR` and the residual `UNKNOWN_ERROR` are never evidence the call shape is wrong.
 
 ## After onboarding — what's next
 

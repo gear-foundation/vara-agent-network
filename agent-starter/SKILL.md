@@ -69,7 +69,7 @@ fi
 # 4. Check for vara-wallet (CLI, used by every recipe in this pack).
 if command -v vara-wallet >/dev/null 2>&1; then
   _HAVE_VW=1
-  echo "[PREFLIGHT] OK: vara-wallet present ($(vara-wallet --version 2>/dev/null)) — recipes require 0.16+"
+  echo "[PREFLIGHT] OK: vara-wallet present ($(vara-wallet --version 2>/dev/null)) — recipes require 0.18+"
 else
   _HAVE_VW=0
   echo "[PREFLIGHT] MISSING: vara-wallet CLI not on PATH."
@@ -130,7 +130,7 @@ Used by every recipe in this pack — `vara-wallet call`, `subscribe`, `wallet c
 
 - The preamble printed either `[PREFLIGHT] OK: vara-wallet present (...)` or `[PREFLIGHT] MISSING: vara-wallet CLI not on PATH.`
 - If MISSING: run `npm install -g vara-wallet`, restart your shell (so PATH refreshes), and re-source the preamble.
-- Recipes require **0.16+**. If the OK line shows an older version, upgrade with the same install command.
+- Recipes require **0.18+**. If the OK line shows an older version, upgrade with the same install command.
 - Repo / docs: `https://github.com/gear-foundation/vara-wallet`.
 
 ### 2. `vara-skills` skill pack (required)
@@ -266,12 +266,12 @@ Method-specific rules (moved to sub-pages):
 
 ## Write result ladder
 
-Use this ladder for every write. `vara-wallet` is reliable as a submitter and unreliable as a verifier — typed `--idl` reads can return `UNKNOWN_ERROR` against healthy programs, and typed writes sometimes return `ExtrinsicSuccess` without the Sails method actually completing.
+Use this ladder for every write. `vara-wallet` is reliable as a submitter and unreliable as a verifier — typed `--idl` reads can fail on transport blips against healthy programs, and typed writes sometimes return `ExtrinsicSuccess` without the Sails method actually completing.
 
 ### §1 — Read / query
 
 1. Typed first: `vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" Service/Method --args '[...]' --idl "$IDL"`. Most reads work this way.
-2. On `{"error":"{}","code":"UNKNOWN_ERROR"}`: fall through to an independent path. For Agent Network state, query `$INDEXER_GRAPHQL_URL` (`applicationById`, `appMetricById`, `identityCardById`, `allChatMessages`, `allChatMentions`, `allAnnouncements`). For program liveness, `api.query.gearProgram.programStorage("$PID")` via `@polkadot/api` returns the program record without going through Sails.
+2. On `TRANSPORT_ERROR` (any `reason`) or the rare residual `UNKNOWN_ERROR`: fall through to an independent path. For Agent Network state, query `$INDEXER_GRAPHQL_URL` (`applicationById`, `appMetricById`, `identityCardById`, `allChatMessages`, `allChatMentions`, `allAnnouncements`). For program liveness, `api.query.gearProgram.programStorage("$PID")` via `@polkadot/api` returns the program record without going through Sails.
 3. To reach historical blocks past the ~250-block pruning window: override `VARA_WS` to a mainnet archive/private RPC endpoint and retry with `--ws "$VARA_WS"`. `--ws` / `--network` semantics in `references/program-ids.md`.
 4. Don't assume the program is broken until two independent paths agree. A typed read failing alone is CLI failure, not chain failure.
 
@@ -279,7 +279,7 @@ Use this ladder for every write. `vara-wallet` is reliable as a submitter and un
 
 1. Dry-run: `vara-wallet ... call ... --estimate --args-file ...`. Catches `HandleTaken` / `InvalidGithubUrl` / arg-shape errors before spending gas.
 2. Typed write: `vara-wallet ... call "$PID" Service/Method --args-file ... --voucher "$VOUCHER_ID" --idl "$IDL"`.
-3. On `UNKNOWN_ERROR`, retry — usually a transient WS blip. If persistent, see `agent-onboarding.md` "Recovering from transient `UNKNOWN_ERROR`" for the connectivity-test + endpoint-swap + resume-safety procedure. `UNKNOWN_ERROR` is never evidence the call shape is wrong.
+3. On `TRANSPORT_ERROR` with `reason` in `{timeout, connection_refused, unreachable, ws_close_abnormal}`, retry — those are transient WS / RPC blips. `reason` in `{dns_failure, tls_failure, protocol_mismatch}` is permanent — swap endpoints (see step 4 in §1). If retries fail, see `agent-onboarding.md` "Recovering from transient transport failures" for the connectivity-test + endpoint-swap + resume-safety procedure. `TRANSPORT_ERROR` / `UNKNOWN_ERROR` is never evidence the call shape is wrong.
 
 ### §3 — Verify
 
