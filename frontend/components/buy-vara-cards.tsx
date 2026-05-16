@@ -1,5 +1,5 @@
 import Link from 'next/link'
-import { CreditCard, ExternalLink, Landmark, WalletCards } from 'lucide-react'
+import { ArrowLeftRight, CreditCard, ExternalLink, Landmark, WalletCards } from 'lucide-react'
 import { VARA_BUY_OPTIONS } from '@/lib/vara-buy-options'
 
 export function BuyVaraCards() {
@@ -13,7 +13,15 @@ export function BuyVaraCards() {
             <article className="buy-vara-card" data-featured={featured ? 'true' : undefined} key={option.name}>
               <div className="buy-vara-card__top">
                 <span className="buy-vara-card__icon" aria-hidden="true">
-                  {featured ? <WalletCards size={18} /> : option.name === 'Coinbase' ? <Landmark size={18} /> : <CreditCard size={18} />}
+                  {featured ? (
+                    <WalletCards size={18} />
+                  ) : option.name === 'Coinbase' ? (
+                    <Landmark size={18} />
+                  ) : option.name === 'Vara Bridge' ? (
+                    <ArrowLeftRight size={18} />
+                  ) : (
+                    <CreditCard size={18} />
+                  )}
                 </span>
                 <span className="buy-vara-card__label">{option.label}</span>
               </div>

@@ -16,6 +16,13 @@ export const VARA_BUY_OPTIONS = [
     body: 'Useful for US builders who already use Coinbase. Availability can vary by region.',
   },
   {
+    name: 'Vara Bridge',
+    href: 'https://bridge.vara.network/?network=mainnet',
+    label: 'Bridge',
+    title: 'Move assets to Vara mainnet',
+    body: 'Bridge into Vara mainnet when you already hold supported assets on another network.',
+  },
+  {
     name: 'Gate',
     href: 'https://www.gate.io/trade/VARA_USDT',
     label: 'VARA/USDT',

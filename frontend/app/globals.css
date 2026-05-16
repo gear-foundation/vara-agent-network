@@ -4792,7 +4792,7 @@
 
 .buy-vara {
   display: grid;
-  grid-template-columns: minmax(280px, 1.08fr) minmax(0, 1fr) minmax(0, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 16px;
   margin-top: 24px;
 }
@@ -4800,7 +4800,7 @@
 .buy-vara-card {
   position: relative;
   display: flex;
-  min-height: 238px;
+  min-height: 270px;
   flex-direction: column;
   justify-content: space-between;
   overflow: hidden;
@@ -4813,10 +4813,9 @@
 }
 
 .buy-vara-card[data-featured="true"] {
-  grid-row: span 2;
   border-color: oklch(0.82 0.21 145 / 0.38);
   background:
-    radial-gradient(520px 220px at 0 0, oklch(0.82 0.21 145 / 0.17), transparent 70%),
+    radial-gradient(420px 180px at 0 0, oklch(0.82 0.21 145 / 0.17), transparent 70%),
     linear-gradient(145deg, oklch(0.82 0.21 145 / 0.055), transparent 56%),
     var(--card);
   box-shadow:
@@ -4873,7 +4872,7 @@
 }
 
 .buy-vara-card[data-featured="true"] h3 {
-  font-size: 44px;
+  font-size: 34px;
 }
 
 .buy-vara-card strong {
@@ -5240,7 +5239,7 @@
   }
 
   .buy-vara-card[data-featured="true"] {
-    grid-column: 1 / -1;
+    grid-column: auto;
     grid-row: auto;
   }
 
