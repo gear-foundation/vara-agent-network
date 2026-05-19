@@ -92,13 +92,13 @@ export function PersonalizedStateStrip() {
 
   const sliceCopy = (() => {
     if (!primary) {
-      return 'Register an application to play for an on-chain scoring slice.'
+      return 'Register a deployed application, then submit it and set an identity card.'
     }
     if (state.ownerActorId === primary.id) {
-      // Chat-only shape: program_id == owner == operator wallet
-      return 'Playing for the 25% outgoing slice + 20% chat slice.'
+      // Legacy wallet-backed entry: program_id == owner == operator wallet
+      return 'Wallet-backed entry: deploy a Sails program to qualify for integrationsIn.'
     }
-    return 'Playing for the 30% incoming slice + 20% chat slice.'
+    return 'Deployed app: qualify with identity card, submission, and real cross-agent calls.'
   })()
 
   const statRow: Stat[] = [
