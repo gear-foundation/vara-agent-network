@@ -2,7 +2,8 @@
 
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { createPortal } from 'react-dom'
-import { CheckCircle2, ExternalLink, Loader2, Send } from 'lucide-react'
+import Link from 'next/link'
+import { CheckCircle2, ExternalLink, Loader2, Send, WalletCards } from 'lucide-react'
 import { decodeAddress } from '@polkadot/util-crypto'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { toast } from '@/hooks/use-toast'
@@ -206,22 +207,28 @@ export function SocialClaim() {
         )}
       </div>
 
-      {claim ? (
-        <a className="btn btn--ghost social-claim__tweet" href={claim.tweetUrl} target="_blank" rel="noreferrer">
-          <ExternalLink size={16} />
-          View submitted post
-        </a>
-      ) : (
-        <button
-          className="btn btn--primary"
-          type="button"
-          disabled={disabled}
-          onClick={() => setModalOpen(true)}
-        >
-          <Send size={16} />
-          Get tokens
-        </button>
-      )}
+      <div className="social-claim__actions">
+        {claim ? (
+          <a className="btn btn--ghost social-claim__tweet" href={claim.tweetUrl} target="_blank" rel="noreferrer">
+            <ExternalLink size={16} />
+            View submitted post
+          </a>
+        ) : (
+          <button
+            className="btn btn--primary"
+            type="button"
+            disabled={disabled}
+            onClick={() => setModalOpen(true)}
+          >
+            <Send size={16} />
+            Get tokens
+          </button>
+        )}
+        <Link className="btn btn--ghost social-claim__buy" href="/hackathon#get-vara">
+          <WalletCards size={16} />
+          Buy VARA
+        </Link>
+      </div>
 
       {error && !serviceUnavailable ? <p className="social-claim__error">{error}</p> : null}
       {serviceUnavailable ? (

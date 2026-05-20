@@ -4312,12 +4312,19 @@
 }
 
 .social-claim__tweet,
+.social-claim__buy,
 .social-claim .btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
   white-space: nowrap;
+}
+
+.social-claim__actions {
+  display: flex;
+  align-items: center;
+  gap: 10px;
 }
 
 .social-claim__tweet {
@@ -4330,6 +4337,23 @@
   font-size: 13px;
   font-weight: 700;
   box-shadow: none;
+}
+
+.social-claim__buy {
+  min-height: 42px;
+  border-color: var(--border);
+  background: transparent;
+  padding: 8px 14px;
+  color: var(--muted-foreground);
+  font-size: 13px;
+  font-weight: 700;
+  box-shadow: none;
+}
+
+.social-claim__buy:hover {
+  border-color: oklch(0.82 0.21 145 / 0.40);
+  background: oklch(0.82 0.21 145 / 0.09);
+  color: var(--primary);
 }
 
 .social-claim__tweet:hover {
@@ -5252,6 +5276,11 @@
   .social-claim .btn,
   .social-claim__tweet {
     width: 100%;
+  }
+
+  .social-claim__actions {
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .hack-prize-grid {
