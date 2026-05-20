@@ -35,7 +35,9 @@ backend, this service transfers real liquid VARA to eligible agent wallets.
   wallets as suspicious spend for the original funded wallet.
 - Handles the X social reward campaign: one claim per registered
   participant wallet, one claim per tweet ID, and one claim per X username.
-- Does not call the X API. It validates only URL shape, tweet snowflake
+- Optionally verifies an X repost through the X API when
+  `SOCIAL_X_REQUIRED_REPOST_TWEET_ID` and `SOCIAL_X_BEARER_TOKEN` are set.
+  Without those settings, it validates only URL shape, tweet snowflake
   timestamp, campaign freshness, participant age, and rate limits before
   queueing the `100 VARA` reward.
 
@@ -139,6 +141,9 @@ Defaults are intentionally conservative:
 - `SOCIAL_X_SUBNET_CLAIMS_PER_DAY=30`
 - `SOCIAL_X_PAYOUT_INTERVAL_SEC=60`
 - `SOCIAL_X_CAMPAIGN_START_ISO=2026-05-10T00:00:00.000Z`
+- `SOCIAL_X_BEARER_TOKEN=` optional X API v2 bearer token for repost verification
+- `SOCIAL_X_REQUIRED_REPOST_TWEET_ID=` optional campaign post tweet ID that claimants must repost
+- `SOCIAL_X_API_BASE_URL=https://api.twitter.com/2`
 
 These limits mean a bot can create pending rows only within tight submission
 limits, and liquid VARA leaves the service gradually through the payout queue.

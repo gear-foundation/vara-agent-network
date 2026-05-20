@@ -10,6 +10,7 @@ const TWITTER_EPOCH_MS = 1_288_834_974_657n;
 const MAX_FUTURE_TWEET_MS = 10 * 60 * 1000;
 const PAYOUT_TRANSFER_ATTEMPTS = 3;
 const PAYOUT_RETRY_DELAY_MS = 2_000;
+const X_REPOST_PAGE_LIMIT = 5;
 const VALID_HOSTS = new Set(["x.com", "www.x.com", "twitter.com", "www.twitter.com", "mobile.twitter.com"]);
 const RESERVED_AUTHORS = new Set(["home", "i", "intent", "share", "notifications", "messages", "explore"]);
 
@@ -37,6 +38,11 @@ export interface SocialXClaimRow {
   created_at: Date;
   updated_at: Date;
   sent_at: Date | null;
+}
+
+interface XRetweetedTweetsResponse {
+  data?: Array<{ id?: string }>;
+  meta?: { next_token?: string };
 }
 
 export class ClaimRequestError extends Error {
@@ -142,6 +148,21 @@ export class SocialXClaimService {
     }
 
     assertParticipantAge(participant);
+    try {
+      await assertRequiredRepost(parsed);
+    } catch (error) {
+      if (error instanceof ClaimRequestError) {
+        await recordAttempt(null, {
+          wallet,
+          parsed,
+          ipHash: ipShape.hash,
+          ipSubnet: ipShape.subnet,
+          outcome: "rejected",
+          reason: error.message.slice(0, 200),
+        });
+      }
+      throw error;
+    }
 
     const client = await pool.connect();
     try {
@@ -270,6 +291,82 @@ export class SocialXClaimService {
     }
     return sent;
   }
+}
+
+export async function assertRequiredRepost(parsed: ParsedTweetUrl): Promise<void> {
+  const requiredTweetId = config.socialXRequiredRepostTweetId;
+  if (!requiredTweetId) return;
+  if (!config.socialXBearerToken) {
+    throw new ClaimRequestError("X repost verification is not configured", 503);
+  }
+
+  const user = await fetchXUserByUsername(parsed.author);
+  const reposted = await userRepostedTweet(user.id, requiredTweetId);
+  if (!reposted) {
+    throw new ClaimRequestError("X account has not reposted the required campaign post");
+  }
+}
+
+async function fetchXUserByUsername(username: string): Promise<{ id: string; username: string }> {
+  const data = await xApiGet<{
+    data?: { id?: string; username?: string };
+    errors?: Array<{ title?: string; detail?: string }>;
+  }>(`/users/by/username/${encodeURIComponent(username)}`, {
+    "user.fields": "id,username",
+  });
+
+  if (!data.data?.id || !data.data.username) {
+    throw new ClaimRequestError("X account from the post URL was not found");
+  }
+  return { id: data.data.id, username: data.data.username };
+}
+
+async function userRepostedTweet(userId: string, tweetId: string): Promise<boolean> {
+  let paginationToken: string | null = null;
+  for (let page = 0; page < X_REPOST_PAGE_LIMIT; page += 1) {
+    const response: XRetweetedTweetsResponse = await xApiGet(`/users/${encodeURIComponent(userId)}/retweeted_tweets`, {
+      "tweet.fields": "id",
+      max_results: "100",
+      ...(paginationToken ? { pagination_token: paginationToken } : {}),
+    });
+
+    if (response.data?.some((tweet) => tweet.id === tweetId)) return true;
+    paginationToken = response.meta?.next_token ?? null;
+    if (!paginationToken) break;
+  }
+  return false;
+}
+
+async function xApiGet<T>(path: string, query: Record<string, string>): Promise<T> {
+  const baseUrl = config.socialXApiBaseUrl.replace(/\/$/, "");
+  const url = new URL(`${baseUrl}${path}`);
+  for (const [key, value] of Object.entries(query)) {
+    url.searchParams.set(key, value);
+  }
+
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        authorization: `Bearer ${config.socialXBearerToken}`,
+        accept: "application/json",
+      },
+    });
+  } catch {
+    throw new ClaimRequestError("X repost verification is unavailable", 503);
+  }
+
+  if (response.status === 401 || response.status === 403) {
+    throw new ClaimRequestError("X repost verification token was rejected", 503);
+  }
+  if (response.status === 429) {
+    throw new ClaimRequestError("X repost verification is rate limited; try again later", 429);
+  }
+  if (!response.ok) {
+    throw new ClaimRequestError("X repost verification failed; try again later", 503);
+  }
+
+  return response.json() as Promise<T>;
 }
 
 async function transferWithRpcRetry(chain: ChainClient, claim: SocialXClaimRow): Promise<string> {

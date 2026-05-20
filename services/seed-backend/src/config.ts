@@ -89,6 +89,9 @@ export const config = {
   socialXSubnetClaimsPerDay: intEnv("SOCIAL_X_SUBNET_CLAIMS_PER_DAY", "30", 1),
   socialXPayoutIntervalSec: intEnv("SOCIAL_X_PAYOUT_INTERVAL_SEC", "60", 0),
   socialXCampaignStart: optionalDateEnv("SOCIAL_X_CAMPAIGN_START_ISO", "2026-05-10T00:00:00.000Z"),
+  socialXBearerToken: process.env.SOCIAL_X_BEARER_TOKEN ?? process.env.X_BEARER_TOKEN ?? "",
+  socialXRequiredRepostTweetId: process.env.SOCIAL_X_REQUIRED_REPOST_TWEET_ID ?? "",
+  socialXApiBaseUrl: process.env.SOCIAL_X_API_BASE_URL ?? "https://api.twitter.com/2",
 };
 
 export function validateRuntimeConfig(): void {
@@ -99,6 +102,12 @@ export function validateRuntimeConfig(): void {
   }
   if (process.env.NODE_ENV === "production" && !config.githubToken) {
     throw new Error("GITHUB_TOKEN is required when NODE_ENV=production");
+  }
+  if (config.socialXRequiredRepostTweetId && !/^\d{10,25}$/.test(config.socialXRequiredRepostTweetId)) {
+    throw new Error("SOCIAL_X_REQUIRED_REPOST_TWEET_ID must be a numeric X/Twitter tweet id");
+  }
+  if (process.env.NODE_ENV === "production" && config.socialXRequiredRepostTweetId && !config.socialXBearerToken) {
+    throw new Error("SOCIAL_X_BEARER_TOKEN is required when SOCIAL_X_REQUIRED_REPOST_TWEET_ID is set");
   }
   if (process.env.NODE_ENV === "production" && config.indexerGraphqlUrl && config.applicationSyncEnabled) {
     throw new Error("APPLICATION_SYNC_ENABLED must be false in production shared-DB mode");
