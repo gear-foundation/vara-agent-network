@@ -565,7 +565,15 @@ const TOP_APPLICATIONS_LIVE_QUERY = `
         uniquePartners
       }
     }
-    interactions: allInteractions(first: 5000, orderBy: SUBSTRATE_BLOCK_TS_DESC) {
+  }
+`
+
+const TOP_APPLICATIONS_INTERACTIONS_PAGE_SIZE = 5000
+
+const TOP_APPLICATIONS_INTERACTIONS_QUERY = `
+  query TopApplicationsInteractions($first: Int!, $offset: Int!) {
+    interactions: allInteractions(first: $first, offset: $offset, orderBy: SUBSTRATE_BLOCK_TS_DESC) {
+      totalCount
       nodes {
         id
         caller
@@ -625,6 +633,9 @@ type InteractionGraphQueryResult = {
 type TopApplicationsLiveQueryResult = {
   applications: Connection<ApplicationRow>
   appMetrics: Connection<AppMetricRow>
+}
+
+type TopApplicationsInteractionsQueryResult = {
   interactions: Connection<Pick<InteractionRow, 'id' | 'caller' | 'callerKind' | 'callee' | 'origin' | 'substrateBlockTs'>>
 }
 
@@ -859,6 +870,7 @@ export async function getIntegratorLeaderboard(): Promise<IntegratorLeaderboardE
 export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[]> {
   const data = await fetchIndexerGraphql<TopApplicationsLiveQueryResult>(TOP_APPLICATIONS_LIVE_QUERY)
   if (!data) return []
+  const interactions = await fetchAllTopApplicationInteractions()
 
   const metricByApp = new Map(
     data.appMetrics.nodes.map((metric) => [metric.applicationId.toLowerCase(), metric]),
@@ -896,7 +908,7 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
     return stats
   }
 
-  for (const interaction of data.interactions.nodes) {
+  for (const interaction of interactions) {
     const callee = interaction.callee.toLowerCase()
     const caller = interaction.caller.toLowerCase()
     if (!applicationIds.has(callee)) continue
@@ -970,6 +982,31 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
       if (b.uniqueUsers !== a.uniqueUsers) return b.uniqueUsers - a.uniqueUsers
       return (b.lastActiveAt ?? 0) - (a.lastActiveAt ?? 0)
     })
+}
+
+async function fetchAllTopApplicationInteractions(): Promise<TopApplicationsInteractionsQueryResult['interactions']['nodes']> {
+  const allInteractions: TopApplicationsInteractionsQueryResult['interactions']['nodes'] = []
+  let offset = 0
+  let totalCount: number | null = null
+
+  while (totalCount === null || offset < totalCount) {
+    const data = await fetchIndexerGraphql<TopApplicationsInteractionsQueryResult>(
+      TOP_APPLICATIONS_INTERACTIONS_QUERY,
+      {
+        first: TOP_APPLICATIONS_INTERACTIONS_PAGE_SIZE,
+        offset,
+      },
+    )
+    const page = data?.interactions
+    if (!page) break
+
+    allInteractions.push(...page.nodes)
+    totalCount = page.totalCount
+    if (page.nodes.length === 0) break
+    offset += page.nodes.length
+  }
+
+  return allInteractions
 }
 
 export function getIntegratorLeaderboardScore(
