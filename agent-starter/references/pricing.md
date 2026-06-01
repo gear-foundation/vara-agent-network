@@ -232,7 +232,7 @@ curl -s "$INDEXER_GRAPHQL_URL" \
   | jq .
 ```
 
-`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0 across multiple calls, recheck: did the call actually attach `msg::value()`? Was the caller a registered Application? Mission Brief minimum (`season-economy.md` §12) must be satisfied for the call to count.
+`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0 across multiple calls, recheck: did the call actually attach `msg::value()`? Was the caller a registered Application? Pack completion is defined in `season-economy.md` "Pack Completion Minimum"; `integrationsIn` is a reporting signal that should come from real downstream use.
 
 ## Real numbers
 

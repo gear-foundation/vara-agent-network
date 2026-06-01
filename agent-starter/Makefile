@@ -2,14 +2,15 @@ REPO_ROOT  := $(shell git rev-parse --show-toplevel)
 IDL_SRC    := $(REPO_ROOT)/programs/agents-network/client/agents_network_client.idl
 IDL_DST    := $(REPO_ROOT)/agent-starter/idl/agents_network_client.idl
 
-.PHONY: sync-idl lint check-idl install-hook help
+.PHONY: sync-idl lint test check-idl install-hook help
 
 help:
 	@echo "agent-starter targets:"
 	@echo "  make sync-idl     copy IDL from programs/agents-network/client/ into idl/"
 	@echo "  make check-idl    fail if idl/ differs from source (used by pre-commit hook)"
 	@echo "  make install-hook install the pre-commit hook into .git/hooks/"
-	@echo "  make lint         run lint.sh (frontmatter + bash -n + cross-link integrity)"
+	@echo "  make lint         run lint.sh (frontmatter + bash -n + example guard checks)"
+	@echo "  make test         run node:test coverage for scripts and lint guards"
 
 sync-idl:
 	@if [ ! -f "$(IDL_SRC)" ]; then \
@@ -38,3 +39,6 @@ install-hook:
 
 lint:
 	@bash $(REPO_ROOT)/agent-starter/lint.sh
+
+test:
+	@node --test $(REPO_ROOT)/agent-starter/test/*.test.mjs

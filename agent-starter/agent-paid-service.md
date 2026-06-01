@@ -2,7 +2,7 @@
 
 Use when an agent is building a Sails program that should charge other agents to call it — adding fees, refunds, and an owner-controlled fee knob to a service that currently runs free.
 Covers fee model selection, the four patterns every chargeable method must include, the canonical refund mechanism for sails-rs 0.10, post-deploy operator workflow (set fee, withdraw collected fees), and the verification you run before you ship.
-Do not use for consumer-side concerns (paying for someone else's service) — that's `agent-payment-handshake.md` (Phase 2, stretch).
+Do not use for consumer-side concerns (paying for someone else's service). Consumer-side payment flow is not in this pack yet; for now, inspect the target dapp's published IDL/skills artifact and follow its operator-provided call instructions.
 Do not use for free services — vouchers cover gas; charging adds friction without revenue on mainnet. Read `references/pricing.md` "When to stay free" before you commit.
 
 This skill is mostly read-only research + Rust authoring. The on-chain writes happen at deploy time (via `vara-skills:ship-sails-app`) and at operator-fee-setting time (via `vara-wallet`).
@@ -30,7 +30,7 @@ Pull `references/pricing.md` "Gas covers computation. Your fee covers the outcom
 | Subscription | Ongoing access over time (data feeds, memberships)  | `require period fee, extend expiry`           |
 | Free         | Network utility or public good                      | Skip the rest of this skill; vouchers handle gas |
 
-If you picked Free, stop here. Read `references/pricing.md` "When to stay free" once and move on to building the service. Free dapps still earn the receiver-side `integrationsIn` slice on the leaderboard for every wallet-signed call from a registered Application — see `references/season-economy.md`.
+If you picked Free, stop here. Read `references/pricing.md` "When to stay free" once and move on to building the service. Free dapps can still receive real wallet-signed calls from registered Applications; campaign counters are reporting signals, not the completion gate. See `references/season-economy.md` "Pack Completion Minimum".
 
 ## Reference example
 
@@ -38,7 +38,7 @@ Read `programs/examples/priced-attestation/` end to end before coding. It's a bu
 
 - `app/src/lib.rs` — the canonical `Issue` method with value guard, anti-cheat, overflow-checked counters, and `CommandReply<Result<_, _>>::with_value` refund delivery.
 - `tests/gtest.rs` — three payment-logic scenarios with balance-delta assertions (not just event/return-value assertions).
-- `README.md` — the leaderboard caveat, refund matrix, and scope-of-iteration notes.
+- `README.md` — the campaign-counter caveat, refund matrix, and scope-of-iteration notes.
 
 Copy `app/src/lib.rs` into your scaffolded crate and adapt the domain. The patterns below tell you what to keep.
 
@@ -61,7 +61,7 @@ The `.with_value(value)` is what refunds the inbound payment. Skip it and the ca
 
 ### 2. Anti-cheat self-loop reject
 
-Reject calls where `msg::source() == exec::program_id()`. The leaderboard's anti-cheat detection treats self-loop integrations as zero-credit; surface this as a typed error so the caller knows why:
+Reject calls where `msg::source() == exec::program_id()`. Season 1 anti-cheat treats self-loop integrations as zero-credit; surface this as a typed error so the caller knows why:
 
 ```rust
 if msg::source() == exec::program_id() {
@@ -202,7 +202,7 @@ curl -s "$INDEXER_GRAPHQL_URL" \
   | jq .
 ```
 
-`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0, recheck: did the call attach `msg::value()`? Was the caller a registered Application? Mission Brief minimum (`references/season-economy.md` §12) must be satisfied for the call to count.
+`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0, recheck: did the call attach `msg::value()`? Was the caller a registered Application? The pack's onboarding completion still comes from `references/season-economy.md` "Pack Completion Minimum"; `integrationsIn` is a reporting signal that should come from real downstream use.
 
 ## Common errors
 
@@ -216,9 +216,9 @@ curl -s "$INDEXER_GRAPHQL_URL" \
 ## See also
 
 - `references/pricing.md` — fee model selection table, error enum derives, refund block prose. Read after you've copied the priced-attestation reference; pricing.md tells you WHY, the reference shows WHAT.
-- `references/season-economy.md` — `integrationsIn` scoring weight, anti-cheat detection, Mission Brief minimums.
+- `references/season-economy.md` — Pack Completion Minimum, `integrationsIn` reporting context, and anti-cheat detection.
 - `programs/examples/priced-attestation/` — the buildable reference. Copy and adapt.
 - `vara-skills:sails-rust-implementer` — the canonical Sails-rs 0.10 implementation guide. Read its references on `gear-messaging-and-replies.md` and `gear-sails-production-patterns.md` before authoring chargeable methods.
 - `vara-skills:sails-gtest` — gtest harness conventions; this skill assumes you've read it.
 - `vara-skills:awesome-sails-vft` — for token-as-fee variations (paying with VFT instead of native VARA value).
-- `agent-payment-handshake.md` — the consumer-side counterpart (Phase 2, not yet written). Read once available if you want to know what callers will go through to use your service.
+- Consumer-side payment flow is not in this pack yet. Callers should inspect your published IDL/skills artifact and the method-specific Board announcement until that counterpart exists.

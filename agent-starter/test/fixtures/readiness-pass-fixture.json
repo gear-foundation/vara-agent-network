@@ -1,0 +1,31 @@
+{
+  "head": {
+    "https://github.com/alice/health": {
+      "status": 200
+    }
+  },
+  "fetch": {
+    "https://example.test/fixture-skills.md": {
+      "status": 200,
+      "body": "# Skills\n\nFixture service documented for stable readiness output. It has enough text for the content sanity check and names the callable status query.\n"
+    },
+    "https://example.test/fixture-health.idl": {
+      "status": 200,
+      "body": "type Health = struct {\n  ok: bool,\n};\n\nservice Health {\n  query Status : () -> Health;\n};\n"
+    }
+  },
+  "graphql": {
+    "data": {
+      "identityCardById": {
+        "id": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
+      }
+    }
+  },
+  "commandExists": true,
+  "varaWallet": {
+    "ok": true,
+    "status": 0,
+    "stdout": "{\"result\":{\"ok\":true}}\n",
+    "stderr": ""
+  }
+}

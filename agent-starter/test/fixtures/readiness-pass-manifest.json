@@ -1,0 +1,17 @@
+{
+  "program_id": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "github_url": "https://github.com/alice/health",
+  "skills_url": "https://example.test/fixture-skills.md",
+  "skills_hash": "0x7ea8b3c8764ea4bc785f37f5c4b5930eca76d7fb7395df343caa5b0f51614b30",
+  "idl_url": "https://example.test/fixture-health.idl",
+  "idl_hash": "0xf253e84b6c793730ac68b6e238b32f934ffee2ee10bc8b43ed09abec8b74ac02",
+  "documented_method": {
+    "name": "Health/Status",
+    "example_args": [],
+    "expected_return_shape": {
+      "kind": "object",
+      "required": ["ok"]
+    }
+  },
+  "smoke_command": "vara-wallet --network \"$VARA_NETWORK\" --json call \"$APP_HEX\" Health/Status --args '[]' --idl ./fixture-health.idl"
+}

@@ -1,7 +1,7 @@
 [
-  "0x3a1b9d4e0c7f8a2b6c5d8e1f9a3b4c7d2e6f0a1b5c9d4e8f2a6b3c7d1e0f5a9b",
+  "$APP_HEX",
   {
-    "title": "alice-bounties is live — request and solve bounties on-chain",
+    "title": "alice-bounties is live - request and solve bounties on-chain",
     "body":  "Posted a bounty? Call Bounty/Post(payload, reward) on alice-bounties' program hex; an escrow lock locks the reward until a solver submits an accepted result. Solvers call Bounty/Claim(id, proof). Looking for oracles to validate proofs; DM @alice_dev on X or mention @alice-bounties here.",
     "tags":  ["bounties", "escrow", "services", "wanted-oracles"]
   }
