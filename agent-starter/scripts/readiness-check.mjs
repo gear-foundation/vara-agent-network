@@ -81,6 +81,102 @@ function exitCodeFor(overall) {
   return 0
 }
 
+function commandWords(input) {
+  const words = []
+  let current = ''
+  let quote = null
+  let escaped = false
+  for (const ch of String(input ?? '')) {
+    if (escaped) {
+      current += ch
+      escaped = false
+      continue
+    }
+    if (ch === '\\' && quote !== "'") {
+      escaped = true
+      continue
+    }
+    if (quote) {
+      if (ch === quote) quote = null
+      else current += ch
+      continue
+    }
+    if (ch === '"' || ch === "'") {
+      quote = ch
+      continue
+    }
+    if (/\s/.test(ch)) {
+      if (current) {
+        words.push(current)
+        current = ''
+      }
+      continue
+    }
+    current += ch
+  }
+  if (quote) throw new Error('unterminated quote')
+  if (escaped) current += '\\'
+  if (current) words.push(current)
+  return words
+}
+
+function expandKnownEnv(value, env) {
+  return String(value ?? '').replace(/\$\{?([A-Z_][A-Z0-9_]*)\}?/g, (match, name) => {
+    return Object.prototype.hasOwnProperty.call(env, name) ? env[name] : match
+  })
+}
+
+function parseSmokeCommand(command, env) {
+  const words = commandWords(command).map(word => expandKnownEnv(word, env))
+  const callIndex = words.indexOf('call')
+  const argsIndex = words.indexOf('--args')
+  const idlIndex = words.indexOf('--idl')
+  const networkIndex = words.indexOf('--network')
+  return {
+    words,
+    command: words[0],
+    hasJson: words.includes('--json'),
+    callIndex,
+    programId: callIndex >= 0 ? words[callIndex + 1] : undefined,
+    method: callIndex >= 0 ? words[callIndex + 2] : undefined,
+    args: argsIndex >= 0 ? words[argsIndex + 1] : undefined,
+    idl: idlIndex >= 0 ? words[idlIndex + 1] : undefined,
+    network: networkIndex >= 0 ? words[networkIndex + 1] : undefined,
+  }
+}
+
+function validateSmokeCommand(command, manifest, env) {
+  let parsed
+  try {
+    parsed = parseSmokeCommand(command, env)
+  } catch (e) {
+    return { ok: false, detail: `smoke_command could not be parsed: ${e.message}` }
+  }
+  if (parsed.command !== 'vara-wallet') return { ok: false, detail: 'smoke_command must start with vara-wallet' }
+  if (!parsed.hasJson) return { ok: false, detail: 'smoke_command must include --json' }
+  if (parsed.callIndex < 0) return { ok: false, detail: 'smoke_command must use vara-wallet call' }
+  if (parsed.programId?.toLowerCase() !== env.APP_HEX.toLowerCase()) {
+    return { ok: false, detail: 'smoke_command program id must match APP_HEX' }
+  }
+  if (parsed.method !== manifest.documented_method.name) {
+    return { ok: false, detail: `smoke_command method ${parsed.method ?? '<missing>'} does not match documented_method ${manifest.documented_method.name}` }
+  }
+  if (!parsed.idl) return { ok: false, detail: 'smoke_command must include --idl PATH' }
+  if (parsed.network !== undefined && parsed.network !== env.VARA_NETWORK) {
+    return { ok: false, detail: 'smoke_command --network must match VARA_NETWORK' }
+  }
+  let smokeArgs
+  try {
+    smokeArgs = JSON.parse(parsed.args ?? '')
+  } catch (e) {
+    return { ok: false, detail: `smoke_command --args is not JSON: ${e.message}` }
+  }
+  if (safeJson(smokeArgs) !== safeJson(manifest.documented_method.example_args)) {
+    return { ok: false, detail: 'smoke_command --args must match documented_method.example_args' }
+  }
+  return { ok: true, detail: 'smoke_command matches documented method, args, program, and network' }
+}
+
 function safeJson(value) {
   return JSON.stringify(value, null, 2)
 }
@@ -335,6 +431,12 @@ async function smokeCheck({ manifest, env, idlText, method, retries, deps }) {
       method: manifest.documented_method.name,
     })
   }
+  const commandCheck = validateSmokeCommand(manifest.smoke_command, manifest, env)
+  if (!commandCheck.ok) {
+    return check('smoke_ok', 'FAIL', commandCheck.detail, {
+      smoke_command: manifest.smoke_command,
+    })
+  }
   if (!(deps.commandExists ?? defaultCommandExists)('vara-wallet')) {
     return check('smoke_ok', 'MISCONFIGURED', 'vara-wallet CLI is not on PATH')
   }
@@ -371,18 +473,24 @@ async function smokeCheck({ manifest, env, idlText, method, retries, deps }) {
   const match = valueMatchesShape(payload.result, manifest.documented_method.expected_return_shape)
   return check('smoke_ok', match.ok ? 'PASS' : 'FAIL', match.detail, {
     smoke_command: manifest.smoke_command,
+    executed_method: manifest.documented_method.name,
+    executed_args: manifest.documented_method.example_args,
   })
 }
 
 function artifactRows(preflightResults) {
   const selected = [
     ['github_ok', ['github_url format', 'github_url placeholder', 'github_url reachable']],
-    ['skills_ok', ['skills_hash non-zero', 'skills_url reachable', 'skills_url hash']],
+    ['skills_ok', ['skills_hash non-zero', 'skills_url reachable', 'skills_url hash', 'skills.md size', 'skills.md heading', 'skills.md content']],
     ['idl_ok', ['idl_url format', 'idl_hash non-zero', 'idl_url reachable', 'idl_url hash']],
   ]
   return selected.map(([name, labels]) => {
     const rows = preflightResults.filter(r => labels.includes(r.label))
-    const status = combineStatus(rows.map(r => ({ status: statusFromPreflightResult(r.kind) })))
+    const status = combineStatus(rows.map(r => ({
+      status: r.kind === 'WARN' && r.label.startsWith('skills.md ')
+        ? 'FAIL'
+        : statusFromPreflightResult(r.kind),
+    })))
     const detail = rows.map(r => `${r.label}: ${r.detail ?? r.kind}`).join('; ')
     return check(name, status, detail || 'not checked')
   })

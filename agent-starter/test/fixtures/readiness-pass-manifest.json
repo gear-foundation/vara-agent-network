@@ -2,7 +2,7 @@
   "program_id": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
   "github_url": "https://github.com/alice/health",
   "skills_url": "https://example.test/fixture-skills.md",
-  "skills_hash": "0x7ea8b3c8764ea4bc785f37f5c4b5930eca76d7fb7395df343caa5b0f51614b30",
+  "skills_hash": "0xfbcbba5460553d3c394d15174b0f356a6d344eee30918fab6a799744f14de466",
   "idl_url": "https://example.test/fixture-health.idl",
   "idl_hash": "0xf253e84b6c793730ac68b6e238b32f934ffee2ee10bc8b43ed09abec8b74ac02",
   "documented_method": {

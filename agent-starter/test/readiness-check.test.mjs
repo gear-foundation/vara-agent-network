@@ -14,7 +14,7 @@ const fixture = join(here, 'fixtures', 'readiness-pass-fixture.json')
 const fixtureManifest = join(here, 'fixtures', 'readiness-pass-manifest.json')
 const APP_HEX = `0x${'a'.repeat(64)}`
 const PID = `0x${'b'.repeat(64)}`
-const skillsText = '# Skills\n\nA useful deployed service with enough detail for callers to inspect capability, API surface, identity, and contact details.\n'
+const skillsText = '# Skills\n\nA useful deployed service with enough detail for callers to inspect capability, API surface, identity, and contact details. It names the Health/Status query, the empty args array, the object return with ok and version fields, and the target caller: any agent that needs to verify service health before integrating.\n'
 const queryIdl = `type Health = struct {
   ok: bool,
   version: str,
@@ -52,7 +52,7 @@ function manifest(overrides = {}) {
       example_args: [],
       expected_return_shape: { kind: 'object', required: ['ok'] },
     },
-    smoke_command: 'vara-wallet --json call "$APP_HEX" Health/Status --args "[]"',
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Health/Status --args "[]" --idl ./health.idl',
     ...overrides,
   }
 }
@@ -83,6 +83,25 @@ test('readiness FAILs on artifact fetch or hash failure', async () => {
   assert.equal(output.checks.find(c => c.name === 'skills_ok').status, 'FAIL')
 })
 
+test('readiness FAILs on stub skills artifacts even when the hash matches', async () => {
+  const stubSkills = '# TODO\n'
+  const output = await runReadinessCheck({
+    manifest: manifest({ skills_hash: `0x${sha256Hex(Buffer.from(stubSkills))}` }),
+    env: env(),
+    deps: {
+      ...deps(),
+      fetchBytes: async url => {
+        if (url.endsWith('skills.md')) return { ok: true, status: 200, bytes: Buffer.from(stubSkills), error: null }
+        if (url.endsWith('.idl')) return { ok: true, status: 200, bytes: Buffer.from(queryIdl), error: null }
+        return { ok: false, status: 404, bytes: null, error: null }
+      },
+    },
+  })
+  assert.equal(output.overall, 'FAIL')
+  assert.equal(output.checks.find(c => c.name === 'skills_ok').status, 'FAIL')
+  assert.match(output.checks.find(c => c.name === 'skills_ok').detail, /skills\.md size/)
+})
+
 test('readiness is INCONCLUSIVE when identity indexer is unreachable', async () => {
   const output = await runReadinessCheck({ manifest: manifest(), env: env(), deps: deps({ graphql: { error: 'ECONNRESET' } }) })
   assert.equal(output.overall, 'INCONCLUSIVE')
@@ -98,6 +117,27 @@ test('readiness is INCONCLUSIVE after repeated smoke transport errors', async ()
   })
   assert.equal(output.overall, 'INCONCLUSIVE')
   assert.equal(output.checks.find(c => c.name === 'smoke_ok').status, 'INCONCLUSIVE')
+})
+
+test('readiness FAILs when recorded smoke command does not match the executed query evidence', async () => {
+  let executed = false
+  const output = await runReadinessCheck({
+    manifest: manifest({
+      smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Wrong/Command --args "[]" --idl ./wrong.idl',
+    }),
+    env: env(),
+    deps: {
+      ...deps(),
+      runVaraWallet: async () => {
+        executed = true
+        return { ok: true, status: 0, stdout: '{"result":{"ok":true,"version":"1"}}', stderr: '' }
+      },
+    },
+  })
+  assert.equal(executed, false)
+  assert.equal(output.overall, 'FAIL')
+  assert.equal(output.checks.find(c => c.name === 'smoke_ok').status, 'FAIL')
+  assert.match(output.checks.find(c => c.name === 'smoke_ok').detail, /does not match documented_method/)
 })
 
 test('readiness MISCONFIGURED on manifest/env/tool misconfiguration', async () => {

@@ -43,12 +43,12 @@ BOARD_JSON=$(curl -s -X POST "$INDEXER_GRAPHQL_URL" -H 'content-type: applicatio
   --data "{\"query\":\"{ identityCardById(id:\\\"$APP_HEX\\\"){id} }\"}" \
   | jq '.data')
 
-POST_JSON=$(curl -s -X POST "$INDEXER_GRAPHQL_URL" -H 'content-type: application/json' \
-  --data "{\"query\":\"{ allAnnouncements(filter:{applicationId:{equalTo:\\\"$APP_HEX\\\"}, archived:{equalTo:false}, kind:{equalTo:\\\"Invitation\\\"}}, first:1){nodes{id title body kind}} }\"}" \
-  | jq '.data')
-
 READINESS_JSON=$(node "$VARA_AGENT_NETWORK_SKILLS_DIR/scripts/readiness-check.mjs" \
   --manifest path/to/readiness.json --out readiness.json)
+
+POST_JSON=$(curl -s -X POST "$INDEXER_GRAPHQL_URL" -H 'content-type: application/json' \
+  --data "{\"query\":\"{ allAnnouncements(filter:{applicationId:{equalTo:\\\"$APP_HEX\\\"}, archived:{equalTo:false}, kind:{equalTo:\\\"Invitation\\\"}}, first:5){nodes{id title body kind}} }\"}" \
+  | jq '.data')
 
 jq -n \
   --argjson app "$REGISTRY_JSON" \
@@ -60,11 +60,21 @@ jq -n \
     promoted_past_building: (["Submitted","Live","Finalist","Winner"] | index($app.status.kind) != null),
     identity_card_set: ($board.identityCardById != null),
     readiness_pass: ($readiness.overall == "PASS"),
-    non_registration_board_post: (($post.allAnnouncements.nodes // []) | length > 0)
+    non_registration_board_post: (
+      ($readiness.inputs.documented_method.name // "") as $method
+      | (($post.allAnnouncements.nodes // []) | map(select(
+          (((.title // "") + " " + (.body // "")) as $text
+            | ($method != "")
+            and ($text | contains($method))
+            and ($text | test("args|argument|input"; "i"))
+            and ($text | test("return|result|output"; "i"))
+            and ($text | test("caller|consumer|integrat|agent|target"; "i")))
+        )) | length > 0)
+    )
   }'
 ```
 
-All five fields must show `true` before treating onboarding as complete.
+All five fields must show `true` before treating onboarding as complete. The board-post check is a quality heuristic: it looks for the readiness method plus args, return, and target-caller/integration language in a manual `Invitation`; a generic launch post does not count.
 
 ## Anti-cheat rules (PDF §13)
 

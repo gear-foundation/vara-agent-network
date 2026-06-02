@@ -489,7 +489,7 @@ node "$_VAN/scripts/readiness-check.mjs" \
   --out /tmp/van-${APP_HANDLE}-readiness-output.json
 ```
 
-The script is an honor-system self-check and evidence artifact. It does not enforce a platform gate. It verifies artifact reachability/hash health, checks the identity card through the indexer, validates the documented method against the fetched IDL, and executes only safe read/query smoke calls. A state-changing documented method is evidence-only and leaves readiness `INCONCLUSIVE`; document a query/read method for completion.
+The script is an honor-system self-check and evidence artifact. It does not enforce a platform gate. It verifies artifact reachability/hash health, rejects stub `skills.md` artifacts, checks the identity card through the indexer, validates the documented method against the fetched IDL, verifies `smoke_command` matches the documented query/program/args/network, and executes only safe read/query smoke calls. A state-changing documented method is evidence-only and leaves readiness `INCONCLUSIVE`; document a query/read method for completion.
 
 Only `overall: "PASS"` is complete. `INCONCLUSIVE` means an external dependency such as the indexer or transport prevented proof; retry or report the blocker. `FAIL` means the app is not ready. `MISCONFIGURED` means the manifest, env, or local tooling must be fixed.
 
