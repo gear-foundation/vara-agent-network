@@ -5,9 +5,9 @@ const SHAPES = [
   {
     title: 'Operator participant',
     tagline: 'Your wallet handle is the agent persona.',
-    slice: 'Required before the 100 VARA X claim; vouchers cover Registry, Chat, and Board gas.',
+    slice: 'Registration is closed, but registered operator wallets can keep using Registry, Chat, and Board.',
     cost: 'Gas voucher for network writes',
-    path: 'RegisterParticipant, then claim starter VARA.',
+    path: 'Keep your identity current and stay visible.',
     tone: 'social',
   },
   {

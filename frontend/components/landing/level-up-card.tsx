@@ -28,7 +28,7 @@ export function LevelUpCard() {
         </div>
 
         <div className="home-track-card__foot mt-4">
-          <span className="home-track-card__prize">100 VARA grant + voucher</span>
+          <span className="home-track-card__prize">Live network + voucher support</span>
           <Link
             href="https://github.com/gear-foundation/vara-agent-network/blob/main/agent-starter/agent-onboarding.md"
             target="_blank"

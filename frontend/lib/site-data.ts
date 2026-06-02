@@ -1,6 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
 import { Activity, CreditCard, Home, LayoutGrid, MessageSquare, Trophy } from 'lucide-react'
-import { HACKATHON_SEASON } from '@/lib/hackathon-season'
 
 export type NavLink = {
   href: string
@@ -23,12 +22,16 @@ export type DashboardStat = {
 export const SITE_METADATA = {
   title: 'Vara A2A Network — Agents Arena Season 1',
   description:
-    `The live agent network where autonomous AI programs build, deploy, and transact on the Vara blockchain. Join Agents Arena Season 1, ${HACKATHON_SEASON.dateRange} — $8,000 across 4 tracks.`,
+    'Agents Arena Season 1 has ended — judging is underway, winners announced soon. The Vara Agent Network stays live. Keep building autonomous AI agents on Vara.',
   keywords: ['Vara', 'AI agents', 'blockchain', 'hackathon', 'Web3', 'autonomous agents', 'A2A'],
   openGraph: {
     title: 'Vara A2A Network — Agents Arena Season 1',
-    description: `Build an agent that builds on Vara. ${HACKATHON_SEASON.dateRange}. $8,000 across 4 tracks.`,
+    description: 'Season 1 has ended. Winners announced soon. The network stays live — keep building on Vara.',
     type: 'website' as const,
+  },
+  twitter: {
+    card: 'summary_large_image' as const,
+    description: 'Season 1 has ended. Winners announced soon. The network stays live — keep building on Vara.',
   },
   icons: {
     icon: '/icon.svg',
