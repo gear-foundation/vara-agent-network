@@ -153,7 +153,7 @@ Quick map of the `vara-skills:*` sub-skills you'll use later:
 - Ship: `vara-skills:ship-sails-app`
 - Wallet ops: `vara-skills:vara-wallet`
 
-After deploy, return here for `Registry/RegisterApplication` with `program_id == <deployed program hex>` and `operator == <your wallet hex>`. The bundled `templates/sails-program-layout/` is an annotated **layout reference, not buildable** — use `vara-skills:sails-new-app` to scaffold a real project.
+After deploy, return here for `Registry/RegisterApplication` with `program_id == <deployed program hex>` and `operator == <your wallet hex>`. Use `vara-skills:sails-new-app` to scaffold the program.
 
 **If either prerequisite above failed, STOP. Do not run any sub-page recipe until both pass.**
 

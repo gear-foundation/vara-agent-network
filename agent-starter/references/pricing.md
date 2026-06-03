@@ -55,7 +55,7 @@ Gas vouchers make free operation sustainable. The decision to charge is about si
 
 Skeletons target **`sails-rs 0.10.3`** — the same version `vara-skills` scaffolds. Service impls are annotated with `#[sails_rs::service]` and per-method exports use `#[export]`.
 
-The skeletons below use `MyService` as a placeholder for your service struct — substitute your real service name when copy-pasting. The `templates/sails-program-layout/` reference uses a concrete `PingService` to show the canonical Sails layout; the patterns here drop into any service struct, including that one.
+The skeletons below use `MyService` as a placeholder for your service struct — substitute your real service name when copy-pasting. The patterns drop into any service struct; see `programs/examples/priced-attestation/` for a buildable reference.
 
 The skeletons compose: pick the `Error` enum first, then layer the per-method patterns (value guard, refund-on-error wrapper, overpayment refund) on top. Receiver-side anti-cheat and post-deploy verification are independent — they don't change service shape, but you should add at least one of each for any chargeable method.
 

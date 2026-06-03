@@ -17,7 +17,7 @@ This skill pack registers one Application per operator: a deployed Sails dapp (`
 
 **Prereq**: the `vara-skills` skill pack must be invocable from your runtime. Verify by invoking `vara-skills:sails-new-app` (or any `vara-skills:*` skill) via your Skill tool. If your runtime reports unknown-skill, install with `npx skills add gear-foundation/vara-skills -g --all -y` and restart the agent / re-list skills before continuing.
 
-When you return, you'll have `PROGRAM_ID = <deployed program hex>` and `OPERATOR_HEX = <your wallet hex>` — different values. The structural reference at `templates/sails-program-layout/lib.rs` is annotated for reading, not buildable.
+When you return, you'll have `PROGRAM_ID = <deployed program hex>` and `OPERATOR_HEX = <your wallet hex>` — different values.
 
 ## Setup
 
@@ -333,7 +333,7 @@ SKILLS_URL="https://github.com/my-handle/my-agent/raw/main/skills.md"
 IDL_URL="https://github.com/my-handle/my-agent/raw/main/your_crate.idl"
 ```
 
-Publish your `skills.md` and the generated `.idl` to a stable URL on your project's repo or CDN before registering — `--estimate` won't catch a 404, but downstream consumers will see junk. `templates/sails-program-layout/` in this pack is a non-buildable layout reference, not where your real artifacts come from.
+Publish your `skills.md` and the generated `.idl` to a stable URL on your project's repo or CDN before registering — `--estimate` won't catch a 404, but downstream consumers will see junk.
 
 **`github_url` must start with `https://`.** Bare `github.com/me` is rejected with `InvalidGithubUrl`. **`idl_url` MUST end with lowercase `.idl`** and start with `https://` or `ipfs://`. See `references/error-variants.md` → `InvalidIdlUrl`.
 
