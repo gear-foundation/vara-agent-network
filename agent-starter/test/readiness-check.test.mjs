@@ -14,6 +14,8 @@ const fixture = join(here, 'fixtures', 'readiness-pass-fixture.json')
 const fixtureManifest = join(here, 'fixtures', 'readiness-pass-manifest.json')
 const APP_HEX = `0x${'a'.repeat(64)}`
 const PID = `0x${'b'.repeat(64)}`
+// Shared env for the CLI subprocess tests (fixture-backed, no network).
+const cliEnv = { ...process.env, APP_HEX, PID, INDEXER_GRAPHQL_URL: 'https://indexer.example/graphql', VARA_NETWORK: 'vara', VAN_READINESS_FIXTURE: fixture }
 const skillsText = '# Skills\n\nA useful deployed service with enough detail for callers to inspect capability, API surface, identity, and contact details. It names the Health/Status query, the empty args array, the object return with ok and version fields, and the target caller: any agent that needs to verify service health before integrating.\n'
 const queryIdl = `type Health = struct {
   ok: bool,
@@ -244,14 +246,7 @@ test('readiness CLI writes stable fixture output and exits 0 on PASS', () => {
       '--out', out,
     ], {
       encoding: 'utf8',
-      env: {
-        ...process.env,
-        APP_HEX,
-        PID,
-        INDEXER_GRAPHQL_URL: 'https://indexer.example/graphql',
-        VARA_NETWORK: 'vara',
-        VAN_READINESS_FIXTURE: fixture,
-      },
+      env: cliEnv,
     })
     assert.equal(r.status, 0)
     const stdoutJson = JSON.parse(r.stdout)
@@ -270,14 +265,7 @@ test('readiness CLI rejects invalid retries', () => {
     '--retries', '-1',
   ], {
     encoding: 'utf8',
-    env: {
-      ...process.env,
-      APP_HEX,
-      PID,
-      INDEXER_GRAPHQL_URL: 'https://indexer.example/graphql',
-      VARA_NETWORK: 'vara',
-      VAN_READINESS_FIXTURE: fixture,
-    },
+    env: cliEnv,
   })
   assert.equal(r.status, 2)
   assert.match(r.stderr, /--retries must be a non-negative integer/)

@@ -13,7 +13,7 @@
 //   2 = usage error
 
 import { readFileSync } from 'node:fs'
-import { checkRegistrationInputs } from './preflight-checks.mjs'
+import { checkRegistrationInputs, parseFlags } from './preflight-checks.mjs'
 
 const USAGE = `preflight-register — pre-submit checklist for Registry/RegisterApplication
 
@@ -52,32 +52,19 @@ const c = NO_COLOR
       bold: s => `\x1b[1m${s}\x1b[0m`,
     }
 
+const REGISTER_FLAGS = new Set([
+  '--args',
+  '--skills-url',
+  '--skills-hash',
+  '--idl-url',
+  '--idl-hash',
+  '--github-url',
+  '--handle',
+  '--description',
+])
+
 function parseArgs(argv) {
-  const out = {}
-  const flags = new Set([
-    '--args',
-    '--skills-url',
-    '--skills-hash',
-    '--idl-url',
-    '--idl-hash',
-    '--github-url',
-    '--handle',
-    '--description',
-  ])
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (a === '--help' || a === '-h') {
-      out.help = true
-      continue
-    }
-    if (!flags.has(a)) {
-      throw new Error(`unknown arg: ${a}`)
-    }
-    const v = argv[++i]
-    if (v === undefined) throw new Error(`missing value for ${a}`)
-    out[a.slice(2)] = v
-  }
-  return out
+  return parseFlags(argv, REGISTER_FLAGS)
 }
 
 function loadArgsFile(path) {

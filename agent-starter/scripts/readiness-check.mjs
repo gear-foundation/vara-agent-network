@@ -7,6 +7,7 @@ import { spawnSync } from 'node:child_process'
 import {
   checkArtifactInputs,
   normaliseHash,
+  parseFlags,
 } from './preflight-checks.mjs'
 
 const SCHEMA_VERSION = 'agent-starter-readiness/v1'
@@ -23,11 +24,18 @@ const REQUIRED_FIELDS = [
   'smoke_command',
 ]
 
+const READINESS_FLAGS = new Set(['--manifest', '--out', '--retries'])
+
 const ARTIFACT_CHECKS = [
   ['github_ok', new Set(['github_url format', 'github_url placeholder', 'github_url reachable'])],
   ['skills_ok', new Set(['skills_hash non-zero', 'skills_url reachable', 'skills_url hash', 'skills.md size', 'skills.md heading', 'skills.md content'])],
   ['idl_ok', new Set(['idl_url format', 'idl_hash non-zero', 'idl_url reachable', 'idl_url hash'])],
 ]
+
+// skills.md content WARNs (stub / too-short / no-heading) block readiness even
+// though preflight treats them as soft at registration time. Explicit set, not a
+// label-prefix match, so a renamed/added preflight label can't silently change this.
+const ESCALATED_WARN_LABELS = new Set(['skills.md size', 'skills.md heading', 'skills.md content'])
 
 const USAGE = `readiness-check - honor-system readiness self-check
 
@@ -43,20 +51,7 @@ env:
 exit: 0 PASS or INCONCLUSIVE, 1 FAIL, 2 MISCONFIGURED.`
 
 function parseArgs(argv) {
-  const out = { retries: '2', out: 'readiness.json' }
-  const flags = new Set(['--manifest', '--out', '--retries'])
-  for (let i = 0; i < argv.length; i++) {
-    const a = argv[i]
-    if (a === '--help' || a === '-h') {
-      out.help = true
-      continue
-    }
-    if (!flags.has(a)) throw new Error(`unknown arg: ${a}`)
-    const v = argv[++i]
-    if (v === undefined) throw new Error(`missing value for ${a}`)
-    out[a.slice(2)] = v
-  }
-  return out
+  return parseFlags(argv, READINESS_FLAGS, { retries: '2', out: 'readiness.json' })
 }
 
 function check(name, status, detail, evidence = undefined) {
@@ -134,22 +129,21 @@ function expandKnownEnv(value, env) {
 
 function parseSmokeCommand(command, env) {
   const words = commandWords(command).map(word => expandKnownEnv(word, env))
+  const valueAfter = flag => {
+    const i = words.indexOf(flag)
+    return i >= 0 ? words[i + 1] : undefined
+  }
   const callIndex = words.indexOf('call')
-  const argsIndex = words.indexOf('--args')
-  const argsFileIndex = words.indexOf('--args-file')
-  const idlIndex = words.indexOf('--idl')
-  const networkIndex = words.indexOf('--network')
   return {
-    words,
     command: words[0],
     hasJson: words.includes('--json'),
     callIndex,
     programId: callIndex >= 0 ? words[callIndex + 1] : undefined,
     method: callIndex >= 0 ? words[callIndex + 2] : undefined,
-    args: argsIndex >= 0 ? words[argsIndex + 1] : undefined,
-    argsFile: argsFileIndex >= 0 ? words[argsFileIndex + 1] : undefined,
-    idl: idlIndex >= 0 ? words[idlIndex + 1] : undefined,
-    network: networkIndex >= 0 ? words[networkIndex + 1] : undefined,
+    args: valueAfter('--args'),
+    argsFile: valueAfter('--args-file'),
+    idl: valueAfter('--idl'),
+    network: valueAfter('--network'),
   }
 }
 
@@ -580,7 +574,7 @@ function artifactRows(preflightResults) {
   return ARTIFACT_CHECKS.map(([name]) => {
     const rows = byGroup.get(name)
     const status = combineStatus(rows.map(r => ({
-      status: r.kind === 'WARN' && r.label.startsWith('skills.md ')
+      status: r.kind === 'WARN' && ESCALATED_WARN_LABELS.has(r.label)
         ? 'FAIL'
         : statusFromPreflightResult(r.kind),
     })))

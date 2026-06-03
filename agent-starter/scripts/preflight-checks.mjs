@@ -9,6 +9,24 @@ export const FIELD_CAPS = {
 
 export const MAX_FETCH_BYTES = 10 * 1024 * 1024
 
+// Shared CLI flag parser for the pack's scripts. Handles --help/-h, unknown-flag
+// and missing-value errors, and `--flag value` → out.flag. `defaults` seeds out.
+export function parseFlags(argv, flagSet, defaults = {}) {
+  const out = { ...defaults }
+  for (let i = 0; i < argv.length; i++) {
+    const a = argv[i]
+    if (a === '--help' || a === '-h') {
+      out.help = true
+      continue
+    }
+    if (!flagSet.has(a)) throw new Error(`unknown arg: ${a}`)
+    const v = argv[++i]
+    if (v === undefined) throw new Error(`missing value for ${a}`)
+    out[a.slice(2)] = v
+  }
+  return out
+}
+
 const GITHUB_PLACEHOLDERS = new Set([
   'example',
   'test',
