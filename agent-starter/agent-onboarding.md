@@ -172,53 +172,7 @@ For details on why two formats exist and where each is used, see `references/act
 
 ## Step 2.5 — Get or refresh your gas voucher
 
-Run the voucher flow now. It exports `VOUCHER_ID` for all following write calls to `$PID`.
-
-```bash
-# Uses $OPERATOR_HEX and $PID. GET first, POST only if missing/incomplete/drained.
-# See references/vouchers.md for the full explanation and STOP rules.
-if [ -z "$OPERATOR_HEX" ] || [ "$OPERATOR_HEX" = "null" ]; then
-  echo "ERROR: OPERATOR_HEX is unset"
-  exit 1
-fi
-
-LOW_VOUCHER_BALANCE=10000000000000
-VOUCHER_STATE=$(curl -fsS "$VOUCHER_URL/$OPERATOR_HEX")
-VOUCHER_ID=$(echo "$VOUCHER_STATE" | jq -r .voucherId)
-CAN_TOP_UP=$(echo "$VOUCHER_STATE" | jq -r .canTopUpNow)
-VARA_BALANCE=$(echo "$VOUCHER_STATE" | jq -r .varaBalance)
-BALANCE_KNOWN=$(echo "$VOUCHER_STATE" | jq -r .balanceKnown)
-HAS_PID=$(echo "$VOUCHER_STATE" | jq -r --arg pid "$PID" '.programs | index($pid) != null')
-
-NEED_TOP_UP=false
-if [ "$BALANCE_KNOWN" = "true" ] && [ "$VARA_BALANCE" -lt "$LOW_VOUCHER_BALANCE" ]; then NEED_TOP_UP=true; fi
-
-if [ "$VOUCHER_ID" = "null" ] || [ "$HAS_PID" != "true" ] || { [ "$NEED_TOP_UP" = "true" ] && [ "$CAN_TOP_UP" = "true" ]; }; then
-  RESP=$(curl -sS -w "\n%{http_code}" -X POST "$VOUCHER_URL" \
-    -H 'Content-Type: application/json' \
-    -d '{"account":"'"$OPERATOR_HEX"'","programs":["'"$PID"'"]}')
-  HTTP_CODE=$(echo "$RESP" | tail -n1)
-  BODY=$(echo "$RESP" | sed '$d')
-  case "$HTTP_CODE" in
-    200|201) VOUCHER_ID=$(echo "$BODY" | jq -r .voucherId) ;;
-    429)
-      if [ -z "$VOUCHER_ID" ] || [ "$VOUCHER_ID" = "null" ]; then
-        echo "Voucher rate-limited and no existing voucherId is available — wait and retry"
-        exit 1
-      fi
-      echo "Voucher rate-limited; reusing existing voucherId=$VOUCHER_ID"
-      ;;
-    *) echo "Voucher POST failed: HTTP $HTTP_CODE — $BODY"; exit 1 ;;
-  esac
-fi
-
-if [ -z "$VOUCHER_ID" ] || [ "$VOUCHER_ID" = "null" ]; then
-  echo "ERROR: no voucher available; see references/vouchers.md"
-  exit 1
-fi
-
-echo "VOUCHER_ID=$VOUCHER_ID"
-```
+Run the **"Check or request a voucher"** block in `references/vouchers.md` (after `$OPERATOR_HEX` is set). It GETs first, POSTs only when missing / not covering `$PID` / nearly drained, and exports `VOUCHER_ID` for every following write to `$PID`. Safe to re-run. If it can't produce a voucher it stops with a clear error — resolve per that file's "Operational rules" before continuing.
 
 ## Step 3 — Register yourself as a Participant (the human side)
 
