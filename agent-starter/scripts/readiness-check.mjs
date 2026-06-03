@@ -23,6 +23,12 @@ const REQUIRED_FIELDS = [
   'smoke_command',
 ]
 
+const ARTIFACT_CHECKS = [
+  ['github_ok', new Set(['github_url format', 'github_url placeholder', 'github_url reachable'])],
+  ['skills_ok', new Set(['skills_hash non-zero', 'skills_url reachable', 'skills_url hash', 'skills.md size', 'skills.md heading', 'skills.md content'])],
+  ['idl_ok', new Set(['idl_url format', 'idl_hash non-zero', 'idl_url reachable', 'idl_url hash'])],
+]
+
 const USAGE = `readiness-check - honor-system readiness self-check
 
 usage:
@@ -152,8 +158,6 @@ function parseSmokeCommand(command, env) {
 const SHELL_METACHARS = /[;&|`]|\$\(|\|\||&&|>|</
 
 function validateSmokeCommand(command, manifest, env) {
-  // Reject shell metacharacters in the unquoted portion — the command is stored
-  // as copy-pasteable evidence, so a trailing `; curl ...` must not pass.
   const dequoted = String(command).replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, '')
   if (SHELL_METACHARS.test(dequoted)) {
     return { ok: false, detail: 'smoke_command contains shell metacharacters outside quotes' }
@@ -254,6 +258,19 @@ function stripLineComments(text) {
   return text.split('\n').map(line => line.replace(/\s*\/\/.*$/, '')).join('\n')
 }
 
+function fieldNamesFromStructBody(body) {
+  return [...String(body ?? '').matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g)].map(f => f[1])
+}
+
+function setParsedMethod(methods, name, query, args, returnType) {
+  methods.set(name, {
+    name,
+    query,
+    args: args.trim(),
+    returnType: returnType.trim(),
+  })
+}
+
 function findNamedBlocks(text, regex) {
   const blocks = []
   regex.lastIndex = 0
@@ -287,18 +304,12 @@ export function parseIdlServices(idlText) {
     const name = m[1]
     const body = m[3] ?? ''
     const kind = m[2] || (body.trim().startsWith('struct') ? 'struct' : body.trim().startsWith('enum') ? 'enum' : 'alias')
-    const fields = []
     const structBody = body.match(/struct\s*\{([\s\S]*)\}/)?.[1] ?? (kind === 'struct' ? body.match(/\{([\s\S]*)\}/)?.[1] : '')
-    if (structBody) {
-      for (const f of structBody.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) fields.push(f[1])
-    }
-    typeDefs.set(name, { kind, fields })
+    typeDefs.set(name, { kind, fields: fieldNamesFromStructBody(structBody) })
   }
 
   for (const block of findNamedBlocks(clean, /\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/g)) {
-    const fields = []
-    for (const f of block.body.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) fields.push(f[1])
-    typeDefs.set(block.name, { kind: 'struct', fields })
+    typeDefs.set(block.name, { kind: 'struct', fields: fieldNamesFromStructBody(block.body) })
   }
   for (const block of findNamedBlocks(clean, /\benum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/g)) {
     if (!typeDefs.has(block.name)) typeDefs.set(block.name, { kind: 'enum', fields: [] })
@@ -311,12 +322,7 @@ export function parseIdlServices(idlText) {
     for (const line of svc[2].split('\n')) {
       const m = line.trim().match(/^(query\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*:\s*\((.*)\)\s*->\s*([^;]+);$/)
       if (!m) continue
-      methods.set(m[2], {
-        name: m[2],
-        query: Boolean(m[1]),
-        args: m[3].trim(),
-        returnType: m[4].trim(),
-      })
+      setParsedMethod(methods, m[2], Boolean(m[1]), m[3], m[4])
     }
     services.set(service, methods)
   }
@@ -334,12 +340,7 @@ export function parseIdlServices(idlText) {
         if (trimmed && !['functions', 'types', '{', '}'].includes(trimmed)) pendingQuery = false
         continue
       }
-      methods.set(m[2], {
-        name: m[2],
-        query: Boolean(m[1]) || pendingQuery,
-        args: m[3].trim(),
-        returnType: m[4].trim(),
-      })
+      setParsedMethod(methods, m[2], Boolean(m[1]) || pendingQuery, m[3], m[4])
       pendingQuery = false
     }
     services.set(svc.name, methods)
@@ -430,8 +431,8 @@ function defaultCommandExists(cmd) {
 function defaultRunVaraWallet({ programId, method, args, idlText, network }) {
   const dir = mkdtempSync(join(tmpdir(), 'van-readiness-'))
   const idlPath = join(dir, 'target.idl')
-  writeFileSync(idlPath, idlText)
   try {
+    writeFileSync(idlPath, idlText)
     const result = spawnSync('vara-wallet', [
       '--network', network,
       '--json',
@@ -570,13 +571,14 @@ async function smokeCheck({ manifest, env, idlText, method, retries, deps }) {
 }
 
 function artifactRows(preflightResults) {
-  const selected = [
-    ['github_ok', ['github_url format', 'github_url placeholder', 'github_url reachable']],
-    ['skills_ok', ['skills_hash non-zero', 'skills_url reachable', 'skills_url hash', 'skills.md size', 'skills.md heading', 'skills.md content']],
-    ['idl_ok', ['idl_url format', 'idl_hash non-zero', 'idl_url reachable', 'idl_url hash']],
-  ]
-  return selected.map(([name, labels]) => {
-    const rows = preflightResults.filter(r => labels.includes(r.label))
+  const byGroup = new Map(ARTIFACT_CHECKS.map(([name]) => [name, []]))
+  for (const result of preflightResults) {
+    for (const [name, labels] of ARTIFACT_CHECKS) {
+      if (labels.has(result.label)) byGroup.get(name).push(result)
+    }
+  }
+  return ARTIFACT_CHECKS.map(([name]) => {
+    const rows = byGroup.get(name)
     const status = combineStatus(rows.map(r => ({
       status: r.kind === 'WARN' && r.label.startsWith('skills.md ')
         ? 'FAIL'
