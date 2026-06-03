@@ -234,8 +234,35 @@ function stripLineComments(text) {
   return text.split('\n').map(line => line.replace(/\s*\/\/.*$/, '')).join('\n')
 }
 
+function findNamedBlocks(text, regex) {
+  const blocks = []
+  regex.lastIndex = 0
+  let match
+  while ((match = regex.exec(text)) !== null) {
+    const open = text.indexOf('{', match.index)
+    if (open < 0) continue
+    let depth = 0
+    let close = -1
+    for (let i = open; i < text.length; i++) {
+      if (text[i] === '{') depth++
+      else if (text[i] === '}') {
+        depth--
+        if (depth === 0) {
+          close = i
+          break
+        }
+      }
+    }
+    if (close < 0) break
+    blocks.push({ name: match[1], body: text.slice(open + 1, close) })
+    regex.lastIndex = close + 1
+  }
+  return blocks
+}
+
 export function parseIdlServices(idlText) {
   const typeDefs = new Map()
+  const clean = stripLineComments(idlText)
   for (const m of idlText.matchAll(/\btype\s+([A-Za-z_][A-Za-z0-9_]*)\s*=\s*(struct|enum|alias)?\s*([\s\S]*?);/g)) {
     const name = m[1]
     const body = m[3] ?? ''
@@ -248,8 +275,16 @@ export function parseIdlServices(idlText) {
     typeDefs.set(name, { kind, fields })
   }
 
+  for (const block of findNamedBlocks(clean, /\bstruct\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/g)) {
+    const fields = []
+    for (const f of block.body.matchAll(/\b([A-Za-z_][A-Za-z0-9_]*)\s*:/g)) fields.push(f[1])
+    typeDefs.set(block.name, { kind: 'struct', fields })
+  }
+  for (const block of findNamedBlocks(clean, /\benum\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{/g)) {
+    if (!typeDefs.has(block.name)) typeDefs.set(block.name, { kind: 'enum', fields: [] })
+  }
+
   const services = new Map()
-  const clean = stripLineComments(idlText)
   for (const svc of clean.matchAll(/\bservice\s+([A-Za-z_][A-Za-z0-9_]*)\s*\{([\s\S]*?)^\};/gm)) {
     const service = svc[1]
     const methods = new Map()
@@ -265,18 +300,49 @@ export function parseIdlServices(idlText) {
     }
     services.set(service, methods)
   }
+  for (const svc of findNamedBlocks(clean, /\bservice\s+([A-Za-z_][A-Za-z0-9_]*)(?:@[^\s{]+)?\s*\{/g)) {
+    const methods = services.get(svc.name) ?? new Map()
+    let pendingQuery = false
+    for (const line of svc.body.split('\n')) {
+      const trimmed = line.trim()
+      if (trimmed === '@query') {
+        pendingQuery = true
+        continue
+      }
+      const m = trimmed.match(/^(@query\s+)?([A-Za-z_][A-Za-z0-9_]*)\s*\((.*)\)\s*->\s*([^;]+);$/)
+      if (!m) {
+        if (trimmed && !['functions', 'types', '{', '}'].includes(trimmed)) pendingQuery = false
+        continue
+      }
+      methods.set(m[2], {
+        name: m[2],
+        query: Boolean(m[1]) || pendingQuery,
+        args: m[3].trim(),
+        returnType: m[4].trim(),
+      })
+      pendingQuery = false
+    }
+    services.set(svc.name, methods)
+  }
   return { services, typeDefs }
 }
 
 function scalarKind(type, typeDefs) {
   const t = type.trim()
+  const option = t.match(/^Option<(.+)>$/)
+  if (option) return { kind: 'optional', inner: scalarKind(option[1], typeDefs) }
+  const opt = t.match(/^opt\s+(.+)$/)
+  if (opt) return { kind: 'optional', inner: scalarKind(opt[1], typeDefs) }
+  const vec = t.match(/^Vec<(.+)>$/)
+  if (vec) return { kind: 'array' }
+  const result = t.match(/^Result<([^,>]+),\s*([^>]+)>$/)
+  if (result) return scalarKind(result[1], typeDefs)
   if (t === 'null' || t === '()' || t === 'void') return { kind: 'null' }
   if (t === 'bool') return { kind: 'boolean' }
   if (/^(u|i)(8|16|32|64|128|256)$/.test(t)) return { kind: 'number' }
-  if (t === 'str' || t === 'String' || t === 'actor_id') return { kind: 'string' }
+  if (t === 'str' || t === 'String' || t === 'actor_id' || t === 'ActorId') return { kind: 'string' }
   if (t.startsWith('vec ')) return { kind: 'array' }
   if (t.startsWith('[')) return { kind: 'array' }
-  if (t.startsWith('opt ')) return { kind: 'optional', inner: scalarKind(t.slice(4), typeDefs) }
   const def = typeDefs.get(t)
   if (def?.kind === 'struct') return { kind: 'object', required: def.fields }
   if (def?.kind === 'enum') return { kind: 'object', required: ['kind'] }

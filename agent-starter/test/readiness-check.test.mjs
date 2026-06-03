@@ -28,6 +28,31 @@ const commandIdl = `service Health {
   Update : () -> null;
 };
 `
+const sailsV1Idl = `service Directory@0x5ab451628f7f6d25 {
+  functions {
+    @query
+    GetManifest(app: ActorId) -> Option<ServiceManifest>;
+
+    UpsertManifest(app: ActorId, input: ManifestInput) -> Result<ServiceManifest, DirectoryError>;
+  }
+
+  types {
+    struct ServiceManifest {
+      app: ActorId,
+      publisher: ActorId,
+      service: str,
+      method: str,
+      args_shape: str,
+      return_shape: str,
+      idl_url: str,
+      skills_url: str,
+      evidence_hash: [u8;32],
+      target_callers: vec str,
+      updated_at: u64,
+    }
+  }
+}
+`
 
 function env(overrides = {}) {
   return {
@@ -75,6 +100,30 @@ test('readiness PASS with reachable artifacts, identity card, documented query, 
   const output = await runReadinessCheck({ manifest: manifest(), env: env(), deps: deps() })
   assert.equal(output.overall, 'PASS')
   assert.deepEqual(output.checks.map(c => c.name), ['github_ok', 'skills_ok', 'idl_ok', 'identity_card_ok', 'documented_method', 'smoke_ok'])
+})
+
+test('readiness PASS with generated Sails v1 IDL and separate-line query annotation', async () => {
+  const methodName = 'Directory/GetManifest'
+  const exampleArgs = [APP_HEX]
+  const output = await runReadinessCheck({
+    manifest: manifest({
+      idl_hash: `0x${sha256Hex(Buffer.from(sailsV1Idl))}`,
+      documented_method: {
+        name: methodName,
+        example_args: exampleArgs,
+        expected_return_shape: { kind: 'object', required: ['app', 'publisher', 'service', 'method'] },
+      },
+      smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Directory/GetManifest --args "[\\"$APP_HEX\\"]" --idl ./readiness_directory.idl',
+    }),
+    env: env(),
+    deps: deps({
+      idlText: sailsV1Idl,
+      wallet: { ok: true, status: 0, stdout: '{"result":{"app":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","publisher":"0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa","service":"Directory","method":"GetManifest"}}', stderr: '' },
+    }),
+  })
+  assert.equal(output.overall, 'PASS')
+  assert.equal(output.checks.find(c => c.name === 'documented_method').status, 'PASS')
+  assert.equal(output.checks.find(c => c.name === 'smoke_ok').status, 'PASS')
 })
 
 test('readiness FAILs on artifact fetch or hash failure', async () => {
