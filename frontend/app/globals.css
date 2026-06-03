@@ -3626,6 +3626,32 @@
   padding-top: 56px;
 }
 
+.hack-season-banner {
+  position: sticky;
+  top: 72px;
+  z-index: 40;
+  display: block;
+  border-bottom: 1px solid color-mix(in oklch, var(--primary) 32%, var(--border));
+  background:
+    linear-gradient(90deg, color-mix(in oklch, var(--primary) 18%, transparent), transparent 62%),
+    var(--background);
+  padding: 10px 16px;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  line-height: 1.45;
+  text-align: center;
+  text-transform: uppercase;
+  transition: color 150ms ease, border-color 150ms ease;
+}
+
+.hack-season-banner:hover {
+  border-color: color-mix(in oklch, var(--primary) 58%, var(--border));
+  color: var(--primary);
+}
+
 .hack-section {
   margin-top: 68px;
   scroll-margin-top: 172px;
@@ -3671,6 +3697,50 @@
   color: var(--foreground);
   font-size: 17px;
   line-height: 1.25;
+}
+
+.hack-whats-next {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+  margin-top: 24px;
+}
+
+.hack-whats-next article {
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(260px 130px at 0 0, color-mix(in oklch, var(--primary) 8%, transparent), transparent 74%),
+    var(--card);
+  padding: 20px;
+}
+
+.hack-whats-next h3 {
+  margin: 0 0 10px;
+  color: var(--foreground);
+  font-size: 18px;
+  font-weight: 700;
+  line-height: 1.25;
+}
+
+.hack-whats-next p,
+.hack-next-note p {
+  margin: 0;
+  color: var(--muted-foreground);
+  font-size: 14px;
+  line-height: 1.62;
+}
+
+.hack-next-note {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+  border: 1px solid color-mix(in oklch, var(--primary) 24%, var(--border));
+  border-radius: var(--radius-xl);
+  background:
+    linear-gradient(135deg, color-mix(in oklch, var(--primary) 9%, transparent), transparent 56%),
+    var(--card);
+  padding: 20px;
 }
 
 .hack-build-brief {
@@ -3847,7 +3917,7 @@
 
 .hack-timeline {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   align-items: start;
   gap: 18px;
   margin-top: 24px;
@@ -5096,6 +5166,29 @@
   font-size: 15px;
 }
 
+.hack-cta__actions {
+  display: flex;
+  flex-direction: column;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.hack-cta__actions .btn {
+  min-width: 292px;
+  padding: 12px 25px;
+}
+
+.hack-cta__actions .btn--ghost {
+  background: color-mix(in oklch, var(--card) 88%, var(--primary));
+}
+
+.social-claim--closed .social-claim__status {
+  border-color: color-mix(in oklch, var(--primary) 24%, var(--border));
+  background: color-mix(in oklch, var(--primary) 8%, var(--card));
+  color: var(--primary);
+}
+
 @keyframes home-wizard-pop {
   from {
     opacity: 0;
@@ -5222,6 +5315,10 @@
 
   .hack-date-band {
     grid-template-columns: 1fr;
+  }
+
+  .hack-whats-next {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .hack-timeline__col {
@@ -5435,6 +5532,19 @@
     align-items: flex-start;
     flex-direction: column;
     padding: 22px;
+  }
+
+  .hack-whats-next {
+    grid-template-columns: 1fr;
+  }
+
+  .hack-cta__actions,
+  .hack-cta__actions .btn {
+    width: 100%;
+  }
+
+  .hack-cta__actions {
+    justify-content: flex-start;
   }
 
   .agents-page {

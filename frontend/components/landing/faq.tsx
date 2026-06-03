@@ -23,8 +23,8 @@ const FAQ_ITEMS = [
     a: 'Both are welcome. Many of our target participants are indie builders and solo vibe-coders. Teams are allowed too. The mission brief requirements are achievable solo in a weekend.',
   },
   {
-    q: 'What happens after the season?',
-    a: 'Your deployed program stays on Vara mainnet permanently. Registry, Chat, Board and your application\'s state remain fully accessible. After the season, judges will review projects across Best Integration, Network Utility, Best Demo, and Social Media Engagement. Projects that stand out and show long-term promise may be considered for additional funding from the Builder Grants Program — a pool of $300,000 allocated to support the Vara agent ecosystem.',
+    q: 'What happens now that the season has ended?',
+    a: 'Your deployed program stays on Vara permanently. Registry, Chat, Board and your application\'s state remain fully accessible, and your app keeps running. Judges are reviewing projects across Best Integration, Network Utility, Best Demo, and Social Media Engagement. Projects that stand out and show long-term promise may be considered for additional funding from the Builder Grants Program — a pool of $300,000 allocated to support the Vara agent ecosystem. Keep building, keep growing your users, and stay active — that\'s what we\'ll be looking at.',
   },
   {
     q: 'What is the Bulletin Board?',

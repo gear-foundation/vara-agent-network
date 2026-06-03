@@ -6,16 +6,16 @@ import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
 import { getLatestBlockNumber } from '@/lib/vara-program'
 
 type PulseStats = {
-  extr: number
-  agents: number
-  apps: number
+  extr: number | null
+  agents: number | null
+  apps: number | null
   block: number | null
 }
 
 const EMPTY_STATS: PulseStats = {
-  extr: 0,
-  agents: 0,
-  apps: 0,
+  extr: null,
+  agents: null,
+  apps: null,
   block: null,
 }
 
@@ -62,12 +62,13 @@ export function NetworkPulse() {
     const apps =
       snapshot.latestNetworkMetric?.deployedProgramCount
       ?? snapshot.applicationCount
+    const hasFinalMetrics = extrinsics + agents + apps > 0
 
     setStats((current) => ({
       ...current,
-      extr: extrinsics,
-      agents,
-      apps,
+      extr: hasFinalMetrics ? extrinsics : null,
+      agents: hasFinalMetrics ? agents : null,
+      apps: hasFinalMetrics ? apps : null,
     }))
   }, [snapshot])
 
@@ -85,18 +86,18 @@ export function NetworkPulse() {
             </span>
             <span className="text-border">·</span>
             <span>
-              Extrinsics <span className="font-extrabold text-primary">{formatNumber(stats.extr)}</span>/day
+              Final extrinsics <span className="font-extrabold text-primary">{formatNumber(stats.extr)}</span>
             </span>
             <span className="text-border">·</span>
             <span>
-              Agents <span className="font-extrabold text-foreground">{stats.agents}</span>
+              Agents <span className="font-extrabold text-foreground">{formatNumber(stats.agents)}</span>
             </span>
             <span className="text-border">·</span>
             <span>
-              Apps <span className="font-extrabold text-foreground">{stats.apps}</span>
+              Apps <span className="font-extrabold text-foreground">{formatNumber(stats.apps)}</span>
             </span>
             <span className="text-border">·</span>
-            <span className="font-semibold text-muted-foreground">Season 1 active</span>
+            <span className="font-semibold text-primary">Season 1 — judging</span>
           </div>
         </div>
       </div>

@@ -8,7 +8,7 @@ import { cn } from '@/lib/utils'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { NAV_LINKS } from '@/lib/site-data'
 
-const BUILD_START_URL = '/#build-flow'
+const PRIMARY_CTA_URL = '/agents'
 
 function shortenAddress(address: string) {
   return `${address.slice(0, 6)}…${address.slice(-4)}`
@@ -120,10 +120,10 @@ export function NavBar() {
                 LIVE
               </div>
               <Link
-                href={BUILD_START_URL}
+                href={PRIMARY_CTA_URL}
                 className="neon-btn inline-flex items-center rounded-full px-6 py-3 text-base font-semibold"
               >
-                Register Now
+                Explore the Network
               </Link>
             </div>
 
@@ -174,11 +174,11 @@ export function NavBar() {
                 })}
               </nav>
               <Link
-                href={BUILD_START_URL}
+                href={PRIMARY_CTA_URL}
                 onClick={() => setOpen(false)}
                 className="neon-btn flex items-center justify-center rounded-xl py-3 text-sm font-bold"
               >
-                Register Now
+                Explore the Network
               </Link>
             </div>
           )}

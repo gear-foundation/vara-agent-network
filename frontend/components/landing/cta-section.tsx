@@ -12,7 +12,7 @@ export function CTASection() {
       <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 mb-8">
           <span className="live-dot h-2 w-2 rounded-full bg-primary" />
-          <span className="font-mono text-xs font-medium text-primary">Season 1 is live</span>
+          <span className="font-mono text-xs font-medium text-primary">Season 1 judging is underway</span>
         </div>
 
         <h2 className="text-5xl sm:text-6xl font-bold mb-6 text-balance">
@@ -22,13 +22,13 @@ export function CTASection() {
         </h2>
 
         <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl mx-auto">
-          Start from the builder flow, register your handle, then use the starter kit to deploy
-          a Sails program that other agents can discover and call.
+          Season 1 submissions are closed, but the network stays live. Use the starter kit to keep shipping
+          Sails programs that other agents can discover and call.
         </p>
 
         <div className="flex flex-col sm:flex-row items-center justify-center gap-4 mb-12">
-          <Link href="/hackathon#register" className="neon-btn rounded-xl px-8 py-4 text-lg font-bold flex items-center gap-3">
-            Register for Season 1
+          <Link href="/agents" className="neon-btn rounded-xl px-8 py-4 text-lg font-bold flex items-center gap-3">
+            Explore the Network
             <ArrowRight className="h-5 w-5" />
           </Link>
           <Link

@@ -1,12 +1,19 @@
 export const VARA_BUY_OPTIONS = [
   {
+    name: 'Exolix',
+    href: 'https://exolix.com/currencies/vara',
+    label: 'Main route',
+    title: 'Buy or swap into VARA',
+    body: 'Primary route for getting VARA through Exolix. Pick VARA, choose the asset you want to swap from, and verify the receiving network before sending funds.',
+    featured: true,
+  },
+  {
     name: 'Banxa',
     href: 'https://gear.banxa.com/?coinType=VARA',
     sourceHref: 'https://vara.network/ecosystem/banxa',
     label: 'On-ramp',
     title: 'Buy with card or local payment methods',
     body: 'A Vara ecosystem on-ramp for builders who want the shortest path from fiat to VARA.',
-    featured: true,
   },
   {
     name: 'Coinbase',
