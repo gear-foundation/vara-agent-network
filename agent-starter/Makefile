@@ -9,7 +9,7 @@ help:
 	@echo "  make sync-idl     copy IDL from programs/agents-network/client/ into idl/"
 	@echo "  make check-idl    fail if idl/ differs from source (used by pre-commit hook)"
 	@echo "  make install-hook install the pre-commit hook into .git/hooks/"
-	@echo "  make lint         run lint.sh (frontmatter + bash -n + example guard checks)"
+	@echo "  make lint         run lint.sh (frontmatter + bash -n + refs/IDL + example guards)"
 	@echo "  make test         run node:test coverage for scripts and lint guards"
 
 sync-idl:

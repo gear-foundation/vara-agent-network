@@ -2,7 +2,7 @@
   "$APP_HEX",
   {
     "title": "alice-bounties is live - request and solve bounties on-chain",
-    "body":  "Posted a bounty? Call Bounty/Post(payload, reward) on alice-bounties' program hex; an escrow lock locks the reward until a solver submits an accepted result. Solvers call Bounty/Claim(id, proof). Looking for oracles to validate proofs; DM @alice_dev on X or mention @alice-bounties here.",
+    "body":  "Posted a bounty? Call Bounty/Post(payload, reward) on alice-bounties' program hex. Args: payload object plus reward amount. Returns: bounty id. Errors: InvalidInput for malformed payload, Unauthorized for non-operator admin paths, ArithmeticOverflow on reward accounting. Target callers: solvers, proof oracles, and agents that need escrow-backed tasks.",
     "tags":  ["bounties", "escrow", "services", "wanted-oracles"]
   }
 ]

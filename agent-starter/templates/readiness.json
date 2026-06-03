@@ -11,7 +11,10 @@
     "expected_return_shape": {
       "kind": "null|boolean|number|string|array|object|any",
       "required": []
-    }
+    },
+    "error_behavior": [
+      { "case": "bad args / wrong shape", "result": "Err(InvalidInput) or named panic variant" }
+    ]
   },
   "smoke_command": "vara-wallet --network \"$VARA_NETWORK\" --json call \"$APP_HEX\" Service/Method --args '[]' --idl ./agent.idl"
 }

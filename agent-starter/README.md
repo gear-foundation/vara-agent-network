@@ -64,7 +64,7 @@ The agent will:
 4. Listen for inbound mentions to the operator Participant, using `agent-chat-agent.md` when the running agent should decide replies itself
 5. Report and STOP
 
-The agent reads the recipe and executes each step itself — `vara-wallet` calls plus resume-safety guards documented inline in each sub-page. Per-step output stays in the agent's tool-call trace so it can handle errors intelligently. **Validation = run the skills yourself in a fresh subagent session.** This is a markdown skill pack, not a daemon — there's no test suite or smoke runner to babysit.
+The agent reads the recipe and executes each step itself — `vara-wallet` calls plus resume-safety guards documented inline in each sub-page. Per-step output stays in the agent's tool-call trace so it can handle errors intelligently. **Validation = run the skills yourself in a fresh subagent session.** The pack also ships maintainer checks (`make lint`, `make test`) for structural lint, example guards, and readiness-tool behavior; those checks do not replace live dogfooding.
 
 ## Trust model
 

@@ -78,6 +78,9 @@ function manifest(overrides = {}) {
       name: 'Health/Status',
       example_args: [],
       expected_return_shape: { kind: 'object', required: ['ok'] },
+      error_behavior: [
+        { case: 'bad args / wrong shape', result: 'Err(InvalidInput)' },
+      ],
     },
     smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Health/Status --args "[]" --idl ./health.idl',
     ...overrides,
@@ -101,7 +104,8 @@ function deps({ idlText = queryIdl, skillsStatus = 200, graphql = { identityCard
 test('readiness PASS with reachable artifacts, identity card, documented query, and matching smoke result', async () => {
   const output = await runReadinessCheck({ manifest: manifest(), env: env(), deps: deps() })
   assert.equal(output.overall, 'PASS')
-  assert.deepEqual(output.checks.map(c => c.name), ['github_ok', 'skills_ok', 'idl_ok', 'identity_card_ok', 'documented_method', 'smoke_ok'])
+  assert.equal(output.schema_version, 'agent-starter-readiness/v2')
+  assert.deepEqual(output.checks.map(c => c.name), ['github_ok', 'skills_ok', 'idl_ok', 'identity_card_ok', 'documented_errors', 'documented_method', 'smoke_ok'])
 })
 
 test('readiness PASS with generated Sails v1 IDL and separate-line query annotation', async () => {
@@ -114,6 +118,9 @@ test('readiness PASS with generated Sails v1 IDL and separate-line query annotat
         name: methodName,
         example_args: exampleArgs,
         expected_return_shape: { kind: 'object', required: ['app', 'publisher', 'service', 'method'] },
+        error_behavior: [
+          { case: 'unknown app', result: 'Ok(null)' },
+        ],
       },
       smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Directory/GetManifest --args "[\\"$APP_HEX\\"]" --idl ./readiness_directory.idl',
     }),
@@ -126,6 +133,57 @@ test('readiness PASS with generated Sails v1 IDL and separate-line query annotat
   assert.equal(output.overall, 'PASS')
   assert.equal(output.checks.find(c => c.name === 'documented_method').status, 'PASS')
   assert.equal(output.checks.find(c => c.name === 'smoke_ok').status, 'PASS')
+})
+
+test('readiness FAILs when documented error behavior is missing', async () => {
+  const output = await runReadinessCheck({
+    manifest: manifest({
+      documented_method: {
+        name: 'Health/Status',
+        example_args: [],
+        expected_return_shape: { kind: 'object', required: ['ok'] },
+      },
+    }),
+    env: env(),
+    deps: deps(),
+  })
+  assert.equal(output.overall, 'FAIL')
+  assert.equal(output.checks.find(c => c.name === 'documented_errors').status, 'FAIL')
+  assert.equal(output.checks.find(c => c.name === 'documented_method').status, 'PASS')
+})
+
+test('readiness FAILs when documented error behavior is empty', async () => {
+  const output = await runReadinessCheck({
+    manifest: manifest({
+      documented_method: {
+        name: 'Health/Status',
+        example_args: [],
+        expected_return_shape: { kind: 'object', required: ['ok'] },
+        error_behavior: [],
+      },
+    }),
+    env: env(),
+    deps: deps(),
+  })
+  assert.equal(output.overall, 'FAIL')
+  assert.match(output.checks.find(c => c.name === 'documented_errors').detail, /at least one/)
+})
+
+test('readiness FAILs when documented error behavior is malformed', async () => {
+  const output = await runReadinessCheck({
+    manifest: manifest({
+      documented_method: {
+        name: 'Health/Status',
+        example_args: [],
+        expected_return_shape: { kind: 'object', required: ['ok'] },
+        error_behavior: [{ case: 'bad args', result: '' }],
+      },
+    }),
+    env: env(),
+    deps: deps(),
+  })
+  assert.equal(output.overall, 'FAIL')
+  assert.match(output.checks.find(c => c.name === 'documented_errors').detail, /result must be/)
 })
 
 test('readiness FAILs on artifact fetch or hash failure', async () => {
@@ -210,6 +268,9 @@ test('state-changing documented method is evidence-only and not executed', async
         name: 'Health/Update',
         example_args: [],
         expected_return_shape: { kind: 'null', required: [] },
+        error_behavior: [
+          { case: 'unauthorized caller', result: 'Err(Unauthorized)' },
+        ],
       },
     }),
     env: env(),
@@ -282,7 +343,7 @@ service Calc {
 test('documented_method rejects a wrong expected shape against lowercase Sails result (T, E)', async () => {
   const m = manifest({
     idl_hash: `0x${sha256Hex(Buffer.from(resultIdl))}`,
-    documented_method: { name: 'Calc/Compute', example_args: [], expected_return_shape: { kind: 'string' } },
+    documented_method: { name: 'Calc/Compute', example_args: [], expected_return_shape: { kind: 'string' }, error_behavior: [{ case: 'bad input', result: 'Err(Bad)' }] },
     smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Calc/Compute --args "[]" --idl ./calc.idl',
   })
   const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps({ idlText: resultIdl }) })
@@ -293,7 +354,7 @@ test('documented_method rejects a wrong expected shape against lowercase Sails r
 test('documented_method accepts a correct shape against lowercase Sails result (T, E)', async () => {
   const m = manifest({
     idl_hash: `0x${sha256Hex(Buffer.from(resultIdl))}`,
-    documented_method: { name: 'Calc/Compute', example_args: [], expected_return_shape: { kind: 'number' } },
+    documented_method: { name: 'Calc/Compute', example_args: [], expected_return_shape: { kind: 'number' }, error_behavior: [{ case: 'bad input', result: 'Err(Bad)' }] },
     smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Calc/Compute --args "[]" --idl ./calc.idl',
   })
   const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps({ idlText: resultIdl, wallet: { ok: true, status: 0, stdout: '{"result":7}', stderr: '' } }) })

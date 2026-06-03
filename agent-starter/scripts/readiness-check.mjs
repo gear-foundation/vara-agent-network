@@ -10,7 +10,7 @@ import {
   parseFlags,
 } from './preflight-checks.mjs'
 
-const SCHEMA_VERSION = 'agent-starter-readiness/v1'
+const SCHEMA_VERSION = 'agent-starter-readiness/v2'
 const STATUSES = new Set(['PASS', 'FAIL', 'SKIP', 'INCONCLUSIVE', 'MISCONFIGURED'])
 const HEX_32 = /^0x[0-9a-fA-F]{64}$/
 const REQUIRED_FIELDS = [
@@ -220,6 +220,26 @@ function validateExpectedShape(shape) {
     return 'expected_return_shape.required must be an array of strings'
   }
   return null
+}
+
+function documentedErrorsCheck(manifest) {
+  const errors = manifest.documented_method?.error_behavior
+  if (!Array.isArray(errors) || errors.length === 0) {
+    return check('documented_errors', 'FAIL', 'documented_method.error_behavior must list at least one failure case')
+  }
+  const malformed = []
+  for (const [idx, entry] of errors.entries()) {
+    if (!entry || typeof entry !== 'object' || Array.isArray(entry)) {
+      malformed.push(`#${idx + 1} must be an object`)
+      continue
+    }
+    if (typeof entry.case !== 'string' || !entry.case.trim()) malformed.push(`#${idx + 1}.case must be a non-empty string`)
+    if (typeof entry.result !== 'string' || !entry.result.trim()) malformed.push(`#${idx + 1}.result must be a non-empty string`)
+  }
+  if (malformed.length) {
+    return check('documented_errors', 'FAIL', malformed.join('; '))
+  }
+  return check('documented_errors', 'PASS', `${errors.length} documented failure case(s)`, { error_behavior: errors })
 }
 
 function validateManifestAndEnv(manifest, env) {
@@ -603,6 +623,7 @@ export async function runReadinessCheck({ manifest, env = process.env, retries =
   const artifact = await artifactPromise
   checks.push(...artifactRows(artifact.results))
   checks.push(await identityPromise)
+  checks.push(documentedErrorsCheck(manifest))
 
   const idlText = artifact.artifacts.idlBytes?.toString('utf8') ?? ''
   // Native fetch can't resolve ipfs:// (a valid idl_url scheme). Don't false-FAIL

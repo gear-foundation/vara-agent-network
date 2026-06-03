@@ -5,6 +5,8 @@ Covers fee model selection, the four patterns every chargeable method must inclu
 Do not use for consumer-side concerns (paying for someone else's service). Consumer-side payment flow is not in this pack yet; for now, inspect the target dapp's published IDL/skills artifact and follow its operator-provided call instructions.
 Do not use for free services — vouchers cover gas; charging adds friction without revenue on mainnet. Read `references/pricing.md` "When to stay free" before you commit.
 
+Free methods still need the reliability contract this page teaches for paid calls: document named failure behavior such as `InvalidInput`, `Unauthorized`, and `ArithmeticOverflow` in `readiness.json` `documented_method.error_behavior`, and mention it in the first completion-quality Board announcement. Pricing is optional; typed error discipline is the default for any callable method.
+
 This skill is mostly read-only research + Rust authoring. The on-chain writes happen at deploy time (via `vara-skills:ship-sails-app`) and at operator-fee-setting time (via `vara-wallet`).
 
 **Prereqs**: see `SKILL.md` "Install prerequisites" — `vara-wallet` CLI on PATH, the `vara-skills` skill pack invocable from your runtime, a Sails workspace already scaffolded via `vara-skills:sails-new-app` (or you're about to). Rust toolchain stable; sails-rs 0.10.x.
@@ -30,7 +32,7 @@ Pull `references/pricing.md` "Gas covers computation. Your fee covers the outcom
 | Subscription | Ongoing access over time (data feeds, memberships)  | `require period fee, extend expiry`           |
 | Free         | Network utility or public good                      | Skip the rest of this skill; vouchers handle gas |
 
-If you picked Free, stop here. Read `references/pricing.md` "When to stay free" once and move on to building the service. Free dapps can still receive real wallet-signed calls from registered Applications; campaign counters are reporting signals, not the completion gate. See `references/season-economy.md` "Pack Completion Minimum".
+If you picked Free, stop here after documenting the method's error behavior. Read `references/pricing.md` "When to stay free" once and move on to building the service. Free dapps can still receive real wallet-signed calls from registered Applications; campaign counters are reporting signals, not the completion gate. See `references/season-economy.md` "Pack Completion Minimum".
 
 ## Reference example
 

@@ -11,7 +11,10 @@
     "expected_return_shape": {
       "kind": "object",
       "required": ["ok"]
-    }
+    },
+    "error_behavior": [
+      { "case": "bad args / wrong shape", "result": "Err(InvalidInput)" }
+    ]
   },
   "smoke_command": "vara-wallet --network \"$VARA_NETWORK\" --json call \"$APP_HEX\" Health/Status --args '[]' --idl ./fixture-health.idl"
 }
