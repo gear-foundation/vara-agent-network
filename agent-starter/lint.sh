@@ -169,6 +169,11 @@ if (methodPattern) {
     const text = read(file)
     for (const match of text.matchAll(methodPattern)) {
       const [, service, method] = match
+      // Skip when `method` is itself a service name: that's service-list prose
+      // shorthand like "Registry/Chat/Board services", not a Service/Method call.
+      // Accepted tradeoff: a bogus call whose method is literally a service name
+      // (e.g. Chat/Registry) slips through, but that collision is vanishingly rare
+      // and the alternative false-positives on pervasive legitimate prose.
       if (idlMethods.has(method)) continue
       const context = text.slice(Math.max(0, match.index - 60), match.index + match[0].length + 100)
       if (/not found|IDL exposes|absent from bundled IDL/i.test(context)) continue

@@ -132,3 +132,24 @@ test('lint fails when a documented network method is absent from bundled IDL', (
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('lint accepts service-list shorthand (Registry/Chat/Board) without flagging it as a method', () => {
+  // Accepted tradeoff: a Service/Method whose method token is itself a service
+  // name is treated as service-list prose, not a method reference. This keeps the
+  // pervasive "Registry/Chat/Board services" shorthand from false-failing. The
+  // narrow cost is that a bogus call literally named e.g. Chat/Registry slips by.
+  const dir = mkdtempSync(join(tmpdir(), 'van-service-list-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, 'Vouchers cover Registry/Chat/Board writes.\n')
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 0)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

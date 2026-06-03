@@ -83,6 +83,10 @@ function manifest(overrides = {}) {
       ],
     },
     smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Health/Status --args "[]" --idl ./health.idl',
+    build_proof: {
+      gtest: { passed: 8, failed: 0, command: 'cargo test --release' },
+      local_smoke: { ok: true, summary: 'deployed to local node; Health/Status returned {ok:true}' },
+    },
     ...overrides,
   }
 }
@@ -105,7 +109,7 @@ test('readiness PASS with reachable artifacts, identity card, documented query, 
   const output = await runReadinessCheck({ manifest: manifest(), env: env(), deps: deps() })
   assert.equal(output.overall, 'PASS')
   assert.equal(output.schema_version, 'agent-starter-readiness/v2')
-  assert.deepEqual(output.checks.map(c => c.name), ['github_ok', 'skills_ok', 'idl_ok', 'identity_card_ok', 'documented_errors', 'documented_method', 'smoke_ok'])
+  assert.deepEqual(output.checks.map(c => c.name), ['github_ok', 'skills_ok', 'idl_ok', 'identity_card_ok', 'documented_errors', 'build_proof', 'documented_method', 'smoke_ok'])
 })
 
 test('readiness PASS with generated Sails v1 IDL and separate-line query annotation', async () => {
@@ -184,6 +188,46 @@ test('readiness FAILs when documented error behavior is malformed', async () => 
   })
   assert.equal(output.overall, 'FAIL')
   assert.match(output.checks.find(c => c.name === 'documented_errors').detail, /result must be/)
+})
+
+test('readiness FAILs when build_proof is missing', async () => {
+  const m = manifest()
+  delete m.build_proof
+  const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps() })
+  assert.equal(output.overall, 'FAIL')
+  assert.equal(output.checks.find(c => c.name === 'build_proof').status, 'FAIL')
+})
+
+test('readiness FAILs when gtest reports failures', async () => {
+  const output = await runReadinessCheck({
+    manifest: manifest({ build_proof: { gtest: { passed: 5, failed: 2 }, local_smoke: { ok: true, summary: 'ran' } } }),
+    env: env(),
+    deps: deps(),
+  })
+  assert.equal(output.overall, 'FAIL')
+  assert.match(output.checks.find(c => c.name === 'build_proof').detail, /failing test/)
+})
+
+test('readiness FAILs when local_smoke is not ok', async () => {
+  const output = await runReadinessCheck({
+    manifest: manifest({ build_proof: { gtest: { passed: 5, failed: 0 }, local_smoke: { ok: false, summary: 'node wedged' } } }),
+    env: env(),
+    deps: deps(),
+  })
+  assert.equal(output.overall, 'FAIL')
+  assert.match(output.checks.find(c => c.name === 'build_proof').detail, /local_smoke\.ok is false/)
+})
+
+test('readiness FAILs when build_proof is malformed', async () => {
+  const output = await runReadinessCheck({
+    manifest: manifest({ build_proof: { gtest: { passed: 'lots', failed: 0 }, local_smoke: { ok: true } } }),
+    env: env(),
+    deps: deps(),
+  })
+  assert.equal(output.overall, 'FAIL')
+  const bp = output.checks.find(c => c.name === 'build_proof')
+  assert.match(bp.detail, /passed must be a non-negative integer/)
+  assert.match(bp.detail, /summary must be a non-empty string/)
 })
 
 test('readiness FAILs on artifact fetch or hash failure', async () => {

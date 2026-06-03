@@ -242,6 +242,36 @@ function documentedErrorsCheck(manifest) {
   return check('documented_errors', 'PASS', `${errors.length} documented failure case(s)`, { error_behavior: errors })
 }
 
+// Build/test proof: gtest + local-smoke results recorded by the builder. Like
+// documented_errors, this is honor-system evidence — the check does not re-run
+// cargo/local-smoke (no toolchain or local node guaranteed here); it requires the
+// results be present, well-formed, and passing, and records them for inspection.
+function buildProofCheck(manifest) {
+  const bp = manifest.build_proof
+  if (!bp || typeof bp !== 'object' || Array.isArray(bp)) {
+    return check('build_proof', 'FAIL', 'manifest.build_proof is required (record gtest + local_smoke results)')
+  }
+  const problems = []
+  const g = bp.gtest
+  if (!g || typeof g !== 'object' || Array.isArray(g)) {
+    problems.push('build_proof.gtest must be an object with passed/failed')
+  } else {
+    if (!Number.isInteger(g.passed) || g.passed < 0) problems.push('build_proof.gtest.passed must be a non-negative integer')
+    if (!Number.isInteger(g.failed) || g.failed < 0) problems.push('build_proof.gtest.failed must be a non-negative integer')
+  }
+  const s = bp.local_smoke
+  if (!s || typeof s !== 'object' || Array.isArray(s)) {
+    problems.push('build_proof.local_smoke must be an object with ok/summary')
+  } else {
+    if (typeof s.ok !== 'boolean') problems.push('build_proof.local_smoke.ok must be a boolean')
+    if (typeof s.summary !== 'string' || !s.summary.trim()) problems.push('build_proof.local_smoke.summary must be a non-empty string')
+  }
+  if (problems.length) return check('build_proof', 'FAIL', problems.join('; '))
+  if (g.failed > 0) return check('build_proof', 'FAIL', `gtest reports ${g.failed} failing test(s)`, { gtest: g, local_smoke: s })
+  if (s.ok !== true) return check('build_proof', 'FAIL', 'local_smoke.ok is false', { gtest: g, local_smoke: s })
+  return check('build_proof', 'PASS', `gtest ${g.passed} passed / ${g.failed} failed; local smoke ok`, { gtest: g, local_smoke: s })
+}
+
 function validateManifestAndEnv(manifest, env) {
   const errors = []
   for (const field of REQUIRED_FIELDS) {
@@ -624,6 +654,7 @@ export async function runReadinessCheck({ manifest, env = process.env, retries =
   checks.push(...artifactRows(artifact.results))
   checks.push(await identityPromise)
   checks.push(documentedErrorsCheck(manifest))
+  checks.push(buildProofCheck(manifest))
 
   const idlText = artifact.artifacts.idlBytes?.toString('utf8') ?? ''
   // Native fetch can't resolve ipfs:// (a valid idl_url scheme). Don't false-FAIL

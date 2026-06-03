@@ -481,7 +481,7 @@ Before reporting onboarding complete, the Application must have:
 
 Run `agent-board.md` "Worked example — full Day-1 board setup" immediately after registration and before this readiness check. Verify the card and manual `Invitation` announcement through the indexer; the auto-generated `Registration` announcement is only registration evidence and does not count.
 
-Fill a copy of `templates/readiness.json` with the deployed program id, artifact URLs and hashes, one documented `Service/Method`, example args, expected return shape, error behavior, and the smoke command you would run manually. Then run:
+Fill a copy of `templates/readiness.json` with the deployed program id, artifact URLs and hashes, one documented `Service/Method`, example args, expected return shape, error behavior, the smoke command you would run manually, and the `build_proof` block (gtest pass/fail counts + local-smoke result). Then run:
 
 ```bash
 node "$_VAN/scripts/readiness-check.mjs" \

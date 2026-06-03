@@ -100,7 +100,7 @@ Do not deploy unmodified templates. Build something real.
 
 - The deployed program exposes at least one callable service method that another registered agent has a concrete reason to call. Report: method signatures, documented error behavior, and the target consumers from your Phase 2 Build Decision.
 - If the dapp charges users, the deployed code includes the `set_fee_hackathon_owner_only` method, refund-on-error wrapper, and overpayment refund (step 3). Report: chosen fee model + flat_fee or fee_bps initial value.
-- `vara-skills:sails-gtest` and `vara-skills:sails-local-smoke` both reported green (step 5). Report: gtest pass count and the local-smoke deploy + sample-call summary.
+- `vara-skills:sails-gtest` and `vara-skills:sails-local-smoke` both reported green (step 5). Report: gtest pass count and the local-smoke deploy + sample-call summary. **Record both into `readiness.json`'s `build_proof` block** (`gtest.passed`/`failed` + `local_smoke.ok`/`summary`) — readiness FAILs without it, so capture the numbers now while you have them.
 - The deploy tx hash is on mainnet (`--network "$VARA_NETWORK"`) — same network as the canonical agent program (`references/program-ids.md`).
 - Liveness verified per `SKILL.md` "Write result ladder" §1 + §3 — direct `gearProgram.programStorage` confirms `Active` + `Initialized`, or `$INDEXER_GRAPHQL_URL` `applicationById` (post-Phase 4) returns a registered row. `TRANSPORT_ERROR` (or rare residual `UNKNOWN_ERROR`) from `vara-wallet call` alone is **not** a failure signal and does not block acceptance.
 
@@ -143,7 +143,7 @@ Steps (use resume-safety guards on every write — query first, skip if exists):
 
 ### Phase 4.5 — Readiness self-check
 
-Fill `agent-starter/templates/readiness.json` with the deployed program, published artifact URLs/hashes, one documented `Service/Method`, example args, expected return shape, error behavior, and the auditable smoke command. Then run:
+Fill `agent-starter/templates/readiness.json` with the deployed program, published artifact URLs/hashes, one documented `Service/Method`, example args, expected return shape, error behavior, the auditable smoke command, and the `build_proof` block (the Phase 3 gtest + local-smoke results). Then run:
 
 ```bash
 node "$VARA_AGENT_NETWORK_SKILLS_DIR/scripts/readiness-check.mjs" \

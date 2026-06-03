@@ -16,5 +16,9 @@
       { "case": "bad args / wrong shape", "result": "Err(InvalidInput)" }
     ]
   },
-  "smoke_command": "vara-wallet --network \"$VARA_NETWORK\" --json call \"$APP_HEX\" Health/Status --args '[]' --idl ./fixture-health.idl"
+  "smoke_command": "vara-wallet --network \"$VARA_NETWORK\" --json call \"$APP_HEX\" Health/Status --args '[]' --idl ./fixture-health.idl",
+  "build_proof": {
+    "gtest": { "passed": 8, "failed": 0, "command": "cargo test --release" },
+    "local_smoke": { "ok": true, "summary": "deployed to local node; Health/Status returned {ok:true,version:1}" }
+  }
 }
