@@ -130,6 +130,7 @@ function parseSmokeCommand(command, env) {
   const words = commandWords(command).map(word => expandKnownEnv(word, env))
   const callIndex = words.indexOf('call')
   const argsIndex = words.indexOf('--args')
+  const argsFileIndex = words.indexOf('--args-file')
   const idlIndex = words.indexOf('--idl')
   const networkIndex = words.indexOf('--network')
   return {
@@ -140,12 +141,23 @@ function parseSmokeCommand(command, env) {
     programId: callIndex >= 0 ? words[callIndex + 1] : undefined,
     method: callIndex >= 0 ? words[callIndex + 2] : undefined,
     args: argsIndex >= 0 ? words[argsIndex + 1] : undefined,
+    argsFile: argsFileIndex >= 0 ? words[argsFileIndex + 1] : undefined,
     idl: idlIndex >= 0 ? words[idlIndex + 1] : undefined,
     network: networkIndex >= 0 ? words[networkIndex + 1] : undefined,
   }
 }
 
+// The smoke_command is recorded as copy-pasteable evidence; reject shell
+// metacharacters so a manifest can't smuggle a second command into evidence.
+const SHELL_METACHARS = /[;&|`]|\$\(|\|\||&&|>|</
+
 function validateSmokeCommand(command, manifest, env) {
+  // Reject shell metacharacters in the unquoted portion — the command is stored
+  // as copy-pasteable evidence, so a trailing `; curl ...` must not pass.
+  const dequoted = String(command).replace(/"(?:\\.|[^"\\])*"|'[^']*'/g, '')
+  if (SHELL_METACHARS.test(dequoted)) {
+    return { ok: false, detail: 'smoke_command contains shell metacharacters outside quotes' }
+  }
   let parsed
   try {
     parsed = parseSmokeCommand(command, env)
@@ -165,16 +177,24 @@ function validateSmokeCommand(command, manifest, env) {
   if (parsed.network !== undefined && parsed.network !== env.VARA_NETWORK) {
     return { ok: false, detail: 'smoke_command --network must match VARA_NETWORK' }
   }
-  let smokeArgs
-  try {
-    smokeArgs = JSON.parse(parsed.args ?? '')
-  } catch (e) {
-    return { ok: false, detail: `smoke_command --args is not JSON: ${e.message}` }
+  // Args may be inline (--args JSON, verified against example_args) or external
+  // (--args-file, the pack's recommended path for long args; not inline-comparable).
+  if (parsed.args === undefined && parsed.argsFile === undefined) {
+    return { ok: false, detail: 'smoke_command must include --args or --args-file' }
   }
-  if (safeJson(smokeArgs) !== safeJson(manifest.documented_method.example_args)) {
-    return { ok: false, detail: 'smoke_command --args must match documented_method.example_args' }
+  if (parsed.args !== undefined) {
+    let smokeArgs
+    try {
+      smokeArgs = JSON.parse(parsed.args)
+    } catch (e) {
+      return { ok: false, detail: `smoke_command --args is not JSON: ${e.message}` }
+    }
+    if (safeJson(smokeArgs) !== safeJson(manifest.documented_method.example_args)) {
+      return { ok: false, detail: 'smoke_command --args must match documented_method.example_args' }
+    }
+    return { ok: true, detail: 'smoke_command matches documented method, args, program, and network' }
   }
-  return { ok: true, detail: 'smoke_command matches documented method, args, program, and network' }
+  return { ok: true, detail: 'smoke_command matches documented method via --args-file (args not inline-verified)' }
 }
 
 function safeJson(value) {
@@ -337,6 +357,9 @@ function scalarKind(type, typeDefs) {
   if (vec) return { kind: 'array' }
   const result = t.match(/^Result<([^,>]+),\s*([^>]+)>$/)
   if (result) return scalarKind(result[1], typeDefs)
+  // Sails IDL renders Result as lowercase `result (Ok, Err)`.
+  const resultLower = t.match(/^result\s*\(\s*([^,]+?)\s*,\s*(.+)\)$/)
+  if (resultLower) return scalarKind(resultLower[1], typeDefs)
   if (t === 'null' || t === '()' || t === 'void') return { kind: 'null' }
   if (t === 'bool') return { kind: 'boolean' }
   if (/^(u|i)(8|16|32|64|128|256)$/.test(t)) return { kind: 'number' }
@@ -468,7 +491,9 @@ export function fixtureDeps(fixture) {
 
 async function identityCardCheck(env, deps) {
   const query = 'query IdentityCard($id: String!) { identityCardById(id: $id) { id } }'
-  const r = await (deps.graphql ?? defaultGraphql)(env.INDEXER_GRAPHQL_URL, query, { id: env.APP_HEX })
+  // Indexer stores actor ids lowercased (migration 0008); match that or a
+  // valid-but-uppercase APP_HEX false-fails the lookup.
+  const r = await (deps.graphql ?? defaultGraphql)(env.INDEXER_GRAPHQL_URL, query, { id: env.APP_HEX.toLowerCase() })
   if (!r.ok) return check('identity_card_ok', 'INCONCLUSIVE', `indexer query failed: ${r.error ?? `HTTP ${r.status}`}`)
   if (r.data?.identityCardById) return check('identity_card_ok', 'PASS', 'identity card found')
   return check('identity_card_ok', 'FAIL', 'identity card missing')
@@ -584,11 +609,23 @@ export async function runReadinessCheck({ manifest, env = process.env, retries =
   checks.push(await identityPromise)
 
   const idlText = artifact.artifacts.idlBytes?.toString('utf8') ?? ''
+  // Native fetch can't resolve ipfs:// (a valid idl_url scheme). Don't false-FAIL
+  // it: mark idl_ok and downstream checks INCONCLUSIVE so the operator verifies.
+  const idlUnfetchable = !idlText && /^ipfs:\/\//i.test(manifest.idl_url ?? '')
+  if (idlUnfetchable) {
+    const idlRow = checks.find(c => c.name === 'idl_ok')
+    if (idlRow) {
+      idlRow.status = 'INCONCLUSIVE'
+      idlRow.detail = 'ipfs:// IDL cannot be fetched by readiness-check; verify manually'
+    }
+  }
   const parsed = idlText ? parseIdlServices(idlText) : { services: new Map(), typeDefs: new Map() }
   const parts = methodNameParts(manifest.documented_method.name)
   const method = parsed.services.get(parts.service)?.get(parts.method)
   let documentedMethod
-  if (!idlText) {
+  if (idlUnfetchable) {
+    documentedMethod = check('documented_method', 'INCONCLUSIVE', 'ipfs:// IDL cannot be fetched by readiness-check; verify the documented method manually')
+  } else if (!idlText) {
     documentedMethod = check('documented_method', 'FAIL', 'IDL artifact was not available for method validation')
   } else {
     if (!method) {

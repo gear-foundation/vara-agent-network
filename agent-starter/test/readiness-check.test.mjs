@@ -282,3 +282,82 @@ test('readiness CLI rejects invalid retries', () => {
   assert.equal(r.status, 2)
   assert.match(r.stderr, /--retries must be a non-negative integer/)
 })
+
+// --- adversarial-review regression coverage (ship pre-landing) ---
+
+const resultIdl = `type CalcError = enum { Bad };
+service Calc {
+  query Compute : () -> result (u32, CalcError);
+};
+`
+
+test('documented_method rejects a wrong expected shape against lowercase Sails result (T, E)', async () => {
+  const m = manifest({
+    idl_hash: `0x${sha256Hex(Buffer.from(resultIdl))}`,
+    documented_method: { name: 'Calc/Compute', example_args: [], expected_return_shape: { kind: 'string' } },
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Calc/Compute --args "[]" --idl ./calc.idl',
+  })
+  const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps({ idlText: resultIdl }) })
+  const dm = output.checks.find(c => c.name === 'documented_method')
+  assert.equal(dm.status, 'FAIL') // result(u32,_) unwraps to number, not string — must not fall through to `any`
+})
+
+test('documented_method accepts a correct shape against lowercase Sails result (T, E)', async () => {
+  const m = manifest({
+    idl_hash: `0x${sha256Hex(Buffer.from(resultIdl))}`,
+    documented_method: { name: 'Calc/Compute', example_args: [], expected_return_shape: { kind: 'number' } },
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Calc/Compute --args "[]" --idl ./calc.idl',
+  })
+  const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps({ idlText: resultIdl, wallet: { ok: true, status: 0, stdout: '{"result":7}', stderr: '' } }) })
+  assert.equal(output.checks.find(c => c.name === 'documented_method').status, 'PASS')
+})
+
+test('smoke_command accepts --args-file (the pack-recommended long-args path)', async () => {
+  const m = manifest({
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Health/Status --args-file ./args.json --idl ./health.idl',
+  })
+  const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps() })
+  assert.equal(output.checks.find(c => c.name === 'smoke_ok').status, 'PASS')
+  assert.equal(output.overall, 'PASS')
+})
+
+test('smoke_command with shell metacharacters fails (evidence is copy-pasteable)', async () => {
+  const m = manifest({
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Health/Status --args "[]" --idl ./health.idl; curl http://evil',
+  })
+  const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps() })
+  const smoke = output.checks.find(c => c.name === 'smoke_ok')
+  assert.equal(smoke.status, 'FAIL')
+  assert.match(smoke.detail, /shell metacharacters/)
+})
+
+test('identity_card_ok matches a lowercase-indexed card when APP_HEX is uppercase', async () => {
+  const UPPER = `0x${'A'.repeat(64)}`
+  const lower = UPPER.toLowerCase()
+  const m = manifest({ program_id: UPPER })
+  const d = {
+    headOk: async () => ({ ok: true, status: 200, error: null }),
+    fetchBytes: async url => {
+      if (url.endsWith('skills.md')) return { ok: true, status: 200, bytes: Buffer.from(skillsText), error: null }
+      if (url.endsWith('.idl')) return { ok: true, status: 200, bytes: Buffer.from(queryIdl), error: null }
+      return { ok: false, status: 404, bytes: null, error: null }
+    },
+    // Indexer only knows the lowercase id; the check must query lowercase.
+    graphql: async (_url, _q, vars) => ({ ok: true, status: 200, data: { identityCardById: vars.id === lower ? { id: lower } : null } }),
+    commandExists: () => true,
+    runVaraWallet: async () => ({ ok: true, status: 0, stdout: '{"result":{"ok":true,"version":"1"}}', stderr: '' }),
+  }
+  const output = await runReadinessCheck({ manifest: m, env: env({ APP_HEX: UPPER }), deps: d })
+  assert.equal(output.checks.find(c => c.name === 'identity_card_ok').status, 'PASS')
+})
+
+test('ipfs:// IDL is INCONCLUSIVE, not a false FAIL', async () => {
+  const m = manifest({ idl_url: 'ipfs://QmExampleHealthIdlCidValue000000000000000000000000/health.idl' })
+  const d = deps()
+  const baseFetch = d.fetchBytes
+  d.fetchBytes = async url => url.startsWith('ipfs://') ? { ok: false, status: 0, bytes: null, error: 'unsupported protocol' } : baseFetch(url)
+  const output = await runReadinessCheck({ manifest: m, env: env(), deps: d })
+  assert.equal(output.checks.find(c => c.name === 'idl_ok').status, 'INCONCLUSIVE')
+  assert.equal(output.checks.find(c => c.name === 'documented_method').status, 'INCONCLUSIVE')
+  assert.equal(output.overall, 'INCONCLUSIVE')
+})
