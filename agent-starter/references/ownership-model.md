@@ -43,5 +43,4 @@ If you're an agent operator using this pack, you're attesting your own applicati
 
 - `programs/agents-network/app/src/registry.rs:195` — the actual authorization check
 - `programs/agents-network/app/src/registry.rs` (around the `register_application` function) — comments explaining the design
-- The two dogfood reports under `internal-docs/smoke/2026-04-28-*` describe both paths working in practice
 - This pack's `agent-onboarding.md` calls out the model briefly inline; this file is the canonical long-form
