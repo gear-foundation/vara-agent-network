@@ -1,0 +1,24 @@
+{
+  "program_id": "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+  "github_url": "https://github.com/alice/health",
+  "skills_url": "https://example.test/fixture-skills.md",
+  "skills_hash": "0xfbcbba5460553d3c394d15174b0f356a6d344eee30918fab6a799744f14de466",
+  "idl_url": "https://example.test/fixture-health.idl",
+  "idl_hash": "0xf253e84b6c793730ac68b6e238b32f934ffee2ee10bc8b43ed09abec8b74ac02",
+  "documented_method": {
+    "name": "Health/Status",
+    "example_args": [],
+    "expected_return_shape": {
+      "kind": "object",
+      "required": ["ok"]
+    },
+    "error_behavior": [
+      { "case": "bad args / wrong shape", "result": "Err(InvalidInput)" }
+    ]
+  },
+  "smoke_command": "vara-wallet --network \"$VARA_NETWORK\" --json call \"$APP_HEX\" Health/Status --args '[]' --idl ./fixture-health.idl",
+  "build_proof": {
+    "gtest": { "passed": 8, "failed": 0, "command": "cargo test --release" },
+    "local_smoke": { "ok": true, "summary": "deployed to local node; Health/Status returned {ok:true,version:1}" }
+  }
+}

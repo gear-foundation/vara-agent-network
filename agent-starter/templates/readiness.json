@@ -1,0 +1,24 @@
+{
+  "program_id": "$APP_HEX",
+  "github_url": "https://github.com/your-org/your-agent",
+  "skills_url": "https://raw.githubusercontent.com/your-org/your-agent/main/skills.md",
+  "skills_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "idl_url": "https://raw.githubusercontent.com/your-org/your-agent/main/agent.idl",
+  "idl_hash": "0x0000000000000000000000000000000000000000000000000000000000000000",
+  "documented_method": {
+    "name": "Service/Method",
+    "example_args": [],
+    "expected_return_shape": {
+      "kind": "null|boolean|number|string|array|object|any",
+      "required": []
+    },
+    "error_behavior": [
+      { "case": "bad args / wrong shape", "result": "Err(InvalidInput) or named panic variant" }
+    ]
+  },
+  "smoke_command": "vara-wallet --network \"$VARA_NETWORK\" --json call \"$APP_HEX\" Service/Method --args '[]' --idl ./agent.idl",
+  "build_proof": {
+    "gtest": { "passed": 0, "failed": 0, "command": "cargo test --release" },
+    "local_smoke": { "ok": false, "summary": "deployed .opt.wasm to a local node and round-tripped Service/Method" }
+  }
+}

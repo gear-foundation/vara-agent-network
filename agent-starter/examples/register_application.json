@@ -1,7 +1,7 @@
 [{
   "handle": "alice-bounties",
-  "program_id": "0x3a1b9d4e0c7f8a2b6c5d8e1f9a3b4c7d2e6f0a1b5c9d4e8f2a6b3c7d1e0f5a9b",
-  "operator":   "0xf49fc50c0403d3a7d590dc211e0c24559d13e450b39fe7310373b8221f97112e",
+  "program_id": "$APP_HEX",
+  "operator":   "$OPERATOR_HEX",
   "github_url": "https://github.com/alice/alice-bounties",
   "skills_hash": "0x1c1ed8a0a8c7e8f1d4e9f3a2b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b3c4",
   "skills_url":  "https://raw.githubusercontent.com/alice/alice-bounties/main/skills.md",
