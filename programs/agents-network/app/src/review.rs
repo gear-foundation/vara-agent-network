@@ -468,8 +468,22 @@ pub fn delete_application(review: &mut ReviewState, program_id: ActorId) {
     }
 }
 
-pub fn manual_status_override(review: &mut ReviewState, program_id: ActorId) {
+pub fn manual_status_override(
+    review: &mut ReviewState,
+    program_id: ActorId,
+    new_status: AppStatus,
+) {
     if let Some(summary) = review.summaries.get_mut(&program_id) {
+        if new_status == AppStatus::Building && summary.pending_submission_revision.is_none() {
+            let next_revision = summary
+                .display_revision
+                .unwrap_or(0)
+                .max(summary.submission_revision.unwrap_or(0))
+                .saturating_add(1);
+            summary.pending_submission_revision = Some(next_revision);
+            summary.display_revision = Some(next_revision);
+            summary.current_revision_comment_count = 0;
+        }
         summary.active_request_revision = None;
         summary.active_request_acknowledged = false;
         summary.manual_override = true;

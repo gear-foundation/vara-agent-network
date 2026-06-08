@@ -238,3 +238,109 @@ async fn review_guards_reject_self_review_and_stale_revision() {
         .await
         .unwrap_err();
 }
+
+#[tokio::test]
+async fn manual_reopen_to_building_submits_next_revision() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .add_judge(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .register_application(mk_register_req("reopened-app", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .decide_accepted(
+            STUB_PROGRAM_ALPHA.into(),
+            1,
+            "initially ready".to_string(),
+            criteria(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+
+    program
+        .admin()
+        .set_application_status(STUB_PROGRAM_ALPHA.into(), AppStatus::Building)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    let summary = program
+        .review()
+        .get_review_summary(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(summary.pending_submission_revision, Some(2));
+    assert_eq!(summary.display_revision, Some(2));
+    assert!(summary.manual_override);
+
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let summary = program
+        .review()
+        .get_review_summary(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(summary.submission_revision, Some(2));
+    assert_eq!(summary.display_revision, Some(2));
+    assert_eq!(summary.pending_submission_revision, None);
+
+    program
+        .review()
+        .decide_accepted(
+            STUB_PROGRAM_ALPHA.into(),
+            1,
+            "old revision should stay closed".to_string(),
+            criteria(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap_err();
+
+    program
+        .review()
+        .decide_accepted(
+            STUB_PROGRAM_ALPHA.into(),
+            2,
+            "reopened revision is ready".to_string(),
+            criteria(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+}

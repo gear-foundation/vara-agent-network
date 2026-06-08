@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   submittedCurrentRevisionVisibleCommentCount,
+  summaryStatusAfterComment,
   summaryStatusFromDecision,
 } from "../src/handlers/review.js";
 
@@ -34,5 +35,29 @@ test("submitted revisions preserve current visible review comments", () => {
       0,
     ),
     0,
+  );
+});
+
+test("comments keep submitted revisions in the decision queue", () => {
+  assert.equal(
+    summaryStatusAfterComment(
+      { reviewStatus: "Submitted", latestVerdict: null, submissionRevision: 2 },
+      2,
+    ),
+    "Submitted",
+  );
+  assert.equal(
+    summaryStatusAfterComment(
+      { reviewStatus: "Requested", latestVerdict: null, submissionRevision: null },
+      2,
+    ),
+    "Commented",
+  );
+  assert.equal(
+    summaryStatusAfterComment(
+      { reviewStatus: "Rejected", latestVerdict: "Rejected", submissionRevision: 1 },
+      2,
+    ),
+    "Rejected",
   );
 });

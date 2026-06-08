@@ -183,7 +183,7 @@ impl<'a> AdminService<'a> {
                 .ok_or(ContractError::UnknownApplication)?;
             let old_status = app.status;
             app.status = new_status;
-            review::manual_status_override(&mut review_state, program_id);
+            review::manual_status_override(&mut review_state, program_id, new_status);
             old_status
         };
 

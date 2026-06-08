@@ -30,6 +30,24 @@ export function submittedCurrentRevisionVisibleCommentCount(
     : 0;
 }
 
+export function summaryStatusAfterComment(
+  existingSummary: {
+    reviewStatus: string | null;
+    latestVerdict: string | null;
+    submissionRevision: number | null;
+  } | undefined,
+  revision: number,
+): string {
+  if (
+    existingSummary?.reviewStatus === "Submitted" &&
+    existingSummary.submissionRevision === revision
+  ) {
+    return "Submitted";
+  }
+  if (!existingSummary || existingSummary.latestVerdict === null) return "Commented";
+  return existingSummary.reviewStatus ?? "Commented";
+}
+
 export async function initializeReviewSummary(
   db: Db,
   programId: string,
@@ -266,38 +284,26 @@ export async function handleReviewRequested(
   const programId = normalizeActorId(payload.program_id);
   const owner = normalizeActorId(payload.owner);
   const requestedAt = asBigInt(payload.requested_at);
-  const inserted = await db
-    .insert(schema.reviewRequests)
-    .values({
-      eventId,
-      programId,
-      owner,
-      revision: payload.revision,
-      reason: payload.reason,
-      requestedAt,
-      seasonId: payload.season_id,
-    })
-    .onConflictDoNothing({ target: schema.reviewRequests.eventId })
-    .returning({ eventId: schema.reviewRequests.eventId });
-  if (inserted.length === 0) return;
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(schema.reviewRequests)
+      .values({
+        eventId,
+        programId,
+        owner,
+        revision: payload.revision,
+        reason: payload.reason,
+        requestedAt,
+        seasonId: payload.season_id,
+      })
+      .onConflictDoNothing({ target: schema.reviewRequests.eventId })
+      .returning({ eventId: schema.reviewRequests.eventId });
+    if (inserted.length === 0) return;
 
-  await db
-    .insert(schema.reviewSummaries)
-    .values({
-      programId,
-      reviewStatus: "Requested",
-      displayRevision: payload.revision,
-      pendingSubmissionRevision: payload.revision,
-      activeRequestRevision: payload.revision,
-      activeRequestAcknowledged: false,
-      manualOverride: false,
-      tombstoned: false,
-      seasonId: payload.season_id,
-      updatedAt: requestedAt,
-    })
-    .onConflictDoUpdate({
-      target: schema.reviewSummaries.programId,
-      set: {
+    await tx
+      .insert(schema.reviewSummaries)
+      .values({
+        programId,
         reviewStatus: "Requested",
         displayRevision: payload.revision,
         pendingSubmissionRevision: payload.revision,
@@ -307,8 +313,22 @@ export async function handleReviewRequested(
         tombstoned: false,
         seasonId: payload.season_id,
         updatedAt: requestedAt,
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: schema.reviewSummaries.programId,
+        set: {
+          reviewStatus: "Requested",
+          displayRevision: payload.revision,
+          pendingSubmissionRevision: payload.revision,
+          activeRequestRevision: payload.revision,
+          activeRequestAcknowledged: false,
+          manualOverride: false,
+          tombstoned: false,
+          seasonId: payload.season_id,
+          updatedAt: requestedAt,
+        },
+      });
+  });
 }
 
 export async function handleReviewCommentPosted(
@@ -320,56 +340,61 @@ export async function handleReviewCommentPosted(
   const programId = normalizeActorId(payload.program_id);
   const author = normalizeActorId(payload.author);
   const ts = asBigInt(payload.ts);
-  const inserted = await db
-    .insert(schema.reviewComments)
-    .values({
-      eventId,
-      programId,
-      revision: payload.revision,
-      author,
-      authorRole: payload.author_role,
-      body: payload.body,
-      ts,
-      seasonId: payload.season_id,
-    })
-    .onConflictDoNothing({ target: schema.reviewComments.eventId })
-    .returning({ eventId: schema.reviewComments.eventId });
-  if (inserted.length === 0) return;
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(schema.reviewComments)
+      .values({
+        eventId,
+        programId,
+        revision: payload.revision,
+        author,
+        authorRole: payload.author_role,
+        body: payload.body,
+        ts,
+        seasonId: payload.season_id,
+      })
+      .onConflictDoNothing({ target: schema.reviewComments.eventId })
+      .returning({ eventId: schema.reviewComments.eventId });
+    if (inserted.length === 0) return;
 
-  if (payload.author_role === "Judge") {
-    await db
-      .update(schema.reviewRequests)
-      .set({ acknowledged: true })
-      .where(sql`${schema.reviewRequests.programId} = ${programId}
-        AND ${schema.reviewRequests.revision} = ${payload.revision}`);
-  }
+    if (payload.author_role === "Judge") {
+      await tx
+        .update(schema.reviewRequests)
+        .set({ acknowledged: true })
+        .where(sql`${schema.reviewRequests.programId} = ${programId}
+          AND ${schema.reviewRequests.revision} = ${payload.revision}`);
+    }
 
-  await db
-    .insert(schema.reviewSummaries)
-    .values({
-      programId,
-      reviewStatus: "Commented",
-      displayRevision: payload.revision,
-      currentRevisionVisibleCommentCount: 1,
-      totalVisibleCommentCount: 1,
-      activeRequestAcknowledged: payload.author_role === "Judge",
-      seasonId: payload.season_id,
-      updatedAt: ts,
-    })
-    .onConflictDoUpdate({
-      target: schema.reviewSummaries.programId,
-      set: {
-        reviewStatus: sql`CASE
-          WHEN ${schema.reviewSummaries.latestVerdict} IS NULL THEN 'Commented'
-          ELSE ${schema.reviewSummaries.reviewStatus}
-        END`,
-        currentRevisionVisibleCommentCount: sql`${schema.reviewSummaries.currentRevisionVisibleCommentCount} + 1`,
-        totalVisibleCommentCount: sql`${schema.reviewSummaries.totalVisibleCommentCount} + 1`,
-        activeRequestAcknowledged: sql`${schema.reviewSummaries.activeRequestAcknowledged} OR ${payload.author_role === "Judge"}`,
+    await tx
+      .insert(schema.reviewSummaries)
+      .values({
+        programId,
+        reviewStatus: "Commented",
+        displayRevision: payload.revision,
+        currentRevisionVisibleCommentCount: 1,
+        totalVisibleCommentCount: 1,
+        activeRequestAcknowledged: payload.author_role === "Judge",
         seasonId: payload.season_id,
         updatedAt: ts,
-      },
-    });
+      })
+      .onConflictDoUpdate({
+        target: schema.reviewSummaries.programId,
+        set: {
+          reviewStatus: sql`CASE
+            WHEN ${schema.reviewSummaries.reviewStatus} = 'Submitted'
+              AND ${schema.reviewSummaries.submissionRevision} = ${payload.revision}
+              THEN ${schema.reviewSummaries.reviewStatus}
+            WHEN ${schema.reviewSummaries.latestVerdict} IS NULL THEN 'Commented'
+            ELSE ${schema.reviewSummaries.reviewStatus}
+          END`,
+          currentRevisionVisibleCommentCount: sql`${schema.reviewSummaries.currentRevisionVisibleCommentCount} + 1`,
+          totalVisibleCommentCount: sql`${schema.reviewSummaries.totalVisibleCommentCount} + 1`,
+          activeRequestAcknowledged: sql`${schema.reviewSummaries.activeRequestAcknowledged} OR ${payload.author_role === "Judge"}`,
+          seasonId: payload.season_id,
+          updatedAt: ts,
+        },
+      });
+  });
 }
 
 export async function handleReviewDecisionRecorded(
@@ -381,28 +406,28 @@ export async function handleReviewDecisionRecorded(
   const programId = normalizeActorId(payload.program_id);
   const judge = normalizeActorId(payload.judge);
   const decidedAt = asBigInt(payload.decided_at);
-  const inserted = await db
-    .insert(schema.reviewDecisions)
-    .values({
-      eventId,
-      programId,
-      revision: payload.revision,
-      judge,
-      verdict: payload.verdict,
-      reason: payload.reason,
-      criteria: payload.criteria,
-      oldStatus: payload.old_status,
-      newStatus: payload.new_status,
-      decidedAt,
-      seasonId: payload.season_id,
-    })
-    .onConflictDoNothing({ target: schema.reviewDecisions.eventId })
-    .returning({ eventId: schema.reviewDecisions.eventId });
-  if (inserted.length === 0) return;
-
   const nextPending = payload.verdict === "Rejected" ? payload.revision + 1 : null;
   const displayRevision = payload.verdict === "Rejected" ? payload.revision + 1 : payload.revision;
   await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(schema.reviewDecisions)
+      .values({
+        eventId,
+        programId,
+        revision: payload.revision,
+        judge,
+        verdict: payload.verdict,
+        reason: payload.reason,
+        criteria: payload.criteria,
+        oldStatus: payload.old_status,
+        newStatus: payload.new_status,
+        decidedAt,
+        seasonId: payload.season_id,
+      })
+      .onConflictDoNothing({ target: schema.reviewDecisions.eventId })
+      .returning({ eventId: schema.reviewDecisions.eventId });
+    if (inserted.length === 0) return;
+
     await tx
       .update(schema.applications)
       .set({ status: payload.new_status })
