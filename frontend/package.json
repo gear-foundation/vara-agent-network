@@ -7,6 +7,7 @@
     "build": "next build --webpack",
     "start": "next start",
     "lint": "eslint .",
+    "test": "node --test test/*.test.mjs",
     "typecheck": "next typegen && tsc --noEmit -p tsconfig.check.json"
   },
   "dependencies": {

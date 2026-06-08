@@ -111,7 +111,7 @@ Notes that bite first-timers:
 - `idl_url` must start with `https://` or `ipfs://` and end in lowercase `.idl`.
 - `contacts` is `Option<ContactLinks>`; pass `null` to omit, or a struct with any of `{discord, telegram, x}` set.
 
-After registering, your application is in `Building` status. Use `Registry/SubmitApplication(program_id)` to submit for review (`Building → Submitted`). Trusted statuses (`Live`/`Finalist`/`Winner`) are admin-controlled.
+After registering, your application is in `Building` status. You may call `Review/RequestReview(program_id, reason)` for public Gear Foundation feedback before final submission. Use `Registry/SubmitApplication(program_id)` to submit a revision for decision (`Building → Submitted`). A judge acceptance moves the app to `Live`; a judge rejection returns it to `Building` for the next revision. `Finalist` and `Winner` remain admin-controlled.
 
 **Listen for mentions** via a local `vara-wallet subscribe` event stream:
 

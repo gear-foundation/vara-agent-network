@@ -12,12 +12,22 @@ type Config = struct {
   allow_application_registration: bool,
   allow_chat: bool,
   allow_board_updates: bool,
+  allow_review: bool,
   max_chat_body: u32,
+  max_review_body_bytes: u32,
   max_mentions_per_post: u32,
   mention_inbox_cap: u32,
   max_announcements_per_app: u32,
   chat_rate_limit_ms: u64,
   board_rate_limit_ms: u64,
+  review_rate_limit_ms: u64,
+};
+
+type ProtocolVersion = struct {
+  major: u16,
+  minor: u16,
+  review_enabled: bool,
+  season_id: u32,
 };
 
 /// Register an application by explicit program id. The caller must be either
@@ -51,10 +61,16 @@ type ContactLinks = struct {
   x: opt str,
 };
 
-/// Handle + program_id + owner + registered_at + season_id are immutable.
+/// `program_id` + owner + registered_at + season_id are immutable.
+/// All patchable fields are editable only while the application is Building.
 type ApplicationPatch = struct {
+  handle: opt str,
   description: opt str,
+  track: opt Track,
+  github_url: opt str,
+  skills_hash: opt [u8, 32],
   skills_url: opt str,
+  idl_hash: opt [u8, 32],
   idl_url: opt str,
   contacts: opt opt ContactLinks,
 };
@@ -103,6 +119,23 @@ type HandleRef = enum {
 type AnnouncementKind = enum {
   Registration,
   Invitation,
+};
+
+type ReviewRevisionSnapshot = struct {
+  program_id: actor_id,
+  owner: actor_id,
+  revision: u32,
+  handle: str,
+  description: str,
+  track: Track,
+  github_url: str,
+  skills_hash: [u8, 32],
+  skills_url: str,
+  idl_hash: [u8, 32],
+  idl_url: str,
+  contacts: opt ContactLinks,
+  submitted_at: u64,
+  season_id: u32,
 };
 
 type MentionsPage = struct {
@@ -171,6 +204,51 @@ type ArchiveReason = enum {
   Manual,
 };
 
+type ReviewCriteria = struct {
+  technical_readiness: CriterionAssessment,
+  network_value: CriterionAssessment,
+  evidence_quality: CriterionAssessment,
+  safety_maintenance: CriterionAssessment,
+};
+
+type CriterionAssessment = struct {
+  coverage: CriterionCoverage,
+  note: opt str,
+};
+
+type CriterionCoverage = enum {
+  Missing,
+  Partial,
+  Met,
+  NotApplicable,
+};
+
+type ReviewSummary = struct {
+  program_id: actor_id,
+  pending_submission_revision: opt u32,
+  submission_revision: opt u32,
+  display_revision: opt u32,
+  active_request_revision: opt u32,
+  active_request_acknowledged: bool,
+  latest_verdict: opt ReviewVerdict,
+  latest_judge: opt actor_id,
+  latest_reason: opt str,
+  current_revision_comment_count: u32,
+  total_comment_count: u32,
+  manual_override: bool,
+  deleted: bool,
+};
+
+type ReviewVerdict = enum {
+  Accepted,
+  Rejected,
+};
+
+type ReviewAuthorRole = enum {
+  Judge,
+  Owner,
+};
+
 constructor {
   /// Construct a fresh program. `admin` controls config and pause mode.
   /// `initial_season` is stamped on every event and state row.
@@ -185,6 +263,7 @@ service Admin {
   UpdateConfig : (new_config: Config) -> null;
   query GetAdmin : () -> actor_id;
   query GetConfig : () -> Config;
+  query GetProtocolVersion : () -> ProtocolVersion;
 
   events {
     AdminTransferred: struct {
@@ -216,6 +295,7 @@ service Admin {
 };
 
 service Registry {
+  DeleteApplication : (program_id: actor_id) -> null;
   /// Register an application by explicit `program_id`. A single operator
   /// wallet can register multiple different applications; each `program_id`
   /// remains globally unique.
@@ -274,6 +354,14 @@ service Registry {
     ApplicationUpdated: struct {
       program_id: actor_id,
       patch: ApplicationPatch,
+      application: Application,
+      season_id: u32,
+    };
+    ApplicationDeleted: struct {
+      program_id: actor_id,
+      owner: actor_id,
+      handle: str,
+      deleted_at: u64,
       season_id: u32,
     };
     /// Owner/program self-call: marks the application ready for review.
@@ -281,6 +369,15 @@ service Registry {
     ApplicationSubmitted: struct {
       program_id: actor_id,
       owner: actor_id,
+      revision: u32,
+      season_id: u32,
+    };
+    ReviewRevisionSubmitted: struct {
+      program_id: actor_id,
+      owner: actor_id,
+      revision: u32,
+      snapshot: ReviewRevisionSnapshot,
+      submitted_at: u64,
       season_id: u32,
     };
   }
@@ -362,6 +459,63 @@ service Board {
       app: actor_id,
       id: u64,
       reason: ArchiveReason,
+      season_id: u32,
+    };
+  }
+};
+
+service Review {
+  AddJudge : (judge: actor_id) -> null;
+  DecideAccepted : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
+  DecideRejected : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
+  OwnerReply : (program_id: actor_id, expected_revision: u32, body: str) -> null;
+  PostJudgeComment : (program_id: actor_id, expected_revision: u32, body: str) -> null;
+  RemoveJudge : (judge: actor_id) -> null;
+  RequestReview : (program_id: actor_id, reason: str) -> null;
+  query GetReviewSummary : (program_id: actor_id) -> opt ReviewSummary;
+  query IsJudge : (judge: actor_id) -> bool;
+  query ListJudges : () -> vec actor_id;
+
+  events {
+    JudgeAdded: struct {
+      admin: actor_id,
+      judge: actor_id,
+      season_id: u32,
+      ts: u64,
+    };
+    JudgeRemoved: struct {
+      admin: actor_id,
+      judge: actor_id,
+      season_id: u32,
+      ts: u64,
+    };
+    ReviewRequested: struct {
+      program_id: actor_id,
+      owner: actor_id,
+      revision: u32,
+      reason: str,
+      requested_at: u64,
+      season_id: u32,
+    };
+    ReviewCommentPosted: struct {
+      program_id: actor_id,
+      revision: u32,
+      author: actor_id,
+      author_role: ReviewAuthorRole,
+      body: str,
+      ts: u64,
+      season_id: u32,
+    };
+    ReviewDecisionRecorded: struct {
+      program_id: actor_id,
+      revision: u32,
+      judge: actor_id,
+      verdict: ReviewVerdict,
+      reason: str,
+      criteria: ReviewCriteria,
+      old_status: AppStatus,
+      new_status: AppStatus,
+      decided_at: u64,
       season_id: u32,
     };
   }

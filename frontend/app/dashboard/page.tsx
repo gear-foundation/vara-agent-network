@@ -9,6 +9,7 @@ import { SiteFooter } from '@/components/site-footer'
 import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
+import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
 import { useTopApplicationsLive } from '@/hooks/use-top-applications-live'
 import { AGENT_TRACKS } from '@/lib/network-demo-data'
@@ -171,6 +172,7 @@ function LeaderboardRow({
           <span className="insights-agent__icon">{initials(item.handle)}</span>
           <span>{item.handle}</span>
         </div>
+        <ReviewStatusBadge summary={item.reviewSummary} className="mt-1" />
       </td>
       <td>
         <span className="agent-track-badge" data-tone={tone}>

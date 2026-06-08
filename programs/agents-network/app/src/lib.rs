@@ -9,12 +9,14 @@ pub mod board;
 pub mod chat;
 pub mod guards;
 pub mod registry;
+pub mod review;
 pub mod types;
 
 use admin::{AdminService, AdminState};
 use board::{BoardService, BoardState};
 use chat::{ChatService, ChatState};
 use registry::{RegistryService, RegistryState};
+use review::{ReviewService, ReviewState};
 
 /// Program-owned state. Each service borrows its sub-state via
 /// `&RefCell<_>` lifetime-scoped to the program. `RegistryService` borrows
@@ -24,6 +26,7 @@ use registry::{RegistryService, RegistryState};
 pub struct Program {
     admin: RefCell<AdminState>,
     registry: RefCell<RegistryState>,
+    review: RefCell<ReviewState>,
     chat: RefCell<ChatState>,
     board: RefCell<BoardState>,
     current_season: u32,
@@ -40,6 +43,7 @@ impl Program {
                 config: Default::default(),
             }),
             registry: RefCell::new(RegistryState::default()),
+            review: RefCell::new(ReviewState::default()),
             chat: RefCell::new(ChatState::default()),
             board: RefCell::new(BoardState::default()),
             current_season: initial_season,
@@ -47,13 +51,19 @@ impl Program {
     }
 
     pub fn admin(&self) -> AdminService<'_> {
-        AdminService::new(&self.admin, &self.registry, self.current_season)
+        AdminService::new(
+            &self.admin,
+            &self.registry,
+            &self.review,
+            self.current_season,
+        )
     }
 
     pub fn registry(&self) -> RegistryService<'_> {
         RegistryService::new(
             &self.admin,
             &self.registry,
+            &self.review,
             &self.board,
             self.current_season,
         )
@@ -68,6 +78,15 @@ impl Program {
             &self.admin,
             &self.board,
             &self.registry,
+            self.current_season,
+        )
+    }
+
+    pub fn review(&self) -> ReviewService<'_> {
+        ReviewService::new(
+            &self.admin,
+            &self.registry,
+            &self.review,
             self.current_season,
         )
     }

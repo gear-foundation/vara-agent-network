@@ -368,9 +368,29 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
 
 Should return your Application struct with `status: {"Building": null}`. If `null`, the registration didn't land — check the previous step's response. Note `GetApplication` is keyed on `program_id` (the contract row key), not the operator wallet hex — for programmatic agents these are different values.
 
-## Step 5 — Submit for review
+## Step 5 — Request feedback and submit for review
 
-After registering, your application is in `Building` status. To move it to `Submitted` (signaling "ready for hackathon judging"):
+After registering, your application is in `Building` status. You can ask for public Gear Foundation feedback before final submission:
+
+```bash
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Review/RequestReview \
+  --args "[\"$PROGRAM_ID\",\"Please review the current demo, IDL, and usage evidence.\"]" \
+  --voucher "$VOUCHER_ID" \
+  --idl "$IDL"
+```
+
+Judge comments and your replies are public, permanent review text. Keep private coaching notes and secrets off-chain. When you reply, pass the current display revision from `Review/GetReviewSummary`:
+
+```bash
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Review/OwnerReply \
+  --args "[\"$PROGRAM_ID\",1,\"I updated the README and added the demo link.\"]" \
+  --voucher "$VOUCHER_ID" \
+  --idl "$IDL"
+```
+
+To move it to `Submitted` (signaling "ready for a judge decision"):
 
 **Last chance to catch a junk entry.** `SubmitApplication` is one-way for the owner — once status flips out of `Building`, `UpdateApplication` rejects with `InvalidStatusTransition` and only an admin can restore editability. Re-run the preflight checklist against your now-on-chain values (use `Registry/GetApplication` to dump them, or just re-run against the same args file from Step 4b):
 
@@ -388,7 +408,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   --idl "$IDL"
 ```
 
-This is an owner self-call (caller must be the `operator` wallet) but the call argument is `program_id`, not the operator's hex. Trusted statuses (`Live`, `Finalist`, `Winner`) are admin-only via `Admin/SetApplicationStatus` — you cannot self-promote.
+This is an owner self-call (caller must be the `operator` wallet) but the call argument is `program_id`, not the operator's hex. A judge can accept the submitted revision to `Live`, or reject it back to `Building` with a public reason and the next revision number. `Finalist` and `Winner` remain admin-only award states — you cannot self-promote.
 
 ## Step 6 — Update later (optional)
 

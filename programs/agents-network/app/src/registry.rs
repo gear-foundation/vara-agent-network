@@ -7,6 +7,7 @@
 use crate::admin::AdminState;
 use crate::board::BoardState;
 use crate::guards;
+use crate::review::{self, ReviewState};
 use crate::types::*;
 use sails_rs::cell::RefCell;
 use sails_rs::collections::BTreeMap;
@@ -88,6 +89,15 @@ pub enum RegistryEvent {
     ApplicationSubmitted {
         program_id: ActorId,
         owner: ActorId,
+        revision: u32,
+        season_id: u32,
+    },
+    ReviewRevisionSubmitted {
+        program_id: ActorId,
+        owner: ActorId,
+        revision: u32,
+        snapshot: ReviewRevisionSnapshot,
+        submitted_at: u64,
         season_id: u32,
     },
 }
@@ -99,6 +109,7 @@ pub enum RegistryEvent {
 pub struct RegistryService<'a> {
     admin: &'a RefCell<AdminState>,
     registry: &'a RefCell<RegistryState>,
+    review: &'a RefCell<ReviewState>,
     /// Shared mutable access to board state so `registerApplication` can call
     /// the `BoardState::push_announcement` helper atomically.
     board: &'a RefCell<BoardState>,
@@ -109,12 +120,14 @@ impl<'a> RegistryService<'a> {
     pub fn new(
         admin: &'a RefCell<AdminState>,
         registry: &'a RefCell<RegistryState>,
+        review: &'a RefCell<ReviewState>,
         board: &'a RefCell<BoardState>,
         current_season: u32,
     ) -> Self {
         Self {
             admin,
             registry,
+            review,
             board,
             current_season,
         }
@@ -233,6 +246,7 @@ impl<'a> RegistryService<'a> {
         );
         reg.handles
             .insert(req.handle.clone(), HandleRef::Application(program_id));
+        review::init_application(&mut self.review.borrow_mut(), program_id);
 
         // Shared helper — writes state, emits no events. RegistryService emits
         // the enriched `ApplicationRegistered`; indexer projects BOTH the
@@ -415,6 +429,7 @@ impl<'a> RegistryService<'a> {
         }
 
         reg.applications.remove(&program_id);
+        review::delete_application(&mut self.review.borrow_mut(), program_id);
         if reg.handles.get(&app.handle) == Some(&HandleRef::Application(program_id)) {
             reg.handles.remove(&app.handle);
         }
@@ -443,29 +458,30 @@ impl<'a> RegistryService<'a> {
 
         let caller = msg::source();
         let mut reg = self.registry.borrow_mut();
-        let app = reg
-            .applications
-            .get_mut(&program_id)
-            .ok_or(ContractError::UnknownApplication)?;
-
-        if caller != app.owner && caller != program_id {
-            return Err(ContractError::NotOwner);
-        }
-        if app.status != AppStatus::Building {
-            return Err(ContractError::InvalidStatusTransition);
-        }
-
-        app.status = AppStatus::Submitted;
-        let owner = app.owner;
+        let mut review = self.review.borrow_mut();
+        let submitted_at = exec::block_timestamp();
+        let (owner, revision, snapshot) =
+            review::submit_application(&mut reg, &mut review, program_id, caller, submitted_at)?;
         let season_id = self.current_season;
         drop(reg);
+        drop(review);
 
         self.emit_event(RegistryEvent::ApplicationSubmitted {
             program_id,
             owner,
+            revision,
             season_id,
         })
         .expect("emit ApplicationSubmitted failed");
+        self.emit_event(RegistryEvent::ReviewRevisionSubmitted {
+            program_id,
+            owner,
+            revision,
+            snapshot,
+            submitted_at,
+            season_id,
+        })
+        .expect("emit ReviewRevisionSubmitted failed");
 
         Ok(())
     }

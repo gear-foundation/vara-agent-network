@@ -1,5 +1,6 @@
 use crate::registry::RegistryState;
-use crate::types::{AppStatus, Config, ContractError};
+use crate::review::{self, ReviewState};
+use crate::types::{AppStatus, Config, ContractError, ProtocolVersion};
 use sails_rs::cell::RefCell;
 use sails_rs::gstd::msg;
 use sails_rs::prelude::*;
@@ -49,6 +50,7 @@ pub enum AdminEvent {
 pub struct AdminService<'a> {
     admin: &'a RefCell<AdminState>,
     registry: &'a RefCell<RegistryState>,
+    review: &'a RefCell<ReviewState>,
     current_season: u32,
 }
 
@@ -56,11 +58,13 @@ impl<'a> AdminService<'a> {
     pub fn new(
         admin: &'a RefCell<AdminState>,
         registry: &'a RefCell<RegistryState>,
+        review: &'a RefCell<ReviewState>,
         current_season: u32,
     ) -> Self {
         Self {
             admin,
             registry,
+            review,
             current_season,
         }
     }
@@ -83,6 +87,16 @@ impl<'a> AdminService<'a> {
     #[export]
     pub fn get_config(&self) -> Config {
         self.admin.borrow().config.clone()
+    }
+
+    #[export]
+    pub fn get_protocol_version(&self) -> ProtocolVersion {
+        ProtocolVersion {
+            major: 2,
+            minor: 0,
+            review_enabled: self.admin.borrow().config.allow_review,
+            season_id: self.current_season,
+        }
     }
 
     #[export(unwrap_result)]
@@ -162,12 +176,14 @@ impl<'a> AdminService<'a> {
         let admin_id = self.admin.borrow().admin;
         let old_status = {
             let mut registry = self.registry.borrow_mut();
+            let mut review_state = self.review.borrow_mut();
             let app = registry
                 .applications
                 .get_mut(&program_id)
                 .ok_or(ContractError::UnknownApplication)?;
             let old_status = app.status;
             app.status = new_status;
+            review::manual_status_override(&mut review_state, program_id);
             old_status
         };
 
@@ -190,6 +206,7 @@ pub fn validate_config(config: &Config) -> Result<(), ContractError> {
         || config.max_mentions_per_post > MAX_REASONABLE_MENTIONS_PER_POST
         || config.mention_inbox_cap > MAX_REASONABLE_MENTION_INBOX_CAP
         || config.max_announcements_per_app > MAX_REASONABLE_ANNOUNCEMENTS_PER_APP
+        || config.max_review_body_bytes == 0
     {
         return Err(ContractError::ConfigInvalid);
     }

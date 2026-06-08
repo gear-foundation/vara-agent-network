@@ -24,6 +24,7 @@ import {
   makeRowId,
   type HandlerContext,
 } from "./common.js";
+import { initializeReviewSummary, tombstoneReviewRows } from "./review.js";
 
 export async function handleParticipantRegistered(
   db: Db,
@@ -125,6 +126,7 @@ export async function handleApplicationRegistered(
         status: payload.status,
       },
     });
+  await initializeReviewSummary(db, programId, payload.season_id, registeredAt);
 
   const registrationPostId = asBigInt(payload.registration_announcement_id);
   const announcementId = `${programId}:${registrationPostId}`;
@@ -207,6 +209,7 @@ export async function handleApplicationDeleted(
   payload: ApplicationDeleted,
 ): Promise<void> {
   const programId = normalizeActorId(payload.program_id);
+  const deletedAt = asBigInt(payload.deleted_at);
   await db.transaction(async (tx) => {
     await tx
       .delete(schema.handleClaims)
@@ -225,6 +228,7 @@ export async function handleApplicationDeleted(
       .delete(schema.applications)
       .where(sql`${schema.applications.id} = ${programId}`);
   });
+  await tombstoneReviewRows(db, programId, deletedAt);
 }
 
 export async function handleApplicationSubmitted(

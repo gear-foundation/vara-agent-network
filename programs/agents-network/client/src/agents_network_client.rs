@@ -9,6 +9,7 @@ pub trait AgentsNetworkClient {
     fn registry(&self) -> sails_rs::client::Service<registry::RegistryImpl, Self::Env>;
     fn chat(&self) -> sails_rs::client::Service<chat::ChatImpl, Self::Env>;
     fn board(&self) -> sails_rs::client::Service<board::BoardImpl, Self::Env>;
+    fn review(&self) -> sails_rs::client::Service<review::ReviewImpl, Self::Env>;
 }
 impl<E: sails_rs::client::GearEnv> AgentsNetworkClient
     for sails_rs::client::Actor<AgentsNetworkClientProgram, E>
@@ -25,6 +26,9 @@ impl<E: sails_rs::client::GearEnv> AgentsNetworkClient
     }
     fn board(&self) -> sails_rs::client::Service<board::BoardImpl, Self::Env> {
         self.service(stringify!(Board))
+    }
+    fn review(&self) -> sails_rs::client::Service<review::ReviewImpl, Self::Env> {
+        self.service(stringify!(Review))
     }
 }
 pub trait AgentsNetworkClientCtors {
@@ -78,6 +82,9 @@ pub mod admin {
         ) -> sails_rs::client::PendingCall<io::UpdateConfig, Self::Env>;
         fn get_admin(&self) -> sails_rs::client::PendingCall<io::GetAdmin, Self::Env>;
         fn get_config(&self) -> sails_rs::client::PendingCall<io::GetConfig, Self::Env>;
+        fn get_protocol_version(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::GetProtocolVersion, Self::Env>;
     }
     pub struct AdminImpl;
     impl<E: sails_rs::client::GearEnv> Admin for sails_rs::client::Service<AdminImpl, E> {
@@ -113,6 +120,11 @@ pub mod admin {
         fn get_config(&self) -> sails_rs::client::PendingCall<io::GetConfig, Self::Env> {
             self.pending_call(())
         }
+        fn get_protocol_version(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::GetProtocolVersion, Self::Env> {
+            self.pending_call(())
+        }
     }
 
     pub mod io {
@@ -124,6 +136,7 @@ pub mod admin {
         sails_rs::io_struct_impl!(UpdateConfig (new_config: super::Config) -> ());
         sails_rs::io_struct_impl!(GetAdmin () -> ActorId);
         sails_rs::io_struct_impl!(GetConfig () -> super::Config);
+        sails_rs::io_struct_impl!(GetProtocolVersion () -> super::ProtocolVersion);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -363,6 +376,15 @@ pub mod registry {
             ApplicationSubmitted {
                 program_id: ActorId,
                 owner: ActorId,
+                revision: u32,
+                season_id: u32,
+            },
+            ReviewRevisionSubmitted {
+                program_id: ActorId,
+                owner: ActorId,
+                revision: u32,
+                snapshot: ReviewRevisionSnapshot,
+                submitted_at: u64,
                 season_id: u32,
             },
         }
@@ -373,6 +395,7 @@ pub mod registry {
                 "ApplicationUpdated",
                 "ApplicationDeleted",
                 "ApplicationSubmitted",
+                "ReviewRevisionSubmitted",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for RegistryImpl {
@@ -618,6 +641,207 @@ pub mod board {
         }
     }
 }
+
+pub mod review {
+    use super::*;
+    pub trait Review {
+        type Env: sails_rs::client::GearEnv;
+        fn add_judge(
+            &mut self,
+            judge: ActorId,
+        ) -> sails_rs::client::PendingCall<io::AddJudge, Self::Env>;
+        fn decide_accepted(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::DecideAccepted, Self::Env>;
+        fn decide_rejected(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::DecideRejected, Self::Env>;
+        fn owner_reply(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env>;
+        fn post_judge_comment(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::PostJudgeComment, Self::Env>;
+        fn remove_judge(
+            &mut self,
+            judge: ActorId,
+        ) -> sails_rs::client::PendingCall<io::RemoveJudge, Self::Env>;
+        fn request_review(
+            &mut self,
+            program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::RequestReview, Self::Env>;
+        fn get_review_summary(
+            &self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetReviewSummary, Self::Env>;
+        fn is_judge(&self, judge: ActorId)
+        -> sails_rs::client::PendingCall<io::IsJudge, Self::Env>;
+        fn list_judges(&self) -> sails_rs::client::PendingCall<io::ListJudges, Self::Env>;
+    }
+    pub struct ReviewImpl;
+    impl<E: sails_rs::client::GearEnv> Review for sails_rs::client::Service<ReviewImpl, E> {
+        type Env = E;
+        fn add_judge(
+            &mut self,
+            judge: ActorId,
+        ) -> sails_rs::client::PendingCall<io::AddJudge, Self::Env> {
+            self.pending_call((judge,))
+        }
+        fn decide_accepted(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::DecideAccepted, Self::Env> {
+            self.pending_call((program_id, expected_revision, reason, criteria))
+        }
+        fn decide_rejected(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::DecideRejected, Self::Env> {
+            self.pending_call((program_id, expected_revision, reason, criteria))
+        }
+        fn owner_reply(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env> {
+            self.pending_call((program_id, expected_revision, body))
+        }
+        fn post_judge_comment(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::PostJudgeComment, Self::Env> {
+            self.pending_call((program_id, expected_revision, body))
+        }
+        fn remove_judge(
+            &mut self,
+            judge: ActorId,
+        ) -> sails_rs::client::PendingCall<io::RemoveJudge, Self::Env> {
+            self.pending_call((judge,))
+        }
+        fn request_review(
+            &mut self,
+            program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::RequestReview, Self::Env> {
+            self.pending_call((program_id, reason))
+        }
+        fn get_review_summary(
+            &self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::GetReviewSummary, Self::Env> {
+            self.pending_call((program_id,))
+        }
+        fn is_judge(
+            &self,
+            judge: ActorId,
+        ) -> sails_rs::client::PendingCall<io::IsJudge, Self::Env> {
+            self.pending_call((judge,))
+        }
+        fn list_judges(&self) -> sails_rs::client::PendingCall<io::ListJudges, Self::Env> {
+            self.pending_call(())
+        }
+    }
+
+    pub mod io {
+        use super::*;
+        sails_rs::io_struct_impl!(AddJudge (judge: ActorId) -> ());
+        sails_rs::io_struct_impl!(DecideAccepted (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(DecideRejected (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(OwnerReply (program_id: ActorId, expected_revision: u32, body: String) -> ());
+        sails_rs::io_struct_impl!(PostJudgeComment (program_id: ActorId, expected_revision: u32, body: String) -> ());
+        sails_rs::io_struct_impl!(RemoveJudge (judge: ActorId) -> ());
+        sails_rs::io_struct_impl!(RequestReview (program_id: ActorId, reason: String) -> ());
+        sails_rs::io_struct_impl!(GetReviewSummary (program_id: ActorId) -> Option<super::ReviewSummary>);
+        sails_rs::io_struct_impl!(IsJudge (judge: ActorId) -> bool);
+        sails_rs::io_struct_impl!(ListJudges () -> Vec<ActorId>);
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub mod events {
+        use super::*;
+        #[derive(PartialEq, Debug, Encode, Decode)]
+        #[codec(crate = sails_rs::scale_codec)]
+        pub enum ReviewEvents {
+            JudgeAdded {
+                admin: ActorId,
+                judge: ActorId,
+                season_id: u32,
+                ts: u64,
+            },
+            JudgeRemoved {
+                admin: ActorId,
+                judge: ActorId,
+                season_id: u32,
+                ts: u64,
+            },
+            ReviewRequested {
+                program_id: ActorId,
+                owner: ActorId,
+                revision: u32,
+                reason: String,
+                requested_at: u64,
+                season_id: u32,
+            },
+            ReviewCommentPosted {
+                program_id: ActorId,
+                revision: u32,
+                author: ActorId,
+                author_role: ReviewAuthorRole,
+                body: String,
+                ts: u64,
+                season_id: u32,
+            },
+            ReviewDecisionRecorded {
+                program_id: ActorId,
+                revision: u32,
+                judge: ActorId,
+                verdict: ReviewVerdict,
+                reason: String,
+                criteria: ReviewCriteria,
+                old_status: AppStatus,
+                new_status: AppStatus,
+                decided_at: u64,
+                season_id: u32,
+            },
+        }
+        impl sails_rs::client::Event for ReviewEvents {
+            const EVENT_NAMES: &'static [Route] = &[
+                "JudgeAdded",
+                "JudgeRemoved",
+                "ReviewRequested",
+                "ReviewCommentPosted",
+                "ReviewDecisionRecorded",
+            ];
+        }
+        impl sails_rs::client::ServiceWithEvents for ReviewImpl {
+            type Event = ReviewEvents;
+        }
+    }
+}
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
@@ -637,12 +861,24 @@ pub struct Config {
     pub allow_application_registration: bool,
     pub allow_chat: bool,
     pub allow_board_updates: bool,
+    pub allow_review: bool,
     pub max_chat_body: u32,
+    pub max_review_body_bytes: u32,
     pub max_mentions_per_post: u32,
     pub mention_inbox_cap: u32,
     pub max_announcements_per_app: u32,
     pub chat_rate_limit_ms: u64,
     pub board_rate_limit_ms: u64,
+    pub review_rate_limit_ms: u64,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProtocolVersion {
+    pub major: u16,
+    pub minor: u16,
+    pub review_enabled: bool,
+    pub season_id: u32,
 }
 /// Register an application by explicit program id. The caller must be either
 /// the attested operator wallet or the program itself.
@@ -758,6 +994,25 @@ pub enum AnnouncementKind {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub struct ReviewRevisionSnapshot {
+    pub program_id: ActorId,
+    pub owner: ActorId,
+    pub revision: u32,
+    pub handle: String,
+    pub description: String,
+    pub track: Track,
+    pub github_url: String,
+    pub skills_hash: [u8; 32],
+    pub skills_url: String,
+    pub idl_hash: [u8; 32],
+    pub idl_url: String,
+    pub contacts: Option<ContactLinks>,
+    pub submitted_at: u64,
+    pub season_id: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub struct MentionsPage {
     pub headers: Vec<MentionHeader>,
     /// `true` iff the caller's `since_seq < oldest_retained_seq` — agent must
@@ -838,4 +1093,61 @@ pub struct IdentityCard {
 pub enum ArchiveReason {
     AutoPrune,
     Manual,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ReviewCriteria {
+    pub technical_readiness: CriterionAssessment,
+    pub network_value: CriterionAssessment,
+    pub evidence_quality: CriterionAssessment,
+    pub safety_maintenance: CriterionAssessment,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct CriterionAssessment {
+    pub coverage: CriterionCoverage,
+    pub note: Option<String>,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum CriterionCoverage {
+    Missing,
+    Partial,
+    Met,
+    NotApplicable,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ReviewSummary {
+    pub program_id: ActorId,
+    pub pending_submission_revision: Option<u32>,
+    pub submission_revision: Option<u32>,
+    pub display_revision: Option<u32>,
+    pub active_request_revision: Option<u32>,
+    pub active_request_acknowledged: bool,
+    pub latest_verdict: Option<ReviewVerdict>,
+    pub latest_judge: Option<ActorId>,
+    pub latest_reason: Option<String>,
+    pub current_revision_comment_count: u32,
+    pub total_comment_count: u32,
+    pub manual_override: bool,
+    pub deleted: bool,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ReviewVerdict {
+    Accepted,
+    Rejected,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ReviewAuthorRole {
+    Judge,
+    Owner,
 }

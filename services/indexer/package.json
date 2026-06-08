@@ -26,6 +26,7 @@
     "start:processor": "npm run processor",
     "start:api": "npm run serve",
     "start:rollup": "node lib/rollup-main.js",
+    "test": "node --test --import tsx test/*.test.ts",
     "typecheck": "tsc --noEmit -p tsconfig.json"
   },
   "dependencies": {

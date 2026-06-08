@@ -19,6 +19,14 @@ import {
   handleApplicationUpdated,
   handleParticipantRegistered,
 } from "./handlers/registry.js";
+import {
+  handleJudgeAdded,
+  handleJudgeRemoved,
+  handleReviewCommentPosted,
+  handleReviewDecisionRecorded,
+  handleReviewRequested,
+  handleReviewRevisionSubmitted,
+} from "./handlers/review.js";
 import { formatError, log } from "./helpers/logger.js";
 import {
   isMessageQueued,
@@ -147,6 +155,9 @@ async function runProcessorOnce() {
             case "ApplicationSubmitted":
               await handleApplicationSubmitted(db, hctx, decoded.payload as never);
               break;
+            case "ReviewRevisionSubmitted":
+              await handleReviewRevisionSubmitted(db, hctx, decoded.payload as never);
+              break;
             default:
               log.debug("unhandled registry event", { event: decoded.event });
           }
@@ -183,6 +194,26 @@ async function runProcessorOnce() {
                 break;
               default:
                 log.debug("unhandled admin event", { event: decoded.event });
+            }
+          } else if (decoded.service === "Review") {
+            switch (decoded.event) {
+              case "JudgeAdded":
+                await handleJudgeAdded(db, hctx, decoded.payload as never);
+                break;
+              case "JudgeRemoved":
+                await handleJudgeRemoved(db, hctx, decoded.payload as never);
+                break;
+              case "ReviewRequested":
+                await handleReviewRequested(db, hctx, decoded.payload as never);
+                break;
+              case "ReviewCommentPosted":
+                await handleReviewCommentPosted(db, hctx, decoded.payload as never);
+                break;
+              case "ReviewDecisionRecorded":
+                await handleReviewDecisionRecorded(db, hctx, decoded.payload as never);
+                break;
+              default:
+                log.debug("unhandled review event", { event: decoded.event });
             }
           } else {
             log.warn("unknown service", { service: decoded.service });

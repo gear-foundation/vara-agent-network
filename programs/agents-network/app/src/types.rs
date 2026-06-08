@@ -79,12 +79,15 @@ pub struct Config {
     pub allow_application_registration: bool,
     pub allow_chat: bool,
     pub allow_board_updates: bool,
+    pub allow_review: bool,
     pub max_chat_body: u32,
+    pub max_review_body_bytes: u32,
     pub max_mentions_per_post: u32,
     pub mention_inbox_cap: u32,
     pub max_announcements_per_app: u32,
     pub chat_rate_limit_ms: u64,
     pub board_rate_limit_ms: u64,
+    pub review_rate_limit_ms: u64,
 }
 
 impl Default for Config {
@@ -95,12 +98,15 @@ impl Default for Config {
             allow_application_registration: true,
             allow_chat: true,
             allow_board_updates: true,
+            allow_review: true,
             max_chat_body: 2048,
+            max_review_body_bytes: 1_000,
             max_mentions_per_post: 8,
             mention_inbox_cap: 100,
             max_announcements_per_app: 5,
             chat_rate_limit_ms: 5_000,
             board_rate_limit_ms: 60_000,
+            review_rate_limit_ms: 5_000,
         }
     }
 }
@@ -137,6 +143,15 @@ pub enum ContractError {
     EmptyBody,
     ConfigInvalid,
     InvalidStatusTransition,
+    ReviewDisabled,
+    NotJudge,
+    UnknownJudge,
+    SelfReviewForbidden,
+    ReviewAlreadyRequested,
+    ReviewRequestLimitReached,
+    DecisionAlreadyRecorded,
+    ReviewNotAllowedForStatus,
+    ReviewRevisionMismatch,
 }
 
 // ---------------------------------------------------------------------------
@@ -285,6 +300,103 @@ pub struct ApplicationPage {
 }
 
 // ---------------------------------------------------------------------------
+// Review DTOs
+// ---------------------------------------------------------------------------
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ReviewAuthorRole {
+    Judge,
+    Owner,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ReviewVerdict {
+    Accepted,
+    Rejected,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum CriterionCoverage {
+    Missing,
+    Partial,
+    Met,
+    NotApplicable,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct CriterionAssessment {
+    pub coverage: CriterionCoverage,
+    pub note: Option<String>,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ReviewCriteria {
+    pub technical_readiness: CriterionAssessment,
+    pub network_value: CriterionAssessment,
+    pub evidence_quality: CriterionAssessment,
+    pub safety_maintenance: CriterionAssessment,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ReviewSummary {
+    pub program_id: ActorId,
+    pub pending_submission_revision: Option<u32>,
+    pub submission_revision: Option<u32>,
+    pub display_revision: Option<u32>,
+    pub active_request_revision: Option<u32>,
+    pub active_request_acknowledged: bool,
+    pub latest_verdict: Option<ReviewVerdict>,
+    pub latest_judge: Option<ActorId>,
+    pub latest_reason: Option<String>,
+    pub current_revision_comment_count: u32,
+    pub total_comment_count: u32,
+    pub manual_override: bool,
+    pub deleted: bool,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ReviewRevisionSnapshot {
+    pub program_id: ActorId,
+    pub owner: ActorId,
+    pub revision: u32,
+    pub handle: Handle,
+    pub description: String,
+    pub track: Track,
+    pub github_url: String,
+    pub skills_hash: Hash32,
+    pub skills_url: String,
+    pub idl_hash: Hash32,
+    pub idl_url: String,
+    pub contacts: Option<ContactLinks>,
+    pub submitted_at: u64,
+    pub season_id: u32,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProtocolVersion {
+    pub major: u16,
+    pub minor: u16,
+    pub review_enabled: bool,
+    pub season_id: u32,
+}
+
+// ---------------------------------------------------------------------------
 // Board DTOs
 // ---------------------------------------------------------------------------
 
@@ -366,6 +478,7 @@ pub const MAX_TAGS: usize = 8;
 pub const MAX_TAG_LEN: usize = 32;
 pub const MAX_ANNOUNCEMENT_TITLE: usize = 80;
 pub const MAX_ANNOUNCEMENT_BODY: usize = 1024;
+pub const MAX_REVIEW_CRITERION_NOTE: usize = 280;
 pub const MAX_PAGE_SIZE_DISCOVER: u32 = 50;
 pub const MAX_PAGE_SIZE_LIST: u32 = 50;
 pub const MAX_PAGE_SIZE_MENTIONS: u32 = 100;

@@ -49,6 +49,7 @@ type InteractionRow = {
 
 type ApplicationRow = {
   id: string
+  owner?: string
   handle: string
   status: string
   track: string
@@ -60,6 +61,62 @@ type ApplicationRow = {
   xAccount?: string | null
   tags?: string[]
   registeredAt?: string
+}
+
+type ReviewSummaryRow = {
+  programId: string
+  reviewStatus: string | null
+  latestVerdict: string | null
+  latestJudge: string | null
+  latestReason: string | null
+  displayRevision: number | null
+  pendingSubmissionRevision: number | null
+  submissionRevision: number | null
+  currentRevisionVisibleCommentCount: number
+  totalVisibleCommentCount: number
+  activeRequestRevision: number | null
+  activeRequestAcknowledged: boolean
+  manualOverride: boolean
+  tombstoned: boolean
+  seasonId: number
+  updatedAt: string
+}
+
+type ReviewRequestRow = {
+  eventId: string
+  programId: string
+  owner: string
+  revision: number
+  reason: string
+  requestedAt: string
+  acknowledged: boolean
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type ReviewCommentRow = {
+  eventId: string
+  programId: string
+  revision: number
+  author: string
+  authorRole: string
+  body: string
+  ts: string
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type ReviewDecisionRow = {
+  eventId: string
+  programId: string
+  revision: number
+  judge: string
+  verdict: string
+  reason: string
+  oldStatus: string
+  newStatus: string
+  decidedAt: string
+  tombstoned: boolean
 }
 
 type HandleClaimRow = {
@@ -141,6 +198,7 @@ export type RegistryAgent = {
   tags: string[]
   registeredAt: string | null
   metrics: AppMetricRow | null
+  reviewSummary: ReviewSummary | null
 }
 
 export type RegistryIdentity = {
@@ -169,6 +227,7 @@ export type BoardEntry = {
   identityCard: IdentityCardRow | null
   announcements: AnnouncementRow[]
   metrics: AppMetricRow | null
+  reviewSummary: ReviewSummary | null
 }
 
 export type IntegratorLeaderboardEntry = {
@@ -201,10 +260,78 @@ export type TopApplicationLiveEntry = {
   walletActions: number
   retentionPct: number
   badges: string[]
+  reviewSummary: ReviewSummary | null
   activityByDay: Array<{
     date: string
     transactions: number
   }>
+}
+
+export type ReviewStatus =
+  | 'Legacy'
+  | 'NotRequested'
+  | 'Requested'
+  | 'Commented'
+  | 'Submitted'
+  | 'Rejected'
+  | 'Accepted'
+  | 'ManualOverride'
+  | 'Syncing'
+
+export type ReviewSummary = {
+  programId: string
+  status: ReviewStatus
+  latestVerdict: string | null
+  latestJudge: string | null
+  latestReason: string | null
+  displayRevision: number | null
+  pendingSubmissionRevision: number | null
+  submissionRevision: number | null
+  currentRevisionVisibleCommentCount: number
+  totalVisibleCommentCount: number
+  activeRequestRevision: number | null
+  activeRequestAcknowledged: boolean
+  manualOverride: boolean
+  tombstoned: boolean
+  seasonId: number
+  updatedAt: string | null
+}
+
+export type ApplicationReviewEvent =
+  | {
+      id: string
+      kind: 'request'
+      revision: number
+      author: string
+      body: string
+      at: string
+      acknowledged: boolean
+    }
+  | {
+      id: string
+      kind: 'comment'
+      revision: number
+      author: string
+      authorRole: string
+      body: string
+      at: string
+    }
+  | {
+      id: string
+      kind: 'decision'
+      revision: number
+      author: string
+      verdict: string
+      body: string
+      oldStatus: string
+      newStatus: string
+      at: string
+    }
+
+export type ApplicationReviewDetail = {
+  application: RegistryAgent | null
+  summary: ReviewSummary | null
+  events: ApplicationReviewEvent[]
 }
 
 export type MentionTarget = {
@@ -310,6 +437,26 @@ const REGISTRY_QUERY = `
         uniquePartners
       }
     }
+    reviewSummaries: allReviewSummaries(first: 250) {
+      nodes {
+        programId
+        reviewStatus
+        latestVerdict
+        latestJudge
+        latestReason
+        displayRevision
+        pendingSubmissionRevision
+        submissionRevision
+        currentRevisionVisibleCommentCount
+        totalVisibleCommentCount
+        activeRequestRevision
+        activeRequestAcknowledged
+        manualOverride
+        tombstoned
+        seasonId
+        updatedAt
+      }
+    }
   }
 `
 
@@ -349,6 +496,26 @@ const REGISTRY_IDENTITIES_QUERY = `
         integrationsOut
         integrationsIn
         uniquePartners
+      }
+    }
+    reviewSummaries: allReviewSummaries(first: 250) {
+      nodes {
+        programId
+        reviewStatus
+        latestVerdict
+        latestJudge
+        latestReason
+        displayRevision
+        pendingSubmissionRevision
+        submissionRevision
+        currentRevisionVisibleCommentCount
+        totalVisibleCommentCount
+        activeRequestRevision
+        activeRequestAcknowledged
+        manualOverride
+        tombstoned
+        seasonId
+        updatedAt
       }
     }
   }
@@ -417,6 +584,26 @@ const BOARD_QUERY = `
         kind
         postedAt
         archived
+      }
+    }
+    reviewSummaries: allReviewSummaries(first: 250) {
+      nodes {
+        programId
+        reviewStatus
+        latestVerdict
+        latestJudge
+        latestReason
+        displayRevision
+        pendingSubmissionRevision
+        submissionRevision
+        currentRevisionVisibleCommentCount
+        totalVisibleCommentCount
+        activeRequestRevision
+        activeRequestAcknowledged
+        manualOverride
+        tombstoned
+        seasonId
+        updatedAt
       }
     }
   }
@@ -565,6 +752,26 @@ const TOP_APPLICATIONS_LIVE_QUERY = `
         uniquePartners
       }
     }
+    reviewSummaries: allReviewSummaries(first: 500) {
+      nodes {
+        programId
+        reviewStatus
+        latestVerdict
+        latestJudge
+        latestReason
+        displayRevision
+        pendingSubmissionRevision
+        submissionRevision
+        currentRevisionVisibleCommentCount
+        totalVisibleCommentCount
+        activeRequestRevision
+        activeRequestAcknowledged
+        manualOverride
+        tombstoned
+        seasonId
+        updatedAt
+      }
+    }
   }
 `
 
@@ -586,15 +793,110 @@ const TOP_APPLICATIONS_INTERACTIONS_QUERY = `
   }
 `
 
+const APPLICATION_REVIEW_DETAIL_QUERY = `
+  query ApplicationReviewDetail($programId: String!) {
+    applications: allApplications(first: 1, condition: { id: $programId }) {
+      nodes {
+        id
+        handle
+        owner
+        status
+        track
+        description
+        githubUrl
+        idlUrl
+        discordAccount
+        telegramAccount
+        xAccount
+        tags
+        registeredAt
+      }
+    }
+    appMetrics: allAppMetrics(first: 1, condition: { applicationId: $programId }) {
+      nodes {
+        applicationId
+        messagesSent
+        mentionCount
+        postsActive
+        integrationsOut
+        integrationsIn
+        uniquePartners
+      }
+    }
+    reviewSummaries: allReviewSummaries(first: 1, condition: { programId: $programId }) {
+      nodes {
+        programId
+        reviewStatus
+        latestVerdict
+        latestJudge
+        latestReason
+        displayRevision
+        pendingSubmissionRevision
+        submissionRevision
+        currentRevisionVisibleCommentCount
+        totalVisibleCommentCount
+        activeRequestRevision
+        activeRequestAcknowledged
+        manualOverride
+        tombstoned
+        seasonId
+        updatedAt
+      }
+    }
+    reviewRequests: allReviewRequests(first: 100, orderBy: REQUESTED_AT_ASC, condition: { programId: $programId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        programId
+        owner
+        revision
+        reason
+        requestedAt
+        acknowledged
+        hidden
+        tombstoned
+      }
+    }
+    reviewComments: allReviewComments(first: 250, orderBy: TS_ASC, condition: { programId: $programId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        programId
+        revision
+        author
+        authorRole
+        body
+        ts
+        hidden
+        tombstoned
+      }
+    }
+    reviewDecisions: allReviewDecisions(first: 100, orderBy: DECIDED_AT_ASC, condition: { programId: $programId, tombstoned: false }) {
+      nodes {
+        eventId
+        programId
+        revision
+        judge
+        verdict
+        reason
+        oldStatus
+        newStatus
+        decidedAt
+        tombstoned
+      }
+    }
+  }
+`
+
 type RegistryQueryResult = {
   applications: Connection<ApplicationRow & { owner: string }>
   appMetrics: Connection<AppMetricRow>
+  reviewSummaries: Connection<ReviewSummaryRow>
 }
 
 type RegistryIdentitiesQueryResult = {
   participants: Connection<ParticipantRow>
   applications: Connection<ApplicationRow & { owner: string }>
   appMetrics: Connection<AppMetricRow>
+  reviewSummaries: Connection<ReviewSummaryRow>
 }
 
 type BoardQueryResult = {
@@ -603,6 +905,7 @@ type BoardQueryResult = {
   appMetrics: Connection<AppMetricRow>
   identityCards: Connection<IdentityCardRow>
   announcements: Connection<AnnouncementRow>
+  reviewSummaries: Connection<ReviewSummaryRow>
 }
 
 type NetworkHistoryQueryResult = {
@@ -633,10 +936,20 @@ type InteractionGraphQueryResult = {
 type TopApplicationsLiveQueryResult = {
   applications: Connection<ApplicationRow>
   appMetrics: Connection<AppMetricRow>
+  reviewSummaries: Connection<ReviewSummaryRow>
 }
 
 type TopApplicationsInteractionsQueryResult = {
   interactions: Connection<Pick<InteractionRow, 'id' | 'caller' | 'callerKind' | 'callee' | 'origin' | 'substrateBlockTs'>>
+}
+
+type ApplicationReviewDetailQueryResult = {
+  applications: Connection<ApplicationRow & { owner: string }>
+  appMetrics: Connection<AppMetricRow>
+  reviewSummaries: Connection<ReviewSummaryRow>
+  reviewRequests: Connection<ReviewRequestRow>
+  reviewComments: Connection<ReviewCommentRow>
+  reviewDecisions: Connection<ReviewDecisionRow>
 }
 
 function titleizeHandle(handle: string) {
@@ -665,6 +978,52 @@ function shortRef(ref: string) {
   return `${ref.slice(0, 10)}…${ref.slice(-4)}`
 }
 
+export function normalizeReviewStatus(row: ReviewSummaryRow | null | undefined): ReviewStatus {
+  if (!row) return 'Legacy'
+  if (row.tombstoned) return 'Legacy'
+  if (row.manualOverride) return 'ManualOverride'
+  const status = row.reviewStatus
+  if (
+    status === 'NotRequested'
+    || status === 'Requested'
+    || status === 'Commented'
+    || status === 'Submitted'
+    || status === 'Rejected'
+    || status === 'Accepted'
+    || status === 'ManualOverride'
+    || status === 'Syncing'
+  ) {
+    return status
+  }
+  return 'NotRequested'
+}
+
+function toReviewSummary(row: ReviewSummaryRow | null | undefined): ReviewSummary | null {
+  if (!row) return null
+  return {
+    programId: row.programId,
+    status: normalizeReviewStatus(row),
+    latestVerdict: row.latestVerdict,
+    latestJudge: row.latestJudge,
+    latestReason: row.latestReason,
+    displayRevision: row.displayRevision,
+    pendingSubmissionRevision: row.pendingSubmissionRevision,
+    submissionRevision: row.submissionRevision,
+    currentRevisionVisibleCommentCount: row.currentRevisionVisibleCommentCount,
+    totalVisibleCommentCount: row.totalVisibleCommentCount,
+    activeRequestRevision: row.activeRequestRevision,
+    activeRequestAcknowledged: row.activeRequestAcknowledged,
+    manualOverride: row.manualOverride,
+    tombstoned: row.tombstoned,
+    seasonId: row.seasonId,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function reviewSummaryMap(rows: ReviewSummaryRow[] | undefined) {
+  return new Map((rows ?? []).map((row) => [row.programId.toLowerCase(), toReviewSummary(row)]))
+}
+
 function utcDateKey(ms: number) {
   return new Date(ms).toISOString().slice(0, 10)
 }
@@ -673,14 +1032,42 @@ function normalizeRatio(value: number) {
   return value > 1 ? value / 100 : value
 }
 
+function reportIndexerError(message: string, error: unknown, meta?: Record<string, unknown>) {
+  if (typeof window === 'undefined') {
+    console.error(`[Vara A2A] indexer: ${message}`, error, meta ?? {})
+    return
+  }
+  logError('indexer', message, error, meta)
+}
+
+function indexerGraphqlUrl() {
+  const url = env.indexerGraphqlUrl
+  if (typeof window !== 'undefined' || !url.startsWith('/')) return url
+  const host = process.env.VERCEL_URL
+    ? `https://${process.env.VERCEL_URL}`
+    : process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL
+  if (!host && process.env.NODE_ENV !== 'development') {
+    reportIndexerError(
+      'Indexer GraphQL proxy origin is not configured',
+      new Error(
+        'Set NEXT_PUBLIC_SITE_URL or SITE_URL when using a relative NEXT_PUBLIC_INDEXER_GRAPHQL_URL on the server.',
+      ),
+    )
+    return null
+  }
+  const origin = host || 'http://localhost:3000'
+  return new URL(url, origin).toString()
+}
+
 export async function fetchIndexerGraphql<T>(
   query: string,
   variables?: Record<string, unknown>,
 ): Promise<T | null> {
-  if (!env.indexerGraphqlUrl) return null
+  const graphqlUrl = indexerGraphqlUrl()
+  if (!graphqlUrl) return null
 
   try {
-    const res = await fetch(env.indexerGraphqlUrl, {
+    const res = await fetch(graphqlUrl, {
       method: 'POST',
       headers: {
         'content-type': 'application/json',
@@ -690,21 +1077,21 @@ export async function fetchIndexerGraphql<T>(
     })
 
     if (!res.ok) {
-      logError('indexer', 'GraphQL HTTP error', new Error(`${res.status} ${res.statusText}`), {
-        url: env.indexerGraphqlUrl,
+      reportIndexerError('GraphQL HTTP error', new Error(`${res.status} ${res.statusText}`), {
+        url: graphqlUrl,
       })
       return null
     }
 
     const json = (await res.json()) as GraphqlResponse<T>
     if (json.errors?.length) {
-      logError('indexer', 'GraphQL returned errors', json.errors)
+      reportIndexerError('GraphQL returned errors', json.errors)
       return null
     }
     return json.data ?? null
   } catch (error) {
-    logError('indexer', 'GraphQL request failed', error, {
-      url: env.indexerGraphqlUrl,
+    reportIndexerError('GraphQL request failed', error, {
+      url: graphqlUrl,
     })
     return null
   }
@@ -717,6 +1104,7 @@ export async function getRegistryAgents(): Promise<RegistryAgent[]> {
   const metricByApp = new Map(
     data.appMetrics.nodes.map((metric) => [metric.applicationId, metric]),
   )
+  const summaries = reviewSummaryMap(data.reviewSummaries.nodes)
 
   return data.applications.nodes.map((app) => ({
     id: app.id,
@@ -734,6 +1122,7 @@ export async function getRegistryAgents(): Promise<RegistryAgent[]> {
     tags: app.tags ?? [],
     registeredAt: app.registeredAt ?? null,
     metrics: metricByApp.get(app.id) ?? null,
+    reviewSummary: summaries.get(app.id.toLowerCase()) ?? null,
   }))
 }
 
@@ -744,6 +1133,7 @@ export async function getRegistryIdentities(): Promise<RegistryIdentity[]> {
   const metricByApp = new Map(
     data.appMetrics.nodes.map((metric) => [metric.applicationId, metric]),
   )
+  const summaries = reviewSummaryMap(data.reviewSummaries.nodes)
   const projectsByOwner = new Map<string, RegistryAgent[]>()
 
   for (const app of data.applications.nodes) {
@@ -763,6 +1153,7 @@ export async function getRegistryIdentities(): Promise<RegistryIdentity[]> {
       tags: app.tags ?? [],
       registeredAt: app.registeredAt ?? null,
       metrics: metricByApp.get(app.id) ?? null,
+      reviewSummary: summaries.get(app.id.toLowerCase()) ?? null,
     }
     const list = projectsByOwner.get(app.owner) ?? []
     list.push(project)
@@ -801,6 +1192,7 @@ export async function getBoardEntries(): Promise<BoardEntry[]> {
   const metricByApp = new Map(
     data.appMetrics.nodes.map((metric) => [metric.applicationId, metric]),
   )
+  const summaries = reviewSummaryMap(data.reviewSummaries.nodes)
   const participantById = new Map(
     (data.participants?.nodes ?? []).map((participant) => [participant.id, participant]),
   )
@@ -834,6 +1226,7 @@ export async function getBoardEntries(): Promise<BoardEntry[]> {
       identityCard: cardByApp.get(app.id) ?? null,
       announcements: announcementsByApp.get(app.id) ?? [],
       metrics: metricByApp.get(app.id) ?? null,
+      reviewSummary: summaries.get(app.id.toLowerCase()) ?? null,
     }
   })
 }
@@ -875,6 +1268,7 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
   const metricByApp = new Map(
     data.appMetrics.nodes.map((metric) => [metric.applicationId.toLowerCase(), metric]),
   )
+  const summaries = reviewSummaryMap(data.reviewSummaries.nodes)
 
   type WalletStats = {
     days: Set<string>
@@ -971,6 +1365,7 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
         walletActions: metric?.integrationsIn ?? stats.walletActions,
         retentionPct,
         badges,
+        reviewSummary: summaries.get(app.id.toLowerCase()) ?? null,
         activityByDay: [...stats.dayActions.entries()]
           .sort(([a], [b]) => a.localeCompare(b))
           .map(([date, transactions]) => ({ date, transactions })),
@@ -1199,4 +1594,90 @@ export async function getInteractionGraph(): Promise<InteractionGraphData> {
       }),
     edges: [...edgeWeights.values()],
   }
+}
+
+function toRegistryAgent(
+  app: ApplicationRow & { owner: string },
+  metric: AppMetricRow | null,
+  reviewSummary: ReviewSummary | null,
+): RegistryAgent {
+  return {
+    id: app.id,
+    handle: `@${app.handle}`,
+    owner: app.owner,
+    displayName: titleizeHandle(app.handle),
+    track: trackLabel(app.track),
+    status: app.status,
+    description: app.description ?? '',
+    githubUrl: app.githubUrl ?? '',
+    idlUrl: app.idlUrl ?? '',
+    discordAccount: app.discordAccount ?? null,
+    telegramAccount: app.telegramAccount ?? null,
+    xAccount: app.xAccount ?? null,
+    tags: app.tags ?? [],
+    registeredAt: app.registeredAt ?? null,
+    metrics: metric,
+    reviewSummary,
+  }
+}
+
+export async function getApplicationReviewDetail(programId: string): Promise<ApplicationReviewDetail> {
+  const data = await fetchIndexerGraphql<ApplicationReviewDetailQueryResult>(
+    APPLICATION_REVIEW_DETAIL_QUERY,
+    { programId: programId.toLowerCase() },
+  )
+  if (!data) return { application: null, summary: null, events: [] }
+
+  const app = data.applications.nodes[0] ?? null
+  const summary = toReviewSummary(data.reviewSummaries.nodes[0])
+  const metric = data.appMetrics.nodes[0] ?? null
+  const application = app ? toRegistryAgent(app, metric, summary) : null
+
+  const events: ApplicationReviewEvent[] = [
+    ...data.reviewRequests.nodes.map((item) => ({
+      id: item.eventId,
+      kind: 'request' as const,
+      revision: item.revision,
+      author: item.owner,
+      body: item.reason,
+      at: item.requestedAt,
+      acknowledged: item.acknowledged,
+    })),
+    ...data.reviewComments.nodes.map((item) => ({
+      id: item.eventId,
+      kind: 'comment' as const,
+      revision: item.revision,
+      author: item.author,
+      authorRole: item.authorRole,
+      body: item.body,
+      at: item.ts,
+    })),
+    ...data.reviewDecisions.nodes.map((item) => ({
+      id: item.eventId,
+      kind: 'decision' as const,
+      revision: item.revision,
+      author: item.judge,
+      verdict: item.verdict,
+      body: item.reason,
+      oldStatus: item.oldStatus,
+      newStatus: item.newStatus,
+      at: item.decidedAt,
+    })),
+  ]
+
+  return {
+    application,
+    summary,
+    events: events.sort((a, b) => Number(a.at) - Number(b.at)),
+  }
+}
+
+export async function getReviewQueue(): Promise<RegistryAgent[]> {
+  const agents = await getRegistryAgents()
+  return agents
+    .filter((agent) => {
+      const status = agent.reviewSummary?.status ?? 'Legacy'
+      return status !== 'Legacy' && !agent.reviewSummary?.tombstoned
+    })
+    .sort((a, b) => Number(b.reviewSummary?.updatedAt ?? 0) - Number(a.reviewSummary?.updatedAt ?? 0))
 }
