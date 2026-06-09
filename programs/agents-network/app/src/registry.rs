@@ -6,6 +6,7 @@
 
 use crate::admin::AdminState;
 use crate::board::BoardState;
+use crate::chat::ChatState;
 use crate::guards;
 use crate::review::{self, ReviewState};
 use crate::types::*;
@@ -23,6 +24,9 @@ pub struct RegistryState {
     pub participants: BTreeMap<ActorId, Participant>,
     pub applications: BTreeMap<ActorId, Application>,
     pub handles: BTreeMap<Handle, HandleRef>,
+    pub program_replacements: BTreeMap<ActorId, ActorId>,
+    pub reserved_program_ids: BTreeMap<ActorId, bool>,
+    pub replacement_counts: BTreeMap<ActorId, u32>,
 }
 
 // ---------------------------------------------------------------------------
@@ -100,6 +104,17 @@ pub enum RegistryEvent {
         submitted_at: u64,
         season_id: u32,
     },
+    ApplicationProgramReplaced {
+        old_program_id: ActorId,
+        new_program_id: ActorId,
+        application: Application,
+        review_summary: ReviewSummary,
+        reason: String,
+        replaced_by: ActorId,
+        replaced_at: u64,
+        replacement_count: u32,
+        season_id: u32,
+    },
 }
 
 // ---------------------------------------------------------------------------
@@ -113,6 +128,7 @@ pub struct RegistryService<'a> {
     /// Shared mutable access to board state so `registerApplication` can call
     /// the `BoardState::push_announcement` helper atomically.
     board: &'a RefCell<BoardState>,
+    chat: &'a RefCell<ChatState>,
     current_season: u32,
 }
 
@@ -122,6 +138,7 @@ impl<'a> RegistryService<'a> {
         registry: &'a RefCell<RegistryState>,
         review: &'a RefCell<ReviewState>,
         board: &'a RefCell<BoardState>,
+        chat: &'a RefCell<ChatState>,
         current_season: u32,
     ) -> Self {
         Self {
@@ -129,6 +146,7 @@ impl<'a> RegistryService<'a> {
             registry,
             review,
             board,
+            chat,
             current_season,
         }
     }
@@ -222,6 +240,9 @@ impl<'a> RegistryService<'a> {
         if reg.applications.contains_key(&program_id) {
             return Err(ContractError::AlreadyRegistered);
         }
+        if reg.reserved_program_ids.contains_key(&program_id) {
+            return Err(ContractError::ProgramIdReserved);
+        }
 
         // Write registry state first; then push the kind=Registration
         // announcement into BoardState. Any panic below rolls back everything.
@@ -246,6 +267,7 @@ impl<'a> RegistryService<'a> {
         );
         reg.handles
             .insert(req.handle.clone(), HandleRef::Application(program_id));
+        reg.reserved_program_ids.insert(program_id, true);
         review::init_application(&mut self.review.borrow_mut(), program_id);
 
         // Shared helper — writes state, emits no events. RegistryService emits
@@ -316,6 +338,7 @@ impl<'a> RegistryService<'a> {
 
         let caller = msg::source();
         let mut reg = self.registry.borrow_mut();
+        ensure_current_program_id(&reg, program_id)?;
 
         let (owner, current_handle, status) = {
             let app = reg
@@ -417,6 +440,7 @@ impl<'a> RegistryService<'a> {
 
         let caller = msg::source();
         let mut reg = self.registry.borrow_mut();
+        ensure_current_program_id(&reg, program_id)?;
         let app = reg
             .applications
             .get(&program_id)
@@ -458,6 +482,7 @@ impl<'a> RegistryService<'a> {
 
         let caller = msg::source();
         let mut reg = self.registry.borrow_mut();
+        ensure_current_program_id(&reg, program_id)?;
         let mut review = self.review.borrow_mut();
         let submitted_at = exec::block_timestamp();
         let (owner, revision, snapshot) =
@@ -486,6 +511,101 @@ impl<'a> RegistryService<'a> {
         Ok(())
     }
 
+    #[export(unwrap_result)]
+    pub fn replace_application_program(
+        &mut self,
+        old_program_id: ActorId,
+        new_program_id: ActorId,
+        reason: String,
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_replacement_reason(&reason, &config)?;
+
+        if old_program_id == new_program_id {
+            return Err(ContractError::ProgramIdUnchanged);
+        }
+        if new_program_id == ActorId::zero() {
+            return Err(ContractError::UnknownApplication);
+        }
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let (application, review_summary, replacement_count) = {
+            let mut reg = self.registry.borrow_mut();
+            ensure_current_program_id(&reg, old_program_id)?;
+
+            if reg.applications.contains_key(&new_program_id) {
+                return Err(ContractError::ProgramIdAlreadyRegistered);
+            }
+            if reg.reserved_program_ids.contains_key(&new_program_id) {
+                return Err(ContractError::ProgramIdReserved);
+            }
+
+            let mut app = reg
+                .applications
+                .remove(&old_program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+
+            if caller != app.owner {
+                reg.applications.insert(old_program_id, app);
+                return Err(ContractError::NotOwner);
+            }
+            if app.status != AppStatus::Building {
+                reg.applications.insert(old_program_id, app);
+                return Err(ContractError::InvalidStatusTransition);
+            }
+
+            let prior_count = reg.replacement_counts.remove(&old_program_id).unwrap_or(0);
+            if prior_count >= MAX_PROGRAM_REPLACEMENTS {
+                reg.replacement_counts.insert(old_program_id, prior_count);
+                reg.applications.insert(old_program_id, app);
+                return Err(ContractError::ProgramReplacementLimitReached);
+            }
+            let replacement_count = prior_count.saturating_add(1);
+
+            app.program_id = new_program_id;
+            reg.applications.insert(new_program_id, app.clone());
+            reg.reserved_program_ids.insert(new_program_id, true);
+            reg.replacement_counts
+                .insert(new_program_id, replacement_count);
+            rewrite_replacement_aliases(&mut reg, old_program_id, new_program_id);
+
+            if reg.handles.get(&app.handle) == Some(&HandleRef::Application(old_program_id)) {
+                reg.handles
+                    .insert(app.handle.clone(), HandleRef::Application(new_program_id));
+            }
+
+            let mut review = self.review.borrow_mut();
+            let review_summary =
+                review::replace_application_program(&mut review, old_program_id, new_program_id);
+            self.board
+                .borrow_mut()
+                .replace_application_program(old_program_id, new_program_id);
+            self.chat
+                .borrow_mut()
+                .replace_application_program(old_program_id, new_program_id);
+
+            (app, review_summary, replacement_count)
+        };
+
+        self.emit_event(RegistryEvent::ApplicationProgramReplaced {
+            old_program_id,
+            new_program_id,
+            application,
+            review_summary,
+            reason,
+            replaced_by: caller,
+            replaced_at: now,
+            replacement_count,
+            season_id,
+        })
+        .expect("emit ApplicationProgramReplaced failed");
+
+        Ok(())
+    }
+
     // ---- Queries ----
 
     #[export]
@@ -496,6 +616,11 @@ impl<'a> RegistryService<'a> {
     #[export]
     pub fn get_application(&self, id: ActorId) -> Option<Application> {
         self.registry.borrow().applications.get(&id).cloned()
+    }
+
+    #[export]
+    pub fn resolve_current_program_id(&self, program_id: ActorId) -> ActorId {
+        resolve_current_program_id(&self.registry.borrow(), program_id)
     }
 
     #[export]
@@ -533,7 +658,37 @@ impl<'a> RegistryService<'a> {
         }
         ApplicationPage { items, next_cursor }
     }
+}
 
+pub fn resolve_current_program_id(reg: &RegistryState, program_id: ActorId) -> ActorId {
+    reg.program_replacements
+        .get(&program_id)
+        .copied()
+        .unwrap_or(program_id)
+}
+
+pub fn ensure_current_program_id(
+    reg: &RegistryState,
+    program_id: ActorId,
+) -> Result<(), ContractError> {
+    if reg.program_replacements.contains_key(&program_id) {
+        return Err(ContractError::StaleProgramId);
+    }
+    Ok(())
+}
+
+fn rewrite_replacement_aliases(
+    reg: &mut RegistryState,
+    old_program_id: ActorId,
+    new_program_id: ActorId,
+) {
+    for current in reg.program_replacements.values_mut() {
+        if *current == old_program_id {
+            *current = new_program_id;
+        }
+    }
+    reg.program_replacements
+        .insert(old_program_id, new_program_id);
 }
 
 // ---------------------------------------------------------------------------

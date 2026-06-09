@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Clock3, ExternalLink, GitBranch, MessageSquare, Send, ShieldCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock3, ExternalLink, GitBranch, MessageSquare, RefreshCw, Send, ShieldCheck, XCircle } from 'lucide-react'
 import {
   getApplicationReviewDetail,
   type ApplicationReviewDetail,
@@ -15,6 +15,7 @@ import {
   ownerReply,
   postReviewerComment,
   requestReview,
+  replaceApplicationProgram,
   submitApplication,
   type ReviewCoverage,
   type ReviewCriteriaInput,
@@ -23,6 +24,7 @@ import { useCurrentUserState } from '@/hooks/use-current-user-state'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 
@@ -92,6 +94,8 @@ export function ReviewWorkbench({
   const [commentText, setCommentText] = useState('')
   const [replyText, setReplyText] = useState('')
   const [decisionText, setDecisionText] = useState('')
+  const [replacementProgramId, setReplacementProgramId] = useState('')
+  const [replacementReason, setReplacementReason] = useState('')
   const [criteriaDraft, setCriteriaDraft] = useState<CriteriaDraft>(INITIAL_CRITERIA)
   const [busy, setBusy] = useState<string | null>(null)
   const [pendingIndexer, setPendingIndexer] = useState(false)
@@ -141,6 +145,10 @@ export function ReviewWorkbench({
 
   async function refresh() {
     const next = await getApplicationReviewDetail(programId)
+    if (next.currentProgramId !== programId.toLowerCase()) {
+      window.location.href = `/applications/${next.currentProgramId}`
+      return next
+    }
     setDetail(next)
     return next
   }
@@ -216,6 +224,19 @@ export function ReviewWorkbench({
             </a>
           ) : null}
         </div>
+        {detail.replacements.length > 0 ? (
+          <div className="review-deployments">
+            <div className="review-panel__kicker">Deployment history</div>
+            {detail.replacements.map((replacement) => (
+              <div className="review-deployment" key={replacement.eventId}>
+                <span title={replacement.oldProgramId}>{shortAddress(replacement.oldProgramId)}</span>
+                <span>to</span>
+                <span title={replacement.newProgramId}>{shortAddress(replacement.newProgramId)}</span>
+                <time>{formatTime(replacement.replacedAt)}</time>
+              </div>
+            ))}
+          </div>
+        ) : null}
       </aside>
 
       <section className="review-thread">
@@ -276,6 +297,32 @@ export function ReviewWorkbench({
             </Button>
             <Button variant="secondary" disabled={!!busy} onClick={() => void run('submit', () => submitApplication(account!, app.id))}>
               Submit application
+            </Button>
+          </ActionBox>
+        ) : null}
+
+        {isOwner && app.status === 'Building' ? (
+          <ActionBox title="Replace program id">
+            <Input
+              placeholder="0x..."
+              value={replacementProgramId}
+              onChange={(event) => setReplacementProgramId(event.target.value)}
+            />
+            <Textarea
+              placeholder="Reason"
+              value={replacementReason}
+              onChange={(event) => setReplacementReason(event.target.value)}
+            />
+            <Button
+              disabled={!!busy || !replacementProgramId.trim() || !replacementReason.trim()}
+              onClick={() => void run('replace-program', () => replaceApplicationProgram(
+                account!,
+                app.id,
+                replacementProgramId.trim(),
+                replacementReason.trim(),
+              ))}
+            >
+              <RefreshCw className="h-4 w-4" /> Replace program
             </Button>
           </ActionBox>
         ) : null}

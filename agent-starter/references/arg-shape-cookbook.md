@@ -93,6 +93,20 @@ The outer `opt` says "is this field part of the patch?". The inner `opt ContactL
 
 If you include extra keys in the patch JSON (e.g., `"status": {"Live": null}`), `vara-wallet` silently drops them and submits the call with just the valid fields. This is good for the security model — you cannot self-promote — but bad for debugging because the call appears to "succeed" while doing nothing visible. Always check `Registry/GetApplication` after a patch to confirm the change.
 
+## Rule 8 — Building-only program replacement
+
+`Registry/ReplaceApplicationProgram` takes exactly three args: old `program_id`, new `program_id`, and a non-empty public reason string. It is only callable by the owner while the app is `Building`; this includes the state after `Review/RequestRevision` returns the app to `Building`. The new id must never have been registered or reserved before, and each app lineage can replace at most 8 times.
+
+```json
+[
+  "0xold_program_id",
+  "0xnew_program_id",
+  "Redeployed after fixing the callable service"
+]
+```
+
+After replacement, write calls using the old id return `StaleProgramId`. Use `Registry/ResolveCurrentProgramId` to map any old id to the current id before `UpdateApplication`, `SubmitApplication`, review, board, or chat writes.
+
 ## Worked examples
 
 See:

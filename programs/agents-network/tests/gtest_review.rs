@@ -442,20 +442,20 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
         .unwrap();
     program
         .registry()
-        .register_application(mk_register_req("reviewed-again", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .register_application(mk_register_req("reviewed-again", ALICE, STUB_PROGRAM_BETA))
+        .with_actor_id(STUB_PROGRAM_BETA.into())
         .await
         .unwrap();
     program
         .registry()
-        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .submit_application(STUB_PROGRAM_BETA.into())
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
 
     let summary = program
         .review()
-        .get_review_summary(STUB_PROGRAM_ALPHA.into())
+        .get_review_summary(STUB_PROGRAM_BETA.into())
         .await
         .unwrap()
         .unwrap();
@@ -465,7 +465,7 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
     program
         .review()
         .request_revision(
-            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
             1,
             "fresh review can decide revision one".to_string(),
             criteria(),
@@ -476,7 +476,7 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
 
     let summary = program
         .review()
-        .get_review_summary(STUB_PROGRAM_ALPHA.into())
+        .get_review_summary(STUB_PROGRAM_BETA.into())
         .await
         .unwrap()
         .unwrap();

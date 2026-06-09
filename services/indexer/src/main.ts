@@ -14,6 +14,7 @@ import { type HandlerContext } from "./handlers/common.js";
 import { handleMessageQueued } from "./handlers/interaction.js";
 import {
   handleApplicationDeleted,
+  handleApplicationProgramReplaced,
   handleApplicationRegistered,
   handleApplicationSubmitted,
   handleApplicationUpdated,
@@ -151,6 +152,9 @@ async function runProcessorOnce() {
               break;
             case "ApplicationDeleted":
               await handleApplicationDeleted(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationProgramReplaced":
+              await handleApplicationProgramReplaced(db, hctx, decoded.payload as never);
               break;
             case "ApplicationSubmitted":
               await handleApplicationSubmitted(db, hctx, decoded.payload as never);

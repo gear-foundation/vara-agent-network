@@ -65,6 +65,7 @@ impl Program {
             &self.registry,
             &self.review,
             &self.board,
+            &self.chat,
             self.current_season,
         )
     }

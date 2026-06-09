@@ -1,4 +1,4 @@
-use crate::registry::RegistryState;
+use crate::registry::{self, RegistryState};
 use crate::review::{self, ReviewState};
 use crate::types::{AppStatus, Config, ContractError, ProtocolVersion};
 use sails_rs::cell::RefCell;
@@ -176,6 +176,7 @@ impl<'a> AdminService<'a> {
         let admin_id = self.admin.borrow().admin;
         let old_status = {
             let mut registry = self.registry.borrow_mut();
+            registry::ensure_current_program_id(&registry, program_id)?;
             let mut review_state = self.review.borrow_mut();
             let app = registry
                 .applications

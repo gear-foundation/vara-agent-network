@@ -3,11 +3,39 @@
 mod common;
 
 use agents_network_client::{
-    AgentsNetworkClient, ContactLinks, HandleRef, Track, registry::Registry,
+    AgentsNetworkClient, AppStatus, ContactLinks, CriterionAssessment, CriterionCoverage,
+    HandleRef, ReviewCriteria, Track, admin::Admin, board::Board, chat::Chat, registry::Registry,
+    review::Review,
 };
 use common::*;
 use sails_rs::client::*;
 use sails_rs::prelude::*;
+
+fn criteria() -> ReviewCriteria {
+    let met = CriterionAssessment {
+        coverage: CriterionCoverage::Met,
+        note: Some("clear evidence".to_string()),
+    };
+    ReviewCriteria {
+        technical_readiness: met.clone(),
+        network_value: met.clone(),
+        evidence_quality: met.clone(),
+        safety_maintenance: met,
+    }
+}
+
+async fn disable_review_rate_limit(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+) {
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+}
 
 #[tokio::test]
 async fn register_participant_happy_path() {
@@ -456,6 +484,497 @@ async fn admin_can_delete_submitted_application() {
         .await
         .unwrap();
     assert!(app.is_none());
+}
+
+#[tokio::test]
+async fn owner_can_replace_program_id_while_building() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("replace-me", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "redeployed with fixed metadata".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    assert_eq!(
+        program
+            .registry()
+            .resolve_current_program_id(STUB_PROGRAM_ALPHA.into())
+            .await
+            .unwrap(),
+        STUB_PROGRAM_BETA.into()
+    );
+    assert!(
+        program
+            .registry()
+            .get_application(STUB_PROGRAM_ALPHA.into())
+            .await
+            .unwrap()
+            .is_none()
+    );
+
+    let app = program
+        .registry()
+        .get_application(STUB_PROGRAM_BETA.into())
+        .await
+        .unwrap()
+        .expect("new program id should own the application row");
+    assert_eq!(app.program_id, STUB_PROGRAM_BETA.into());
+    assert_eq!(app.owner, ALICE.into());
+    assert_eq!(
+        program
+            .registry()
+            .resolve_handle("replace-me".to_string())
+            .await
+            .unwrap(),
+        Some(HandleRef::Application(STUB_PROGRAM_BETA.into()))
+    );
+}
+
+#[tokio::test]
+async fn replacement_moves_board_chat_and_review_current_state() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    disable_review_rate_limit(&program).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("move-state", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .board()
+        .set_identity_card(STUB_PROGRAM_ALPHA.into(), mk_identity_card_req())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .board()
+        .post_announcement(STUB_PROGRAM_ALPHA.into(), mk_announcement_req("invite"))
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .chat()
+        .post(
+            "hello @move-state".to_string(),
+            HandleRef::Participant(BOB.into()),
+            vec![HandleRef::Application(STUB_PROGRAM_ALPHA.into())],
+            None,
+        )
+        .with_actor_id(BOB.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .request_review(STUB_PROGRAM_ALPHA.into(), "please review".to_string())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "redeployed under a new program id".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let cards = program.board().list_identity_cards(None, 10).await.unwrap();
+    assert_eq!(cards.items.len(), 1);
+    assert_eq!(cards.items[0].0, STUB_PROGRAM_BETA.into());
+
+    let announcements = program.board().list_announcements(None, 10).await.unwrap();
+    assert_eq!(announcements.items.len(), 2);
+    assert!(
+        announcements
+            .items
+            .iter()
+            .all(|(app, _)| *app == STUB_PROGRAM_BETA.into())
+    );
+    program
+        .board()
+        .post_announcement(
+            STUB_PROGRAM_BETA.into(),
+            mk_announcement_req("rate-limited"),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    let old_mentions = program
+        .chat()
+        .get_mentions(HandleRef::Application(STUB_PROGRAM_ALPHA.into()), 0, 100)
+        .await
+        .unwrap();
+    assert!(old_mentions.headers.is_empty());
+    let new_mentions = program
+        .chat()
+        .get_mentions(HandleRef::Application(STUB_PROGRAM_BETA.into()), 0, 100)
+        .await
+        .unwrap();
+    assert_eq!(new_mentions.headers.len(), 1);
+
+    assert!(
+        program
+            .review()
+            .get_review_summary(STUB_PROGRAM_ALPHA.into())
+            .await
+            .unwrap()
+            .is_none()
+    );
+    let summary = program
+        .review()
+        .get_review_summary(STUB_PROGRAM_BETA.into())
+        .await
+        .unwrap()
+        .expect("review summary should move to the new program id");
+    assert_eq!(summary.program_id, STUB_PROGRAM_BETA.into());
+    assert_eq!(summary.active_request_revision, Some(1));
+}
+
+#[tokio::test]
+async fn owner_can_replace_after_revision_request_returns_to_building() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    disable_review_rate_limit(&program).await;
+
+    program
+        .review()
+        .add_reviewer(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .register_application(mk_register_req(
+            "revision-replace",
+            ALICE,
+            STUB_PROGRAM_ALPHA,
+        ))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .request_revision(
+            STUB_PROGRAM_ALPHA.into(),
+            1,
+            "needs another deployment".to_string(),
+            criteria(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+
+    let app = program
+        .registry()
+        .get_application(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(app.status, AppStatus::Building);
+
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "replacement after reviewer revision request".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let summary = program
+        .review()
+        .get_review_summary(STUB_PROGRAM_BETA.into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(summary.pending_submission_revision, Some(2));
+    assert_eq!(summary.latest_reviewer, Some(CAROL.into()));
+}
+
+#[tokio::test]
+async fn stale_program_id_mutations_are_rejected() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("stale-app", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "new deployment".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let mut patch = empty_patch();
+    patch.description = Some("stale update".to_string());
+    program
+        .registry()
+        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .review()
+        .request_review(STUB_PROGRAM_ALPHA.into(), "stale review".to_string())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .board()
+        .set_identity_card(STUB_PROGRAM_ALPHA.into(), mk_identity_card_req())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .chat()
+        .post(
+            "stale author".to_string(),
+            HandleRef::Application(STUB_PROGRAM_ALPHA.into()),
+            Vec::new(),
+            None,
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .chat()
+        .post(
+            "stale mention".to_string(),
+            HandleRef::Participant(BOB.into()),
+            vec![HandleRef::Application(STUB_PROGRAM_ALPHA.into())],
+            None,
+        )
+        .with_actor_id(BOB.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn program_ids_remain_reserved_after_replacement_and_delete() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("reserved-app", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "reserve both ids".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_BETA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .register_application(mk_register_req("reuse-old", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .registry()
+        .register_application(mk_register_req("reuse-new", ALICE, STUB_PROGRAM_BETA))
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn replacement_reason_is_required_and_capped() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("reason-app", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "x".repeat(1_001),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn replacement_limit_is_eight_per_lineage() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req("limit-app", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+
+    let mut current = STUB_PROGRAM_ALPHA;
+    for next in 300..308u64 {
+        program
+            .registry()
+            .replace_application_program(current.into(), next.into(), format!("replacement {next}"))
+            .with_actor_id(ALICE.into())
+            .await
+            .unwrap();
+        assert_eq!(
+            program
+                .registry()
+                .resolve_current_program_id(STUB_PROGRAM_ALPHA.into())
+                .await
+                .unwrap(),
+            next.into()
+        );
+        current = next;
+    }
+
+    program
+        .registry()
+        .replace_application_program(current.into(), 308u64.into(), "one too many".to_string())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn replacement_rejects_submitted_live_and_award_statuses() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .registry()
+        .register_application(mk_register_req(
+            "submitted-reject",
+            ALICE,
+            STUB_PROGRAM_ALPHA,
+        ))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "submitted should reject".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    for (idx, status) in [AppStatus::Live, AppStatus::Finalist, AppStatus::Winner]
+        .into_iter()
+        .enumerate()
+    {
+        let old = 400u64 + idx as u64 * 2;
+        let new = old + 1;
+        let handle = format!("status-reject-{idx}");
+        program
+            .registry()
+            .register_application(mk_register_req(&handle, ALICE, old))
+            .with_actor_id(old.into())
+            .await
+            .unwrap();
+        program
+            .admin()
+            .set_application_status(old.into(), status)
+            .with_actor_id(DEPLOYER.into())
+            .await
+            .unwrap();
+        program
+            .registry()
+            .replace_application_program(
+                old.into(),
+                new.into(),
+                "trusted status should reject".to_string(),
+            )
+            .with_actor_id(ALICE.into())
+            .await
+            .unwrap_err();
+    }
 }
 
 #[tokio::test]

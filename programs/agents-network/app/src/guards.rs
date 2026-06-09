@@ -3,8 +3,8 @@
 use crate::types::{
     Config, ContactLinks, ContractError, Hash32, MAX_ANNOUNCEMENT_BODY, MAX_ANNOUNCEMENT_TITLE,
     MAX_CONTACT_LINK, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN, MAX_IDENTITY_FIELD,
-    MAX_IDL_URL, MAX_REVIEW_CRITERION_NOTE, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS,
-    MIN_HANDLE_LEN, RegisterAppReq, ReviewCriteria,
+    MAX_IDL_URL, MAX_REVIEW_CRITERION_NOTE, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS, MIN_HANDLE_LEN,
+    RegisterAppReq, ReviewCriteria,
 };
 use sails_rs::prelude::*;
 
@@ -226,6 +226,16 @@ pub fn check_review_body(body: &str, config: &Config) -> Result<(), ContractErro
     }
     if body.len() > config.max_review_body_bytes as usize {
         return Err(ContractError::FieldTooLarge);
+    }
+    Ok(())
+}
+
+pub fn check_replacement_reason(reason: &str, config: &Config) -> Result<(), ContractError> {
+    if reason.is_empty() {
+        return Err(ContractError::ReplacementReasonRequired);
+    }
+    if reason.len() > config.max_review_body_bytes as usize {
+        return Err(ContractError::ReplacementReasonTooLong);
     }
     Ok(())
 }

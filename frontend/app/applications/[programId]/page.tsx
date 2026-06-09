@@ -5,6 +5,7 @@ import { PageAmbient } from '@/components/page-ambient'
 import { ReviewWorkbench } from '@/components/review-workbench'
 import { SiteFooter } from '@/components/site-footer'
 import { getApplicationReviewDetail } from '@/lib/indexer-client'
+import { redirect } from 'next/navigation'
 
 export default async function ApplicationReviewPage({
   params,
@@ -13,6 +14,9 @@ export default async function ApplicationReviewPage({
 }) {
   const { programId } = await params
   const detail = await getApplicationReviewDetail(programId)
+  if (detail.currentProgramId !== detail.requestedProgramId) {
+    redirect(`/applications/${detail.currentProgramId}`)
+  }
 
   return (
     <div className="min-h-screen bg-background">

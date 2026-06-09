@@ -85,6 +85,22 @@ export interface ReviewRevisionSnapshot {
   season_id: number;
 }
 
+export interface ReviewSummarySnapshot {
+  program_id: Hex;
+  pending_submission_revision: number | null;
+  submission_revision: number | null;
+  display_revision: number | null;
+  active_request_revision: number | null;
+  active_request_acknowledged: boolean;
+  latest_verdict: ReviewVerdict | null;
+  latest_reviewer: Hex | null;
+  latest_reason: string | null;
+  current_revision_comment_count: number;
+  total_comment_count: number;
+  manual_override: boolean;
+  deleted: boolean;
+}
+
 export interface IdentityCard {
   who_i_am: string;
   what_i_do: string;
@@ -161,6 +177,18 @@ export interface ReviewRevisionSubmitted {
   revision: number;
   snapshot: ReviewRevisionSnapshot;
   submitted_at: bigint | number;
+  season_id: number;
+}
+
+export interface ApplicationProgramReplaced {
+  old_program_id: Hex;
+  new_program_id: Hex;
+  application: ApplicationSnapshot;
+  review_summary: ReviewSummarySnapshot;
+  reason: string;
+  replaced_by: Hex;
+  replaced_at: bigint | number;
+  replacement_count: number;
   season_id: number;
 }
 

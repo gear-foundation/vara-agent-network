@@ -9,7 +9,7 @@
 
 use crate::admin::AdminState;
 use crate::guards;
-use crate::registry::RegistryState;
+use crate::registry::{self, RegistryState};
 use crate::types::*;
 use alloc::collections::VecDeque;
 use sails_rs::cell::RefCell;
@@ -99,6 +99,26 @@ impl BoardState {
             }
         }
     }
+
+    pub fn replace_application_program(&mut self, old_app: ActorId, new_app: ActorId) {
+        if let Some(card) = self.identity_cards.remove(&old_app) {
+            self.identity_cards.insert(new_app, card);
+        }
+        if let Some(queue) = self.announcements.remove(&old_app) {
+            for announcement in &queue {
+                self.announcement_index.insert(announcement.id, new_app);
+            }
+            self.announcements.insert(new_app, queue);
+        }
+        for app in self.announcement_index.values_mut() {
+            if *app == old_app {
+                *app = new_app;
+            }
+        }
+        if let Some(last_post_at) = self.last_board_post_at.remove(&old_app) {
+            self.last_board_post_at.insert(new_app, last_post_at);
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -176,6 +196,7 @@ impl<'a> BoardService<'a> {
 
     fn authorize(&self, app: ActorId) -> Result<(), ContractError> {
         let reg = self.registry.borrow();
+        registry::ensure_current_program_id(&reg, app)?;
         let application = reg
             .applications
             .get(&app)

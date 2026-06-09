@@ -6,7 +6,7 @@
 
 use crate::admin::AdminState;
 use crate::guards;
-use crate::registry::RegistryState;
+use crate::registry::{self, RegistryState};
 use crate::types::*;
 use sails_rs::cell::RefCell;
 use sails_rs::collections::BTreeMap;
@@ -27,6 +27,31 @@ pub struct ChatState {
     /// Rate limit keyed on `msg::source()` (wallet for participant posts,
     /// program ActorId for app self-calls — shared bucket).
     pub last_post_at: BTreeMap<ActorId, u64>,
+}
+
+impl ChatState {
+    pub fn replace_application_program(&mut self, old_app: ActorId, new_app: ActorId) {
+        let old_key = HandleRef::Application(old_app).encode();
+        let new_key = HandleRef::Application(new_app).encode();
+        if let Some(old_inbox) = self.mention_inboxes.remove(&old_key) {
+            if let Some(new_inbox) = self.mention_inboxes.get_mut(&new_key) {
+                if old_inbox.latest_seq > new_inbox.latest_seq {
+                    new_inbox.latest_seq = old_inbox.latest_seq;
+                }
+                if new_inbox.oldest_retained_seq == 0
+                    || (old_inbox.oldest_retained_seq != 0
+                        && old_inbox.oldest_retained_seq < new_inbox.oldest_retained_seq)
+                {
+                    new_inbox.oldest_retained_seq = old_inbox.oldest_retained_seq;
+                }
+                for header in old_inbox.ring {
+                    new_inbox.ring.push_back(header);
+                }
+            } else {
+                self.mention_inboxes.insert(new_key, old_inbox);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +140,7 @@ impl<'a> ChatService<'a> {
             }
             HandleRef::Application(a) => {
                 let reg = self.registry.borrow();
+                registry::ensure_current_program_id(&reg, *a)?;
                 let app = reg
                     .applications
                     .get(a)
@@ -142,6 +168,7 @@ impl<'a> ChatService<'a> {
 
         // Dedup mentions preserving order.
         let dedup_mentions = dedup_preserve_order(&mentions);
+        ensure_current_application_refs(&dedup_mentions, &self.registry.borrow())?;
 
         // Strip orphan mentions (HandleRefs not in the registry) before ring
         // append. The MessagePosted event still carries the original mentions
@@ -279,4 +306,16 @@ fn filter_registered_mentions(mentions: &[HandleRef], registry: &RegistryState) 
         })
         .cloned()
         .collect()
+}
+
+fn ensure_current_application_refs(
+    refs: &[HandleRef],
+    registry: &RegistryState,
+) -> Result<(), ContractError> {
+    for r in refs {
+        if let HandleRef::Application(a) = r {
+            registry::ensure_current_program_id(registry, *a)?;
+        }
+    }
+    Ok(())
 }

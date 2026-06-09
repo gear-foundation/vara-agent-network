@@ -6,7 +6,7 @@
 
 use crate::admin::AdminState;
 use crate::guards;
-use crate::registry::RegistryState;
+use crate::registry::{self, RegistryState};
 use crate::types::*;
 use sails_rs::cell::RefCell;
 use sails_rs::collections::BTreeMap;
@@ -111,7 +111,12 @@ impl<'a> ReviewService<'a> {
         let season_id = self.current_season;
         {
             let mut review = self.review.borrow_mut();
-            if review.reviewers.get(&(season_id, reviewer)).copied().unwrap_or(false) {
+            if review
+                .reviewers
+                .get(&(season_id, reviewer))
+                .copied()
+                .unwrap_or(false)
+            {
                 return Err(ContractError::AlreadyRegistered);
             }
             review.reviewers.insert((season_id, reviewer), true);
@@ -133,7 +138,12 @@ impl<'a> ReviewService<'a> {
         let season_id = self.current_season;
         {
             let mut review = self.review.borrow_mut();
-            if !review.reviewers.get(&(season_id, reviewer)).copied().unwrap_or(false) {
+            if !review
+                .reviewers
+                .get(&(season_id, reviewer))
+                .copied()
+                .unwrap_or(false)
+            {
                 return Err(ContractError::UnknownReviewer);
             }
             review.reviewers.insert((season_id, reviewer), false);
@@ -186,6 +196,7 @@ impl<'a> ReviewService<'a> {
         let season_id = self.current_season;
         let owner = {
             let reg = self.registry.borrow();
+            registry::ensure_current_program_id(&reg, program_id)?;
             let app = reg
                 .applications
                 .get(&program_id)
@@ -233,8 +244,12 @@ impl<'a> ReviewService<'a> {
         expected_revision: u32,
         body: String,
     ) -> Result<(), ContractError> {
-        let (author, ts, season_id) =
-            self.post_comment(program_id, expected_revision, &body, ReviewAuthorRole::Reviewer)?;
+        let (author, ts, season_id) = self.post_comment(
+            program_id,
+            expected_revision,
+            &body,
+            ReviewAuthorRole::Reviewer,
+        )?;
         self.emit_event(ReviewEvent::ReviewCommentPosted {
             program_id,
             revision: expected_revision,
@@ -255,8 +270,12 @@ impl<'a> ReviewService<'a> {
         expected_revision: u32,
         body: String,
     ) -> Result<(), ContractError> {
-        let (author, ts, season_id) =
-            self.post_comment(program_id, expected_revision, &body, ReviewAuthorRole::Owner)?;
+        let (author, ts, season_id) = self.post_comment(
+            program_id,
+            expected_revision,
+            &body,
+            ReviewAuthorRole::Owner,
+        )?;
         self.emit_event(ReviewEvent::ReviewCommentPosted {
             program_id,
             revision: expected_revision,
@@ -355,6 +374,7 @@ impl<'a> ReviewService<'a> {
         let season_id = self.current_season;
         {
             let reg = self.registry.borrow();
+            registry::ensure_current_program_id(&reg, program_id)?;
             let app = reg
                 .applications
                 .get(&program_id)
@@ -419,6 +439,7 @@ impl<'a> ReviewService<'a> {
         let season_id = self.current_season;
         let (old_status, new_status) = {
             let mut reg = self.registry.borrow_mut();
+            registry::ensure_current_program_id(&reg, program_id)?;
             let mut review = self.review.borrow_mut();
             ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
             if !is_active_reviewer(&review, season_id, caller) {
@@ -440,24 +461,9 @@ impl<'a> ReviewService<'a> {
 }
 
 pub fn init_application(review: &mut ReviewState, program_id: ActorId) {
-    review.summaries.insert(
-        program_id,
-        ReviewSummary {
-            program_id,
-            pending_submission_revision: Some(1),
-            submission_revision: None,
-            display_revision: Some(1),
-            active_request_revision: None,
-            active_request_acknowledged: false,
-            latest_verdict: None,
-            latest_reviewer: None,
-            latest_reason: None,
-            current_revision_comment_count: 0,
-            total_comment_count: 0,
-            manual_override: false,
-            deleted: false,
-        },
-    );
+    review
+        .summaries
+        .insert(program_id, initial_summary(program_id));
 }
 
 pub fn delete_application(review: &mut ReviewState, program_id: ActorId) {
@@ -469,6 +475,57 @@ pub fn delete_application(review: &mut ReviewState, program_id: ActorId) {
     review
         .decisions
         .retain(|(decision_program_id, _), _| *decision_program_id != program_id);
+}
+
+pub fn replace_application_program(
+    review: &mut ReviewState,
+    old_program_id: ActorId,
+    new_program_id: ActorId,
+) -> ReviewSummary {
+    let mut summary = review
+        .summaries
+        .remove(&old_program_id)
+        .unwrap_or_else(|| initial_summary(old_program_id));
+    summary.program_id = new_program_id;
+    review.summaries.insert(new_program_id, summary.clone());
+
+    let decisions: Vec<((ActorId, u32), bool)> = review
+        .decisions
+        .iter()
+        .filter_map(|((program_id, revision), decided)| {
+            if *program_id == old_program_id {
+                Some(((new_program_id, *revision), *decided))
+            } else {
+                None
+            }
+        })
+        .collect();
+    review
+        .decisions
+        .retain(|(program_id, _), _| *program_id != old_program_id);
+    for (key, value) in decisions {
+        review.decisions.insert(key, value);
+    }
+
+    summary
+}
+
+fn initial_summary(program_id: ActorId) -> ReviewSummary {
+    ReviewSummary {
+        program_id,
+        pending_submission_revision: Some(1),
+        submission_revision: None,
+        display_revision: Some(1),
+        active_request_revision: None,
+        active_request_acknowledged: false,
+        latest_verdict: None,
+        latest_reviewer: None,
+        latest_reason: None,
+        current_revision_comment_count: 0,
+        total_comment_count: 0,
+        manual_override: false,
+        deleted: false,
+    }
 }
 
 pub fn manual_status_override(
@@ -584,7 +641,9 @@ fn decide_application(
         ReviewVerdict::RevisionRequested => AppStatus::Building,
     };
     app.status = new_status;
-    review.decisions.insert((program_id, expected_revision), true);
+    review
+        .decisions
+        .insert((program_id, expected_revision), true);
 
     summary.latest_verdict = Some(verdict);
     summary.latest_reviewer = Some(reviewer);
@@ -617,7 +676,11 @@ fn ensure_rate_limit(
 }
 
 fn is_active_reviewer(review: &ReviewState, season_id: u32, reviewer: ActorId) -> bool {
-    review.reviewers.get(&(season_id, reviewer)).copied().unwrap_or(false)
+    review
+        .reviewers
+        .get(&(season_id, reviewer))
+        .copied()
+        .unwrap_or(false)
 }
 
 fn ensure_summary(review: &mut ReviewState, program_id: ActorId) -> &mut ReviewSummary {
@@ -672,7 +735,9 @@ mod tests {
         let program_id = ActorId::from(200u64);
         let owner = ActorId::from(101u64);
         let mut registry = RegistryState::default();
-        registry.applications.insert(program_id, app(program_id, owner));
+        registry
+            .applications
+            .insert(program_id, app(program_id, owner));
         let mut review = ReviewState::default();
 
         let (submitted_owner, revision, snapshot) =

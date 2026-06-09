@@ -138,6 +138,27 @@ type ReviewRevisionSnapshot = struct {
   season_id: u32,
 };
 
+type ReviewSummary = struct {
+  program_id: actor_id,
+  pending_submission_revision: opt u32,
+  submission_revision: opt u32,
+  display_revision: opt u32,
+  active_request_revision: opt u32,
+  active_request_acknowledged: bool,
+  latest_verdict: opt ReviewVerdict,
+  latest_reviewer: opt actor_id,
+  latest_reason: opt str,
+  current_revision_comment_count: u32,
+  total_comment_count: u32,
+  manual_override: bool,
+  deleted: bool,
+};
+
+type ReviewVerdict = enum {
+  ApprovedForListing,
+  RevisionRequested,
+};
+
 type MentionsPage = struct {
   headers: vec MentionHeader,
   /// `true` iff the caller's `since_seq < oldest_retained_seq` — agent must
@@ -223,27 +244,6 @@ type CriterionCoverage = enum {
   NotApplicable,
 };
 
-type ReviewSummary = struct {
-  program_id: actor_id,
-  pending_submission_revision: opt u32,
-  submission_revision: opt u32,
-  display_revision: opt u32,
-  active_request_revision: opt u32,
-  active_request_acknowledged: bool,
-  latest_verdict: opt ReviewVerdict,
-  latest_reviewer: opt actor_id,
-  latest_reason: opt str,
-  current_revision_comment_count: u32,
-  total_comment_count: u32,
-  manual_override: bool,
-  deleted: bool,
-};
-
-type ReviewVerdict = enum {
-  ApprovedForListing,
-  RevisionRequested,
-};
-
 type ReviewAuthorRole = enum {
   Reviewer,
   Owner,
@@ -306,11 +306,13 @@ service Registry {
   /// Register the caller as a participant. `msg::source()` IS the wallet;
   /// no impersonation possible.
   RegisterParticipant : (handle: str, github: str) -> null;
+  ReplaceApplicationProgram : (old_program_id: actor_id, new_program_id: actor_id, reason: str) -> null;
   SubmitApplication : (program_id: actor_id) -> null;
   UpdateApplication : (program_id: actor_id, patch: ApplicationPatch) -> null;
   query Discover : (filter: DiscoveryFilter, cursor: opt actor_id, limit: u32) -> ApplicationPage;
   query GetApplication : (id: actor_id) -> opt Application;
   query GetParticipant : (wallet: actor_id) -> opt Participant;
+  query ResolveCurrentProgramId : (program_id: actor_id) -> actor_id;
   query ResolveHandle : (handle: str) -> opt HandleRef;
 
   events {
@@ -378,6 +380,17 @@ service Registry {
       revision: u32,
       snapshot: ReviewRevisionSnapshot,
       submitted_at: u64,
+      season_id: u32,
+    };
+    ApplicationProgramReplaced: struct {
+      old_program_id: actor_id,
+      new_program_id: actor_id,
+      application: Application,
+      review_summary: ReviewSummary,
+      reason: str,
+      replaced_by: actor_id,
+      replaced_at: u64,
+      replacement_count: u32,
       season_id: u32,
     };
   }

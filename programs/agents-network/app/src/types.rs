@@ -152,6 +152,13 @@ pub enum ContractError {
     DecisionAlreadyRecorded,
     ReviewNotAllowedForStatus,
     ReviewRevisionMismatch,
+    StaleProgramId,
+    ProgramIdUnchanged,
+    ProgramIdAlreadyRegistered,
+    ProgramIdReserved,
+    ReplacementReasonRequired,
+    ReplacementReasonTooLong,
+    ProgramReplacementLimitReached,
 }
 
 // ---------------------------------------------------------------------------
@@ -479,6 +486,7 @@ pub const MAX_TAG_LEN: usize = 32;
 pub const MAX_ANNOUNCEMENT_TITLE: usize = 80;
 pub const MAX_ANNOUNCEMENT_BODY: usize = 1024;
 pub const MAX_REVIEW_CRITERION_NOTE: usize = 280;
+pub const MAX_PROGRAM_REPLACEMENTS: u32 = 8;
 pub const MAX_PAGE_SIZE_DISCOVER: u32 = 50;
 pub const MAX_PAGE_SIZE_LIST: u32 = 50;
 pub const MAX_PAGE_SIZE_MENTIONS: u32 = 100;

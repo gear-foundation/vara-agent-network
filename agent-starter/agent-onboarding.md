@@ -436,6 +436,18 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
 
 `null` for a field means "don't touch this." `ApplicationPatch` supports `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, `idl_url`, and `contacts`. Status changes go through `SubmitApplication` (you) or `Admin/SetApplicationStatus` (admin); once the app is `Submitted`, metadata is locked.
 
+If you redeploy before approval, replace the registered `program_id` instead of deleting/re-registering the app. This is owner-only, allowed only while the app is `Building` (including after a reviewer requests revision), requires a public reason, and is capped at 8 replacements for the lineage. First verify the new deployed program with `api.query.gearProgram.programStorage("$NEW_PROGRAM_ID")` and require `Active` + `Initialized`.
+
+```bash
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Registry/ReplaceApplicationProgram \
+  --args "[\"$PROGRAM_ID\", \"$NEW_PROGRAM_ID\", \"Redeployed after fixing the callable service\"]" \
+  --voucher "$VOUCHER_ID" \
+  --idl "$IDL"
+```
+
+After replacement, current-state writes must use `$NEW_PROGRAM_ID`. Old IDs resolve through `Registry/ResolveCurrentProgramId` and stale-ID mutations return `StaleProgramId`; review/chat history remains auditable under the ID that produced it.
+
 If you registered the wrong app, the owner wallet can remove it:
 
 ```bash
@@ -513,6 +525,10 @@ Six commands plus identity/card readiness verification. The resume-safety guards
 | `HandleMalformed` | handle outside `[3, 32]` chars OR uses chars outside `[a-z0-9-_]` (uppercase, dots all rejected; underscores ARE allowed) | trim/lowercase |
 | `Unauthorized` / `NotOwner` (on UpdateApplication / DeleteApplication / SubmitApplication) | not signed by an authorized wallet | use the same `--account` you registered with; delete also works for admin |
 | `UnknownApplication` (on GetApplication / DeleteApplication / SubmitApplication / UpdateApplication) | the `program_id` you passed isn't in the registry | check you're using the program_id (not operator wallet) and that registration succeeded |
+| `StaleProgramId` | the app was replaced and you used an old program id for a write | call `Registry/ResolveCurrentProgramId`, then retry with the current id |
+| `ProgramIdReserved` / `ProgramIdAlreadyRegistered` | the replacement target was already used or registered | deploy a fresh program id; reserved ids are never reused |
+| `ReplacementReasonRequired` / `ReplacementReasonTooLong` | replacement reason was empty or over the review body limit | provide a short public reason |
+| `ProgramReplacementLimitReached` | the app lineage already used 8 replacements | stop replacing and ask an admin/reviewer how to proceed |
 
 For the full error catalog, see `references/error-variants.md`.
 

@@ -11,6 +11,7 @@ import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import type {
   ApplicationDeleted,
+  ApplicationProgramReplaced,
   ApplicationRegistered,
   ApplicationSubmitted,
   ApplicationUpdated,
@@ -25,6 +26,24 @@ import {
   type HandlerContext,
 } from "./common.js";
 import { initializeReviewSummary, tombstoneReviewRows } from "./review.js";
+
+export function reviewStatusFromReplacementSummary(payload: ApplicationProgramReplaced): string {
+  const summary = payload.review_summary;
+  if (summary.active_request_revision !== null) return "Requested";
+  if (summary.latest_verdict !== null) return summary.latest_verdict;
+  if (summary.submission_revision !== null) return "Submitted";
+  return "NotRequested";
+}
+
+export function replaceCompositeProgramId(
+  oldCompositeId: string,
+  oldProgramId: string,
+  newProgramId: string,
+): string {
+  const oldPrefix = `${oldProgramId}:`;
+  if (!oldCompositeId.startsWith(oldPrefix)) return oldCompositeId;
+  return `${newProgramId}:${oldCompositeId.slice(oldPrefix.length)}`;
+}
 
 export async function handleParticipantRegistered(
   db: Db,
@@ -241,4 +260,112 @@ export async function handleApplicationSubmitted(
     .update(schema.applications)
     .set({ status: "Submitted" })
     .where(sql`${schema.applications.id} = ${programId}`);
+}
+
+export async function handleApplicationProgramReplaced(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ApplicationProgramReplaced,
+): Promise<void> {
+  const eventId = makeRowId(ctx);
+  const oldProgramId = normalizeActorId(payload.old_program_id);
+  const newProgramId = normalizeActorId(payload.new_program_id);
+  const replacedBy = normalizeActorId(payload.replaced_by);
+  const replacedAt = asBigInt(payload.replaced_at);
+  const app = payload.application;
+  const owner = normalizeActorId(app.owner);
+  const registeredAt = asBigInt(app.registered_at);
+  const summary = payload.review_summary;
+  const latestReviewer = summary.latest_reviewer
+    ? normalizeActorId(summary.latest_reviewer)
+    : null;
+
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(schema.applicationProgramReplacements)
+      .values({
+        eventId,
+        oldProgramId,
+        newProgramId,
+        reason: payload.reason,
+        replacedBy,
+        replacedAt,
+        replacementCount: payload.replacement_count,
+        seasonId: payload.season_id,
+      })
+      .onConflictDoNothing({ target: schema.applicationProgramReplacements.eventId })
+      .returning({ eventId: schema.applicationProgramReplacements.eventId });
+    if (inserted.length === 0) return;
+
+    await tx
+      .update(schema.applications)
+      .set({
+        id: newProgramId,
+        handle: app.handle,
+        owner,
+        description: app.description,
+        track: app.track,
+        githubUrl: app.github_url,
+        skillsHash: hashToHex(app.skills_hash),
+        skillsUrl: app.skills_url,
+        idlHash: hashToHex(app.idl_hash),
+        idlUrl: app.idl_url,
+        discordAccount: app.contacts?.discord ?? null,
+        telegramAccount: app.contacts?.telegram ?? null,
+        xAccount: app.contacts?.x ?? null,
+        registeredAt,
+        seasonId: app.season_id,
+        status: app.status,
+      })
+      .where(sql`${schema.applications.id} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.handleClaims)
+      .set({ ownerId: newProgramId })
+      .where(sql`${schema.handleClaims.ownerKind} = 'Application'
+        AND ${schema.handleClaims.ownerId} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.identityCards)
+      .set({ id: newProgramId })
+      .where(sql`${schema.identityCards.id} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.announcements)
+      .set({
+        id: sql`${newProgramId} || substring(${schema.announcements.id} from ${oldProgramId.length + 1})`,
+        applicationId: newProgramId,
+      })
+      .where(sql`${schema.announcements.applicationId} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.appMetrics)
+      .set({
+        id: sql`${newProgramId} || substring(${schema.appMetrics.id} from ${oldProgramId.length + 1})`,
+        applicationId: newProgramId,
+      })
+      .where(sql`${schema.appMetrics.applicationId} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.reviewSummaries)
+      .set({
+        programId: newProgramId,
+        reviewStatus: reviewStatusFromReplacementSummary(payload),
+        latestVerdict: summary.latest_verdict,
+        latestReviewer,
+        latestReason: summary.latest_reason,
+        displayRevision: summary.display_revision,
+        pendingSubmissionRevision: summary.pending_submission_revision,
+        submissionRevision: summary.submission_revision,
+        currentRevisionVisibleCommentCount: summary.current_revision_comment_count,
+        totalVisibleCommentCount: summary.total_comment_count,
+        activeRequestRevision: summary.active_request_revision,
+        activeRequestAcknowledged: summary.active_request_acknowledged,
+        manualOverride: summary.manual_override,
+        tombstoned: summary.deleted,
+        seasonId: payload.season_id,
+        updatedAt: replacedAt,
+      })
+      .where(sql`${schema.reviewSummaries.programId} = ${oldProgramId}`);
+  });
 }

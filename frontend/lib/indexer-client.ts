@@ -156,6 +156,17 @@ type AnnouncementRow = {
   archived: boolean
 }
 
+type ApplicationProgramReplacementRow = {
+  eventId: string
+  oldProgramId: string
+  newProgramId: string
+  reason: string
+  replacedBy: string
+  replacedAt: string
+  replacementCount: number
+  seasonId: number
+}
+
 export type DashboardSnapshot = {
   latestNetworkMetric: NetworkMetricRow | null
   participantCount: number
@@ -328,10 +339,24 @@ export type ApplicationReviewEvent =
       at: string
     }
 
+export type ApplicationProgramReplacement = {
+  eventId: string
+  oldProgramId: string
+  newProgramId: string
+  reason: string
+  replacedBy: string
+  replacedAt: string
+  replacementCount: number
+  seasonId: number
+}
+
 export type ApplicationReviewDetail = {
   application: RegistryAgent | null
   summary: ReviewSummary | null
   events: ApplicationReviewEvent[]
+  replacements: ApplicationProgramReplacement[]
+  requestedProgramId: string
+  currentProgramId: string
 }
 
 export type MentionTarget = {
@@ -830,6 +855,85 @@ ${REVIEW_SUMMARY_FIELDS}
   }
 `
 
+const APPLICATION_REPLACEMENT_BY_OLD_QUERY = `
+  query ApplicationReplacementByOld($programId: String!) {
+    applicationProgramReplacements: allApplicationProgramReplacements(first: 1, orderBy: REPLACED_AT_ASC, condition: { oldProgramId: $programId }) {
+      nodes {
+        eventId
+        oldProgramId
+        newProgramId
+        reason
+        replacedBy
+        replacedAt
+        replacementCount
+        seasonId
+      }
+    }
+  }
+`
+
+const APPLICATION_REPLACEMENTS_BY_NEW_QUERY = `
+  query ApplicationReplacementsByNew($programId: String!) {
+    applicationProgramReplacements: allApplicationProgramReplacements(first: 50, orderBy: REPLACED_AT_ASC, condition: { newProgramId: $programId }) {
+      nodes {
+        eventId
+        oldProgramId
+        newProgramId
+        reason
+        replacedBy
+        replacedAt
+        replacementCount
+        seasonId
+      }
+    }
+  }
+`
+
+const APPLICATION_REVIEW_HISTORY_QUERY = `
+  query ApplicationReviewHistory($programId: String!) {
+    reviewRequests: allReviewRequests(first: 100, orderBy: REQUESTED_AT_ASC, condition: { programId: $programId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        programId
+        owner
+        revision
+        reason
+        requestedAt
+        acknowledged
+        hidden
+        tombstoned
+      }
+    }
+    reviewComments: allReviewComments(first: 250, orderBy: TS_ASC, condition: { programId: $programId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        programId
+        revision
+        author
+        authorRole
+        body
+        ts
+        hidden
+        tombstoned
+      }
+    }
+    reviewDecisions: allReviewDecisions(first: 100, orderBy: DECIDED_AT_ASC, condition: { programId: $programId, tombstoned: false }) {
+      nodes {
+        eventId
+        programId
+        revision
+        reviewer
+        verdict
+        reason
+        oldStatus
+        newStatus
+        decidedAt
+        tombstoned
+      }
+    }
+  }
+`
+
 type RegistryQueryResult = {
   applications: Connection<ApplicationRow & { owner: string }>
   appMetrics: Connection<AppMetricRow>
@@ -897,6 +1001,17 @@ type ApplicationReviewDetailQueryResult = {
   reviewComments: Connection<ReviewCommentRow>
   reviewDecisions: Connection<ReviewDecisionRow>
 }
+
+type ApplicationReplacementsQueryResult = {
+  applicationProgramReplacements: Connection<ApplicationProgramReplacementRow>
+}
+
+type ApplicationReviewHistoryQueryResult = Pick<
+  ApplicationReviewDetailQueryResult,
+  'reviewRequests' | 'reviewComments' | 'reviewDecisions'
+>
+
+const MAX_APPLICATION_REPLACEMENT_DEPTH = 8
 
 function titleizeHandle(handle: string) {
   return handle
@@ -1544,19 +1659,8 @@ function toRegistryAgent(
   }
 }
 
-export async function getApplicationReviewDetail(programId: string): Promise<ApplicationReviewDetail> {
-  const data = await fetchIndexerGraphql<ApplicationReviewDetailQueryResult>(
-    APPLICATION_REVIEW_DETAIL_QUERY,
-    { programId: programId.toLowerCase() },
-  )
-  if (!data) return { application: null, summary: null, events: [] }
-
-  const app = data.applications.nodes[0] ?? null
-  const summary = toReviewSummary(data.reviewSummaries.nodes[0])
-  const metric = data.appMetrics.nodes[0] ?? null
-  const application = app ? toRegistryAgent(app, metric, summary) : null
-
-  const events: ApplicationReviewEvent[] = [
+function reviewEventsFromData(data: ApplicationReviewHistoryQueryResult): ApplicationReviewEvent[] {
+  return [
     ...data.reviewRequests.nodes.map((item) => ({
       id: item.eventId,
       kind: 'request' as const,
@@ -1587,11 +1691,114 @@ export async function getApplicationReviewDetail(programId: string): Promise<App
       at: item.decidedAt,
     })),
   ]
+}
+
+function normalizeReplacementRow(row: ApplicationProgramReplacementRow): ApplicationProgramReplacement {
+  return {
+    ...row,
+    oldProgramId: row.oldProgramId.toLowerCase(),
+    newProgramId: row.newProgramId.toLowerCase(),
+    replacedBy: row.replacedBy.toLowerCase(),
+  }
+}
+
+async function fetchReplacementByOldProgramId(programId: string) {
+  const data = await fetchIndexerGraphql<ApplicationReplacementsQueryResult>(
+    APPLICATION_REPLACEMENT_BY_OLD_QUERY,
+    { programId: programId.toLowerCase() },
+  )
+  const row = data?.applicationProgramReplacements.nodes[0]
+  return row ? normalizeReplacementRow(row) : null
+}
+
+async function fetchReplacementsByNewProgramId(programId: string) {
+  const data = await fetchIndexerGraphql<ApplicationReplacementsQueryResult>(
+    APPLICATION_REPLACEMENTS_BY_NEW_QUERY,
+    { programId: programId.toLowerCase() },
+  )
+  return (data?.applicationProgramReplacements.nodes ?? []).map(normalizeReplacementRow)
+}
+
+async function resolveCurrentProgramIdFromIndexer(programId: string) {
+  const replacements: ApplicationProgramReplacement[] = []
+  let current = programId.toLowerCase()
+  for (let i = 0; i < MAX_APPLICATION_REPLACEMENT_DEPTH; i += 1) {
+    const replacement = await fetchReplacementByOldProgramId(current)
+    if (!replacement || replacement.newProgramId === current) break
+    replacements.push(replacement)
+    current = replacement.newProgramId
+  }
+  return { currentProgramId: current, replacements }
+}
+
+async function collectLineageReplacements(currentProgramId: string, seed: ApplicationProgramReplacement[]) {
+  const replacementsByEventId = new Map(seed.map((row) => [row.eventId, row]))
+  const lineage = new Set<string>([currentProgramId.toLowerCase()])
+  const queue = [currentProgramId.toLowerCase()]
+
+  while (queue.length > 0) {
+    const next = queue.shift()
+    if (!next) break
+    const inbound = await fetchReplacementsByNewProgramId(next)
+    for (const replacement of inbound) {
+      replacementsByEventId.set(replacement.eventId, replacement)
+      if (!lineage.has(replacement.oldProgramId)) {
+        lineage.add(replacement.oldProgramId)
+        queue.push(replacement.oldProgramId)
+      }
+      lineage.add(replacement.newProgramId)
+    }
+  }
+
+  return {
+    lineage: [...lineage],
+    replacements: [...replacementsByEventId.values()].sort(
+      (a, b) => Number(a.replacedAt) - Number(b.replacedAt),
+    ),
+  }
+}
+
+export async function getApplicationReviewDetail(programId: string): Promise<ApplicationReviewDetail> {
+  const requestedProgramId = programId.toLowerCase()
+  const resolved = await resolveCurrentProgramIdFromIndexer(requestedProgramId)
+  const currentProgramId = resolved.currentProgramId
+  const { lineage, replacements } = await collectLineageReplacements(
+    currentProgramId,
+    resolved.replacements,
+  )
+
+  const data = await fetchIndexerGraphql<ApplicationReviewDetailQueryResult>(
+    APPLICATION_REVIEW_DETAIL_QUERY,
+    { programId: currentProgramId },
+  )
+  if (!data) {
+    return { application: null, summary: null, events: [], replacements, requestedProgramId, currentProgramId }
+  }
+
+  const app = data.applications.nodes[0] ?? null
+  const summary = toReviewSummary(data.reviewSummaries.nodes[0])
+  const metric = data.appMetrics.nodes[0] ?? null
+  const application = app ? toRegistryAgent(app, metric, summary) : null
+
+  const historyResults = await Promise.all(
+    lineage.map((lineageProgramId) =>
+      fetchIndexerGraphql<ApplicationReviewHistoryQueryResult>(
+        APPLICATION_REVIEW_HISTORY_QUERY,
+        { programId: lineageProgramId },
+      ),
+    ),
+  )
+  const events = historyResults
+    .filter((item): item is ApplicationReviewHistoryQueryResult => Boolean(item))
+    .flatMap(reviewEventsFromData)
 
   return {
     application,
     summary,
     events: events.sort((a, b) => Number(a.at) - Number(b.at)),
+    replacements,
+    requestedProgramId,
+    currentProgramId,
   }
 }
 

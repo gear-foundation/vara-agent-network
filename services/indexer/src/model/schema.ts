@@ -95,6 +95,25 @@ export const applications = pgTable(
   }),
 );
 
+export const applicationProgramReplacements = pgTable(
+  "application_program_replacements",
+  {
+    eventId: text("event_id").primaryKey(),
+    oldProgramId: text("old_program_id").notNull(),
+    newProgramId: text("new_program_id").notNull(),
+    reason: text("reason").notNull(),
+    replacedBy: text("replaced_by").notNull(),
+    replacedAt: bigint("replaced_at", { mode: "bigint" }).notNull(),
+    replacementCount: integer("replacement_count").notNull(),
+    seasonId: integer("season_id").notNull(),
+  },
+  (t) => ({
+    oldProgramIdx: index("app_program_replacements_old_idx").on(t.oldProgramId),
+    newProgramIdx: index("app_program_replacements_new_idx").on(t.newProgramId),
+    seasonIdx: index("app_program_replacements_season_idx").on(t.seasonId),
+  }),
+);
+
 export const reviewers = pgTable(
   "reviewers",
   {

@@ -211,6 +211,12 @@ pub mod registry {
             handle: String,
             github: String,
         ) -> sails_rs::client::PendingCall<io::RegisterParticipant, Self::Env>;
+        fn replace_application_program(
+            &mut self,
+            old_program_id: ActorId,
+            new_program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::ReplaceApplicationProgram, Self::Env>;
         fn submit_application(
             &mut self,
             program_id: ActorId,
@@ -234,6 +240,10 @@ pub mod registry {
             &self,
             wallet: ActorId,
         ) -> sails_rs::client::PendingCall<io::GetParticipant, Self::Env>;
+        fn resolve_current_program_id(
+            &self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::ResolveCurrentProgramId, Self::Env>;
         fn resolve_handle(
             &self,
             handle: String,
@@ -260,6 +270,14 @@ pub mod registry {
             github: String,
         ) -> sails_rs::client::PendingCall<io::RegisterParticipant, Self::Env> {
             self.pending_call((handle, github))
+        }
+        fn replace_application_program(
+            &mut self,
+            old_program_id: ActorId,
+            new_program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::ReplaceApplicationProgram, Self::Env> {
+            self.pending_call((old_program_id, new_program_id, reason))
         }
         fn submit_application(
             &mut self,
@@ -294,6 +312,12 @@ pub mod registry {
         ) -> sails_rs::client::PendingCall<io::GetParticipant, Self::Env> {
             self.pending_call((wallet,))
         }
+        fn resolve_current_program_id(
+            &self,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::ResolveCurrentProgramId, Self::Env> {
+            self.pending_call((program_id,))
+        }
         fn resolve_handle(
             &self,
             handle: String,
@@ -307,11 +331,13 @@ pub mod registry {
         sails_rs::io_struct_impl!(DeleteApplication (program_id: ActorId) -> ());
         sails_rs::io_struct_impl!(RegisterApplication (req: super::RegisterAppReq) -> ());
         sails_rs::io_struct_impl!(RegisterParticipant (handle: String, github: String) -> ());
+        sails_rs::io_struct_impl!(ReplaceApplicationProgram (old_program_id: ActorId, new_program_id: ActorId, reason: String) -> ());
         sails_rs::io_struct_impl!(SubmitApplication (program_id: ActorId) -> ());
         sails_rs::io_struct_impl!(UpdateApplication (program_id: ActorId, patch: super::ApplicationPatch) -> ());
         sails_rs::io_struct_impl!(Discover (filter: super::DiscoveryFilter, cursor: Option<ActorId>, limit: u32) -> super::ApplicationPage);
         sails_rs::io_struct_impl!(GetApplication (id: ActorId) -> Option<super::Application>);
         sails_rs::io_struct_impl!(GetParticipant (wallet: ActorId) -> Option<super::Participant>);
+        sails_rs::io_struct_impl!(ResolveCurrentProgramId (program_id: ActorId) -> ActorId);
         sails_rs::io_struct_impl!(ResolveHandle (handle: String) -> Option<super::HandleRef>);
     }
 
@@ -387,6 +413,17 @@ pub mod registry {
                 submitted_at: u64,
                 season_id: u32,
             },
+            ApplicationProgramReplaced {
+                old_program_id: ActorId,
+                new_program_id: ActorId,
+                application: Application,
+                review_summary: ReviewSummary,
+                reason: String,
+                replaced_by: ActorId,
+                replaced_at: u64,
+                replacement_count: u32,
+                season_id: u32,
+            },
         }
         impl sails_rs::client::Event for RegistryEvents {
             const EVENT_NAMES: &'static [Route] = &[
@@ -396,6 +433,7 @@ pub mod registry {
                 "ApplicationDeleted",
                 "ApplicationSubmitted",
                 "ReviewRevisionSubmitted",
+                "ApplicationProgramReplaced",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for RegistryImpl {
@@ -1015,6 +1053,31 @@ pub struct ReviewRevisionSnapshot {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub struct ReviewSummary {
+    pub program_id: ActorId,
+    pub pending_submission_revision: Option<u32>,
+    pub submission_revision: Option<u32>,
+    pub display_revision: Option<u32>,
+    pub active_request_revision: Option<u32>,
+    pub active_request_acknowledged: bool,
+    pub latest_verdict: Option<ReviewVerdict>,
+    pub latest_reviewer: Option<ActorId>,
+    pub latest_reason: Option<String>,
+    pub current_revision_comment_count: u32,
+    pub total_comment_count: u32,
+    pub manual_override: bool,
+    pub deleted: bool,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ReviewVerdict {
+    ApprovedForListing,
+    RevisionRequested,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub struct MentionsPage {
     pub headers: Vec<MentionHeader>,
     /// `true` iff the caller's `since_seq < oldest_retained_seq` — agent must
@@ -1120,31 +1183,6 @@ pub enum CriterionCoverage {
     Partial,
     Met,
     NotApplicable,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct ReviewSummary {
-    pub program_id: ActorId,
-    pub pending_submission_revision: Option<u32>,
-    pub submission_revision: Option<u32>,
-    pub display_revision: Option<u32>,
-    pub active_request_revision: Option<u32>,
-    pub active_request_acknowledged: bool,
-    pub latest_verdict: Option<ReviewVerdict>,
-    pub latest_reviewer: Option<ActorId>,
-    pub latest_reason: Option<String>,
-    pub current_revision_comment_count: u32,
-    pub total_comment_count: u32,
-    pub manual_override: bool,
-    pub deleted: bool,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum ReviewVerdict {
-    ApprovedForListing,
-    RevisionRequested,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]

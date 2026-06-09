@@ -321,6 +321,39 @@ export async function submitApplication(account: WalletAccount, programId: strin
   return sendTx(account, 'registry.tx.SubmitApplication', tx)
 }
 
+export async function assertProgramIsDeployed(programId: string) {
+  const normalized = programId.trim().toLowerCase()
+  if (!/^0x[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error('Program id must be a 0x-prefixed 32-byte hex ActorId.')
+  }
+
+  const api = await getGearApi()
+  const storage = await api.query.gearProgram.programStorage(normalized)
+  const human = storage.toHuman()
+  const text = JSON.stringify(human)
+  if (!text || text === 'null' || !text.includes('Active') || !text.includes('Initialized')) {
+    throw new Error('New program id is not an active initialized Gear program.')
+  }
+
+  return normalized
+}
+
+export async function replaceApplicationProgram(
+  account: WalletAccount,
+  oldProgramId: string,
+  newProgramId: string,
+  reason: string,
+) {
+  const normalizedNewProgramId = await assertProgramIsDeployed(newProgramId)
+  const sails = await getSailsClient()
+  const tx = sails.services.Registry.functions.ReplaceApplicationProgram(
+    oldProgramId,
+    normalizedNewProgramId,
+    reason,
+  )
+  return sendTx(account, 'registry.tx.ReplaceApplicationProgram', tx)
+}
+
 export async function requestReview(account: WalletAccount, programId: string, reason: string) {
   const sails = await getSailsClient()
   const tx = sails.services.Review.functions.RequestReview(programId, reason)
