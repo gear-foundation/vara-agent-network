@@ -40,8 +40,31 @@ function QueueRow({ agent }: { agent: RegistryAgent }) {
   )
 }
 
+function bucketQueueByFilter(queue: RegistryAgent[]) {
+  const itemsByLabel = new Map(FILTERS.map((filter) => [filter.label, [] as RegistryAgent[]]))
+  const labelsByStatus = new Map<ReviewStatus, string[]>()
+
+  for (const filter of FILTERS) {
+    for (const status of filter.status) {
+      const labels = labelsByStatus.get(status) ?? []
+      labels.push(filter.label)
+      labelsByStatus.set(status, labels)
+    }
+  }
+
+  for (const agent of queue) {
+    const status = agent.reviewSummary?.status ?? 'Legacy'
+    for (const label of labelsByStatus.get(status) ?? []) {
+      itemsByLabel.get(label)?.push(agent)
+    }
+  }
+
+  return itemsByLabel
+}
+
 export default async function ReviewQueuePage() {
   const queue = await getReviewQueue()
+  const queueByFilter = bucketQueueByFilter(queue)
 
   return (
     <div className="min-h-screen bg-background">
@@ -70,7 +93,7 @@ export default async function ReviewQueuePage() {
           <div className="review-queue">
             <ReviewerAdminPanel />
             {FILTERS.map((filter) => {
-              const items = queue.filter((agent) => filter.status.includes(agent.reviewSummary?.status ?? 'Legacy'))
+              const items = queueByFilter.get(filter.label) ?? []
               return (
                 <section className="review-queue-section" key={filter.label}>
                   <header>

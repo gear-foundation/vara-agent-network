@@ -275,12 +275,12 @@ export async function createProcessor(hooks: ProcessorHooks) {
         }),
       );
 
+      let lastProcessedInBatch: number | null = null;
       for (const result of fetched) {
         if ("error" in result) {
           if (isPrunedBlockError(result.error)) {
             log.warn("skipping pruned block", { block: result.block });
-            // Skipped blocks still advance the cursor to avoid infinite retry.
-            await updateCursor(result.block);
+            lastProcessedInBatch = result.block;
             continue;
           }
           // Non-pruning error: bail without advancing so the next restart/head
@@ -289,10 +289,13 @@ export async function createProcessor(hooks: ProcessorHooks) {
         }
 
         await applyBlockContext(result.ctx);
-        await updateCursor(result.block);
+        lastProcessedInBatch = result.block;
         if (label === "backfill" && result.block % 50 === 0) {
           log.info("backfill progress", { at: result.block, to });
         }
+      }
+      if (lastProcessedInBatch !== null) {
+        await updateCursor(lastProcessedInBatch);
       }
     }
   }

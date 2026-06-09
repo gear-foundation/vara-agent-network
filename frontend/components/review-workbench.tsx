@@ -104,8 +104,10 @@ export function ReviewWorkbench({
   const summary = detail.summary ?? app?.reviewSummary ?? null
   const displayRevision = summary?.displayRevision ?? 1
   const isOwner = state.kind === 'connected_registered' && app?.owner?.toLowerCase() === state.ownerActorId.toLowerCase()
-  const grouped = useMemo(() => groupByRevision(detail.events), [detail.events])
-  const revisionGroups = [...grouped.entries()].sort(([a], [b]) => b - a)
+  const revisionGroups = useMemo(
+    () => [...groupByRevision(detail.events).entries()].sort(([a], [b]) => b - a),
+    [detail.events],
+  )
   const decisionCriteria = useMemo(() => buildCriteria(criteriaDraft), [criteriaDraft])
 
   function updateCriterion(key: CriteriaKey, patch: Partial<CriteriaDraft[CriteriaKey]>) {

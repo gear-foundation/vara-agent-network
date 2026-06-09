@@ -887,6 +887,8 @@ type TopApplicationsInteractionsQueryResult = {
   interactions: Connection<Pick<InteractionRow, 'id' | 'caller' | 'callerKind' | 'callee' | 'origin' | 'substrateBlockTs'>>
 }
 
+type TopApplicationInteractionRow = TopApplicationsInteractionsQueryResult['interactions']['nodes'][number]
+
 type ApplicationReviewDetailQueryResult = {
   applications: Connection<ApplicationRow & { owner: string }>
   appMetrics: Connection<AppMetricRow>
@@ -1181,7 +1183,6 @@ export async function getIntegratorLeaderboard(): Promise<IntegratorLeaderboardE
 export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[]> {
   const data = await fetchIndexerGraphql<TopApplicationsLiveQueryResult>(TOP_APPLICATIONS_LIVE_QUERY)
   if (!data) return []
-  const interactions = await fetchAllTopApplicationInteractions()
 
   const metricByApp = new Map(
     data.appMetrics.nodes.map((metric) => [metric.applicationId.toLowerCase(), metric]),
@@ -1220,16 +1221,16 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
     return stats
   }
 
-  for (const interaction of interactions) {
+  const processInteraction = (interaction: TopApplicationInteractionRow) => {
     const callee = interaction.callee.toLowerCase()
     const caller = interaction.caller.toLowerCase()
-    if (!applicationIds.has(callee)) continue
-    if (applicationIds.has(caller)) continue
-    if (interaction.origin && interaction.origin !== 'wallet_initiated') continue
-    if (interaction.callerKind && interaction.callerKind !== 'Wallet') continue
+    if (!applicationIds.has(callee)) return
+    if (applicationIds.has(caller)) return
+    if (interaction.origin && interaction.origin !== 'wallet_initiated') return
+    if (interaction.callerKind && interaction.callerKind !== 'Wallet') return
 
     const ts = Number(interaction.substrateBlockTs)
-    if (!Number.isFinite(ts) || ts <= 0) continue
+    if (!Number.isFinite(ts) || ts <= 0) return
 
     const date = utcDateKey(ts)
     const stats = ensureStats(callee)
@@ -1245,6 +1246,11 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
     stats.lastActiveAt = Math.max(stats.lastActiveAt ?? 0, ts)
     stats.walletActions += 1
   }
+  await visitTopApplicationInteractionPages((interactions) => {
+    for (const interaction of interactions) {
+      processInteraction(interaction)
+    }
+  })
 
   return data.applications.nodes
     .map((app) => {
@@ -1297,8 +1303,9 @@ export async function getTopApplicationsLive(): Promise<TopApplicationLiveEntry[
     })
 }
 
-async function fetchAllTopApplicationInteractions(): Promise<TopApplicationsInteractionsQueryResult['interactions']['nodes']> {
-  const allInteractions: TopApplicationsInteractionsQueryResult['interactions']['nodes'] = []
+async function visitTopApplicationInteractionPages(
+  visit: (interactions: TopApplicationInteractionRow[]) => void,
+): Promise<void> {
   let offset = 0
   let totalCount: number | null = null
 
@@ -1313,13 +1320,11 @@ async function fetchAllTopApplicationInteractions(): Promise<TopApplicationsInte
     const page = data?.interactions
     if (!page) break
 
-    allInteractions.push(...page.nodes)
+    visit(page.nodes)
     totalCount = page.totalCount
     if (page.nodes.length === 0) break
     offset += page.nodes.length
   }
-
-  return allInteractions
 }
 
 export function getIntegratorLeaderboardScore(
