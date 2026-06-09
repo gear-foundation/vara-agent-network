@@ -7,8 +7,8 @@ const LABELS: Record<ReviewStatus, string> = {
   Requested: 'Requested',
   Commented: 'Commented',
   Submitted: 'Submitted',
-  RevisionRequested: 'RevisionRequested',
-  ApprovedForListing: 'ApprovedForListing',
+  RevisionRequested: 'Revision requested',
+  ApprovedForListing: 'Approved for listing',
   ManualOverride: 'Manual override',
   Syncing: 'Syncing',
 }
