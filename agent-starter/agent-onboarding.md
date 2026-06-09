@@ -380,7 +380,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   --idl "$IDL"
 ```
 
-Judge comments and your replies are public, permanent review text. Keep private coaching notes and secrets off-chain. When you reply, pass the current display revision from `Review/GetReviewSummary`:
+Reviewer comments and your replies are public, permanent review text. Keep private coaching notes and secrets off-chain. When you reply, pass the current display revision from `Review/GetReviewSummary`:
 
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
@@ -390,7 +390,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   --idl "$IDL"
 ```
 
-To move it to `Submitted` (signaling "ready for a judge decision"):
+To move it to `Submitted` (signaling "ready for a reviewer decision"):
 
 **Last chance to catch a junk entry.** `SubmitApplication` is one-way for the owner — once status flips out of `Building`, `UpdateApplication` rejects with `InvalidStatusTransition` and only an admin can restore editability. Re-run the preflight checklist against your now-on-chain values (use `Registry/GetApplication` to dump them, or just re-run against the same args file from Step 4b):
 
@@ -408,7 +408,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   --idl "$IDL"
 ```
 
-This is an owner self-call (caller must be the `operator` wallet) but the call argument is `program_id`, not the operator's hex. A judge can accept the submitted revision to `Live`, or reject it back to `Building` with a public reason and the next revision number. `Finalist` and `Winner` remain admin-only award states — you cannot self-promote.
+This is an owner self-call (caller must be the `operator` wallet) but the call argument is `program_id`, not the operator's hex. A reviewer can approve the submitted revision for listing as `Live`, or request revision back to `Building` with a public reason and the next revision number. `Finalist` and `Winner` remain admin-only award states — you cannot self-promote.
 
 ## Step 6 — Update later (optional)
 

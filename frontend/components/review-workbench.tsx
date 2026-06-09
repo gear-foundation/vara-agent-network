@@ -11,9 +11,9 @@ import {
 } from '@/lib/indexer-client'
 import {
   decideReview,
-  isReviewJudge,
+  isReviewer,
   ownerReply,
-  postJudgeComment,
+  postReviewerComment,
   requestReview,
   submitApplication,
   type ReviewCoverage,
@@ -68,8 +68,8 @@ function formatTime(value: string) {
 
 function eventLabel(event: ApplicationReviewEvent) {
   if (event.kind === 'request') return 'Review requested'
-  if (event.kind === 'decision') return event.verdict === 'Accepted' ? 'Accepted for live listing' : 'Rejected to revision'
-  return event.authorRole === 'Judge' ? 'Judge comment' : 'Owner reply'
+  if (event.kind === 'decision') return event.verdict === 'ApprovedForListing' ? 'Approved for listing' : 'Revision requested'
+  return event.authorRole === 'Reviewer' ? 'Reviewer comment' : 'Owner reply'
 }
 
 function groupByRevision(events: ApplicationReviewEvent[]) {
@@ -99,7 +99,7 @@ export function ReviewWorkbench({
   const [error, setError] = useState<string | null>(null)
   const { account } = useVaraWallet()
   const { state } = useCurrentUserState()
-  const [judge, setJudge] = useState(false)
+  const [reviewer, setReviewer] = useState(false)
 
   const app = detail.application
   const summary = detail.summary ?? app?.reviewSummary ?? null
@@ -112,15 +112,15 @@ export function ReviewWorkbench({
   useEffect(() => {
     let active = true
     if (!account) {
-      setJudge(false)
+      setReviewer(false)
       return
     }
-    void isReviewJudge(account.address)
+    void isReviewer(account.address)
       .then((value) => {
-        if (active) setJudge(value)
+        if (active) setReviewer(value)
       })
       .catch(() => {
-        if (active) setJudge(false)
+        if (active) setReviewer(false)
       })
     return () => {
       active = false
@@ -277,16 +277,16 @@ export function ReviewWorkbench({
           </ActionBox>
         ) : null}
 
-        {judge && (app.status === 'Building' || app.status === 'Submitted') ? (
-          <ActionBox title="Judge comment">
+        {reviewer && (app.status === 'Building' || app.status === 'Submitted') ? (
+          <ActionBox title="Reviewer comment">
             <Textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} />
-            <Button disabled={!!busy || !commentText.trim()} onClick={() => void run('comment', () => postJudgeComment(account!, app.id, displayRevision, commentText.trim()))}>
+            <Button disabled={!!busy || !commentText.trim()} onClick={() => void run('comment', () => postReviewerComment(account!, app.id, displayRevision, commentText.trim()))}>
               <ShieldCheck className="h-4 w-4" /> Comment
             </Button>
           </ActionBox>
         ) : null}
 
-        {judge && app.status === 'Submitted' ? (
+        {reviewer && app.status === 'Submitted' ? (
           <ActionBox title="Decision">
             <Textarea value={decisionText} onChange={(event) => setDecisionText(event.target.value)} />
             <div className="review-criteria-grid">
@@ -340,27 +340,27 @@ export function ReviewWorkbench({
                 disabled={!!busy || !decisionText.trim() || !decisionCriteria}
                 onClick={() => {
                   if (!decisionCriteria) return
-                  void run('accept', () => decideReview(account!, app.id, displayRevision, 'Accepted', decisionText.trim(), decisionCriteria))
+                  void run('approve', () => decideReview(account!, app.id, displayRevision, 'ApprovedForListing', decisionText.trim(), decisionCriteria))
                 }}
               >
-                <CheckCircle2 className="h-4 w-4" /> Accept
+                <CheckCircle2 className="h-4 w-4" /> Approve
               </Button>
               <Button
                 variant="destructive"
                 disabled={!!busy || !decisionText.trim() || !decisionCriteria}
                 onClick={() => {
                   if (!decisionCriteria) return
-                  void run('reject', () => decideReview(account!, app.id, displayRevision, 'Rejected', decisionText.trim(), decisionCriteria))
+                  void run('request-revision', () => decideReview(account!, app.id, displayRevision, 'RevisionRequested', decisionText.trim(), decisionCriteria))
                 }}
               >
-                <XCircle className="h-4 w-4" /> Reject
+                <XCircle className="h-4 w-4" /> Request revision
               </Button>
             </div>
           </ActionBox>
         ) : null}
 
-        {!isOwner && !judge ? (
-          <div className="review-empty">Connect as the owner or an active judge to act on this application.</div>
+        {!isOwner && !reviewer ? (
+          <div className="review-empty">Connect as the owner or an active reviewer to act on this application.</div>
         ) : null}
       </aside>
     </div>

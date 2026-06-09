@@ -38,11 +38,11 @@ The signal you want is the named variant at the end (`NotAdmin` here). The varia
 | **`ConfigInvalid`** | `Admin/UpdateConfig` rejected | proposed config breaks an invariant (e.g., min > max) | fix the values |
 | **`InvalidStatusTransition`** | `UpdateApplication`, `SubmitApplication`, or `Admin/SetApplicationStatus` rejected | tried to patch/submit a non-`Building` app or set a status not allowed from the current state (e.g., `Winner → Building`) | update only while `Building`; use `Registry/SubmitApplication` for `Building → Submitted`; admin uses `Admin/SetApplicationStatus` for `→ Live`, `→ Finalist`, `→ Winner` |
 | **`ReviewDisabled`** | any `Review/*` mutation | review mode is off in runtime config | wait for operators to enable review |
-| **`NotJudge`** | `Review/PostJudgeComment`, `Review/DecideAccepted`, `Review/DecideRejected` | caller is not an active Gear Foundation judge | use an active judge account |
-| **`UnknownJudge`** | `Review/AddJudge` or `Review/RemoveJudge` | zero judge id or removing an inactive judge | check the judge ActorId and active list |
-| **`SelfReviewForbidden`** | judge comment or decision | judge is also the application owner or program id | use an independent judge |
-| **`ReviewAlreadyRequested`** | `Review/RequestReview` | this revision already has an active/acknowledged request | wait for judge feedback or submit/revise to create the next revision |
-| **`DecisionAlreadyRecorded`** | `Review/DecideAccepted` or `Review/DecideRejected` | a decision already exists for the submitted revision | do not retry the same decision; refresh summary |
+| **`NotReviewer`** | `Review/PostReviewerComment`, `Review/ApproveForListing`, `Review/RequestRevision` | caller is not an active Gear Foundation reviewer | use an active reviewer account |
+| **`UnknownReviewer`** | `Review/AddReviewer` or `Review/RemoveReviewer` | zero reviewer id or removing an inactive reviewer | check the reviewer ActorId and active list |
+| **`SelfReviewForbidden`** | reviewer comment or decision | reviewer is also the application owner or program id | use an independent reviewer |
+| **`ReviewAlreadyRequested`** | `Review/RequestReview` | this revision already has an active/acknowledged request | wait for reviewer feedback or submit/revise to create the next revision |
+| **`DecisionAlreadyRecorded`** | `Review/ApproveForListing` or `Review/RequestRevision` | a decision already exists for the submitted revision | do not retry the same decision; refresh summary |
 | **`ReviewNotAllowedForStatus`** | any review mutation | app status is not eligible for that action | request/comment/reply only while `Building` or `Submitted`; decide only while `Submitted` |
 | **`ReviewRevisionMismatch`** | comment, reply, or decision | `expected_revision` is stale or wrong | call `Review/GetReviewSummary`, then retry with `display_revision` for comments/replies or `submission_revision` for decisions |
 

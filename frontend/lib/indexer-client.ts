@@ -67,7 +67,7 @@ type ReviewSummaryRow = {
   programId: string
   reviewStatus: string | null
   latestVerdict: string | null
-  latestJudge: string | null
+  latestReviewer: string | null
   latestReason: string | null
   displayRevision: number | null
   pendingSubmissionRevision: number | null
@@ -110,7 +110,7 @@ type ReviewDecisionRow = {
   eventId: string
   programId: string
   revision: number
-  judge: string
+  reviewer: string
   verdict: string
   reason: string
   oldStatus: string
@@ -273,8 +273,8 @@ export type ReviewStatus =
   | 'Requested'
   | 'Commented'
   | 'Submitted'
-  | 'Rejected'
-  | 'Accepted'
+  | 'RevisionRequested'
+  | 'ApprovedForListing'
   | 'ManualOverride'
   | 'Syncing'
 
@@ -282,7 +282,7 @@ export type ReviewSummary = {
   programId: string
   status: ReviewStatus
   latestVerdict: string | null
-  latestJudge: string | null
+  latestReviewer: string | null
   latestReason: string | null
   displayRevision: number | null
   pendingSubmissionRevision: number | null
@@ -442,7 +442,7 @@ const REGISTRY_QUERY = `
         programId
         reviewStatus
         latestVerdict
-        latestJudge
+        latestReviewer
         latestReason
         displayRevision
         pendingSubmissionRevision
@@ -503,7 +503,7 @@ const REGISTRY_IDENTITIES_QUERY = `
         programId
         reviewStatus
         latestVerdict
-        latestJudge
+        latestReviewer
         latestReason
         displayRevision
         pendingSubmissionRevision
@@ -591,7 +591,7 @@ const BOARD_QUERY = `
         programId
         reviewStatus
         latestVerdict
-        latestJudge
+        latestReviewer
         latestReason
         displayRevision
         pendingSubmissionRevision
@@ -757,7 +757,7 @@ const TOP_APPLICATIONS_LIVE_QUERY = `
         programId
         reviewStatus
         latestVerdict
-        latestJudge
+        latestReviewer
         latestReason
         displayRevision
         pendingSubmissionRevision
@@ -828,7 +828,7 @@ const APPLICATION_REVIEW_DETAIL_QUERY = `
         programId
         reviewStatus
         latestVerdict
-        latestJudge
+        latestReviewer
         latestReason
         displayRevision
         pendingSubmissionRevision
@@ -874,7 +874,7 @@ const APPLICATION_REVIEW_DETAIL_QUERY = `
         eventId
         programId
         revision
-        judge
+        reviewer
         verdict
         reason
         oldStatus
@@ -988,8 +988,8 @@ export function normalizeReviewStatus(row: ReviewSummaryRow | null | undefined):
     || status === 'Requested'
     || status === 'Commented'
     || status === 'Submitted'
-    || status === 'Rejected'
-    || status === 'Accepted'
+    || status === 'RevisionRequested'
+    || status === 'ApprovedForListing'
     || status === 'ManualOverride'
     || status === 'Syncing'
   ) {
@@ -1004,7 +1004,7 @@ function toReviewSummary(row: ReviewSummaryRow | null | undefined): ReviewSummar
     programId: row.programId,
     status: normalizeReviewStatus(row),
     latestVerdict: row.latestVerdict,
-    latestJudge: row.latestJudge,
+    latestReviewer: row.latestReviewer,
     latestReason: row.latestReason,
     displayRevision: row.displayRevision,
     pendingSubmissionRevision: row.pendingSubmissionRevision,
@@ -1656,7 +1656,7 @@ export async function getApplicationReviewDetail(programId: string): Promise<App
       id: item.eventId,
       kind: 'decision' as const,
       revision: item.revision,
-      author: item.judge,
+      author: item.reviewer,
       verdict: item.verdict,
       body: item.reason,
       oldStatus: item.oldStatus,

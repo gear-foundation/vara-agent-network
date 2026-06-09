@@ -4,7 +4,7 @@ import { LiveTicker } from '@/components/live-ticker'
 import { NavBar } from '@/components/nav-bar'
 import { NetworkPulse } from '@/components/network-pulse'
 import { PageAmbient } from '@/components/page-ambient'
-import { JudgeAdminPanel } from '@/components/judge-admin-panel'
+import { ReviewerAdminPanel } from '@/components/reviewer-admin-panel'
 import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { SiteFooter } from '@/components/site-footer'
 import { getReviewQueue, type RegistryAgent, type ReviewStatus } from '@/lib/indexer-client'
@@ -12,8 +12,8 @@ import { getReviewQueue, type RegistryAgent, type ReviewStatus } from '@/lib/ind
 const FILTERS: Array<{ label: string, status: ReviewStatus[] }> = [
   { label: 'Requested feedback', status: ['Requested', 'Commented'] },
   { label: 'Awaiting decision', status: ['Submitted'] },
-  { label: 'Rejected to revision', status: ['Rejected'] },
-  { label: 'Accepted', status: ['Accepted'] },
+  { label: 'Revision requested', status: ['RevisionRequested'] },
+  { label: 'Approved for listing', status: ['ApprovedForListing'] },
 ]
 
 function shortAddress(value: string) {
@@ -56,9 +56,9 @@ export default async function ReviewQueuePage() {
           <div className="section__hdr">
             <div>
               <div className="section__kicker">Foundation review</div>
-              <h1 className="section__title">Judge queue</h1>
+              <h1 className="section__title">Reviewer queue</h1>
               <p className="section__sub">
-                Public review queue for requested feedback, submitted decisions, rejected revisions, and accepted live listings.
+                Public review queue for requested feedback, submitted decisions, revision requests, and listing approvals.
               </p>
             </div>
             <div className="review-queue-count">
@@ -68,7 +68,7 @@ export default async function ReviewQueuePage() {
           </div>
 
           <div className="review-queue">
-            <JudgeAdminPanel />
+            <ReviewerAdminPanel />
             {FILTERS.map((filter) => {
               const items = queue.filter((agent) => filter.status.includes(agent.reviewSummary?.status ?? 'Legacy'))
               return (

@@ -1,7 +1,7 @@
 import { sql } from "drizzle-orm";
 import type {
-  JudgeAdded,
-  JudgeRemoved,
+  ReviewerAdded,
+  ReviewerRemoved,
   ReviewCommentPosted,
   ReviewDecisionRecorded,
   ReviewRequested,
@@ -13,7 +13,7 @@ import { schema } from "../model/db.js";
 import { makeRowId, type HandlerContext } from "./common.js";
 
 export function summaryStatusFromDecision(verdict: string): string {
-  return verdict === "Accepted" ? "Accepted" : "Rejected";
+  return verdict === "ApprovedForListing" ? "ApprovedForListing" : "RevisionRequested";
 }
 
 export function submittedCurrentRevisionVisibleCommentCount(
@@ -138,46 +138,46 @@ export async function markReviewManualOverride(
     });
 }
 
-export async function handleJudgeAdded(
+export async function handleReviewerAdded(
   db: Db,
   _ctx: HandlerContext,
-  payload: JudgeAdded,
+  payload: ReviewerAdded,
 ): Promise<void> {
-  const judge = normalizeActorId(payload.judge);
+  const reviewer = normalizeActorId(payload.reviewer);
   const updatedAt = asBigInt(payload.ts);
   await db
-    .insert(schema.judges)
+    .insert(schema.reviewers)
     .values({
-      id: `${payload.season_id}:${judge}`,
-      judge,
+      id: `${payload.season_id}:${reviewer}`,
+      reviewer,
       seasonId: payload.season_id,
       active: true,
       updatedAt,
     })
     .onConflictDoUpdate({
-      target: schema.judges.id,
+      target: schema.reviewers.id,
       set: { active: true, updatedAt },
     });
 }
 
-export async function handleJudgeRemoved(
+export async function handleReviewerRemoved(
   db: Db,
   _ctx: HandlerContext,
-  payload: JudgeRemoved,
+  payload: ReviewerRemoved,
 ): Promise<void> {
-  const judge = normalizeActorId(payload.judge);
+  const reviewer = normalizeActorId(payload.reviewer);
   const updatedAt = asBigInt(payload.ts);
   await db
-    .insert(schema.judges)
+    .insert(schema.reviewers)
     .values({
-      id: `${payload.season_id}:${judge}`,
-      judge,
+      id: `${payload.season_id}:${reviewer}`,
+      reviewer,
       seasonId: payload.season_id,
       active: false,
       updatedAt,
     })
     .onConflictDoUpdate({
-      target: schema.judges.id,
+      target: schema.reviewers.id,
       set: { active: false, updatedAt },
     });
 }
@@ -357,7 +357,7 @@ export async function handleReviewCommentPosted(
       .returning({ eventId: schema.reviewComments.eventId });
     if (inserted.length === 0) return;
 
-    if (payload.author_role === "Judge") {
+    if (payload.author_role === "Reviewer") {
       await tx
         .update(schema.reviewRequests)
         .set({ acknowledged: true })
@@ -373,7 +373,7 @@ export async function handleReviewCommentPosted(
         displayRevision: payload.revision,
         currentRevisionVisibleCommentCount: 1,
         totalVisibleCommentCount: 1,
-        activeRequestAcknowledged: payload.author_role === "Judge",
+        activeRequestAcknowledged: payload.author_role === "Reviewer",
         seasonId: payload.season_id,
         updatedAt: ts,
       })
@@ -389,7 +389,7 @@ export async function handleReviewCommentPosted(
           END`,
           currentRevisionVisibleCommentCount: sql`${schema.reviewSummaries.currentRevisionVisibleCommentCount} + 1`,
           totalVisibleCommentCount: sql`${schema.reviewSummaries.totalVisibleCommentCount} + 1`,
-          activeRequestAcknowledged: sql`${schema.reviewSummaries.activeRequestAcknowledged} OR ${payload.author_role === "Judge"}`,
+          activeRequestAcknowledged: sql`${schema.reviewSummaries.activeRequestAcknowledged} OR ${payload.author_role === "Reviewer"}`,
           seasonId: payload.season_id,
           updatedAt: ts,
         },
@@ -404,10 +404,10 @@ export async function handleReviewDecisionRecorded(
 ): Promise<void> {
   const eventId = makeRowId(ctx);
   const programId = normalizeActorId(payload.program_id);
-  const judge = normalizeActorId(payload.judge);
+  const reviewer = normalizeActorId(payload.reviewer);
   const decidedAt = asBigInt(payload.decided_at);
-  const nextPending = payload.verdict === "Rejected" ? payload.revision + 1 : null;
-  const displayRevision = payload.verdict === "Rejected" ? payload.revision + 1 : payload.revision;
+  const nextPending = payload.verdict === "RevisionRequested" ? payload.revision + 1 : null;
+  const displayRevision = payload.verdict === "RevisionRequested" ? payload.revision + 1 : payload.revision;
   await db.transaction(async (tx) => {
     const inserted = await tx
       .insert(schema.reviewDecisions)
@@ -415,7 +415,7 @@ export async function handleReviewDecisionRecorded(
         eventId,
         programId,
         revision: payload.revision,
-        judge,
+        reviewer,
         verdict: payload.verdict,
         reason: payload.reason,
         criteria: payload.criteria,
@@ -438,7 +438,7 @@ export async function handleReviewDecisionRecorded(
         programId,
         reviewStatus: summaryStatusFromDecision(payload.verdict),
         latestVerdict: payload.verdict,
-        latestJudge: judge,
+        latestReviewer: reviewer,
         latestReason: payload.reason,
         displayRevision,
         pendingSubmissionRevision: nextPending,
@@ -456,7 +456,7 @@ export async function handleReviewDecisionRecorded(
         set: {
           reviewStatus: summaryStatusFromDecision(payload.verdict),
           latestVerdict: payload.verdict,
-          latestJudge: judge,
+          latestReviewer: reviewer,
           latestReason: payload.reason,
           displayRevision,
           pendingSubmissionRevision: nextPending,

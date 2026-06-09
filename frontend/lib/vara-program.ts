@@ -288,31 +288,31 @@ async function sendTx(account: WalletAccount, label: string, tx: any) {
   return result
 }
 
-export async function isReviewJudge(address: string) {
+export async function isReviewer(address: string) {
   const actorId = await addressToActorId(address)
   const sails = await getSailsClient()
-  return Boolean(await sails.services.Review.queries.IsJudge(actorId).withAddress(address).call())
+  return Boolean(await sails.services.Review.queries.IsReviewer(actorId).withAddress(address).call())
 }
 
-export async function listReviewJudges(address?: string) {
+export async function listReviewers(address?: string) {
   const sails = await getSailsClient()
-  const query = sails.services.Review.queries.ListJudges()
+  const query = sails.services.Review.queries.ListReviewers()
   const result = address ? await query.withAddress(address).call() : await query.call()
   return (Array.isArray(result) ? result : []) as string[]
 }
 
-export async function addReviewJudge(account: WalletAccount, judge: string) {
-  const actorId = judge.startsWith('0x') ? judge : await addressToActorId(judge)
+export async function addReviewer(account: WalletAccount, reviewer: string) {
+  const actorId = reviewer.startsWith('0x') ? reviewer : await addressToActorId(reviewer)
   const sails = await getSailsClient()
-  const tx = sails.services.Review.functions.AddJudge(actorId)
-  return sendTx(account, 'review.tx.AddJudge', tx)
+  const tx = sails.services.Review.functions.AddReviewer(actorId)
+  return sendTx(account, 'review.tx.AddReviewer', tx)
 }
 
-export async function removeReviewJudge(account: WalletAccount, judge: string) {
-  const actorId = judge.startsWith('0x') ? judge : await addressToActorId(judge)
+export async function removeReviewer(account: WalletAccount, reviewer: string) {
+  const actorId = reviewer.startsWith('0x') ? reviewer : await addressToActorId(reviewer)
   const sails = await getSailsClient()
-  const tx = sails.services.Review.functions.RemoveJudge(actorId)
-  return sendTx(account, 'review.tx.RemoveJudge', tx)
+  const tx = sails.services.Review.functions.RemoveReviewer(actorId)
+  return sendTx(account, 'review.tx.RemoveReviewer', tx)
 }
 
 export async function submitApplication(account: WalletAccount, programId: string) {
@@ -327,15 +327,15 @@ export async function requestReview(account: WalletAccount, programId: string, r
   return sendTx(account, 'review.tx.RequestReview', tx)
 }
 
-export async function postJudgeComment(
+export async function postReviewerComment(
   account: WalletAccount,
   programId: string,
   revision: number,
   body: string,
 ) {
   const sails = await getSailsClient()
-  const tx = sails.services.Review.functions.PostJudgeComment(programId, revision, body)
-  return sendTx(account, 'review.tx.PostJudgeComment', tx)
+  const tx = sails.services.Review.functions.PostReviewerComment(programId, revision, body)
+  return sendTx(account, 'review.tx.PostReviewerComment', tx)
 }
 
 export async function ownerReply(
@@ -353,14 +353,14 @@ export async function decideReview(
   account: WalletAccount,
   programId: string,
   revision: number,
-  verdict: 'Accepted' | 'Rejected',
+  verdict: 'ApprovedForListing' | 'RevisionRequested',
   reason: string,
   criteria: ReviewCriteriaInput,
 ) {
   const sails = await getSailsClient()
-  const fn = verdict === 'Accepted'
-    ? sails.services.Review.functions.DecideAccepted
-    : sails.services.Review.functions.DecideRejected
+  const fn = verdict === 'ApprovedForListing'
+    ? sails.services.Review.functions.ApproveForListing
+    : sails.services.Review.functions.RequestRevision
   const tx = fn(programId, revision, reason, criteria)
-  return sendTx(account, `review.tx.Decide${verdict}`, tx)
+  return sendTx(account, `review.tx.${verdict}`, tx)
 }

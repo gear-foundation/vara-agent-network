@@ -1,7 +1,7 @@
 //! Gear Foundation review service.
 //!
 //! Full public review history is event-only and indexer-backed. Protocol state
-//! stores only judge membership, per-app revision guards, active request state,
+//! stores only reviewer membership, per-app revision guards, active request state,
 //! and latest summary data needed to validate future mutations.
 
 use crate::admin::AdminState;
@@ -15,7 +15,7 @@ use sails_rs::prelude::*;
 
 #[derive(Default)]
 pub struct ReviewState {
-    pub judges: BTreeMap<(u32, ActorId), bool>,
+    pub reviewers: BTreeMap<(u32, ActorId), bool>,
     pub summaries: BTreeMap<ActorId, ReviewSummary>,
     pub decisions: BTreeMap<(ActorId, u32), bool>,
     pub last_review_at: BTreeMap<ActorId, u64>,
@@ -26,15 +26,15 @@ pub struct ReviewState {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum ReviewEvent {
-    JudgeAdded {
+    ReviewerAdded {
         admin: ActorId,
-        judge: ActorId,
+        reviewer: ActorId,
         season_id: u32,
         ts: u64,
     },
-    JudgeRemoved {
+    ReviewerRemoved {
         admin: ActorId,
-        judge: ActorId,
+        reviewer: ActorId,
         season_id: u32,
         ts: u64,
     },
@@ -58,7 +58,7 @@ pub enum ReviewEvent {
     ReviewDecisionRecorded {
         program_id: ActorId,
         revision: u32,
-        judge: ActorId,
+        reviewer: ActorId,
         verdict: ReviewVerdict,
         reason: String,
         criteria: ReviewCriteria,
@@ -103,66 +103,66 @@ impl<'a> ReviewService<'a> {
 #[sails_rs::service(events = ReviewEvent)]
 impl<'a> ReviewService<'a> {
     #[export(unwrap_result)]
-    pub fn add_judge(&mut self, judge: ActorId) -> Result<(), ContractError> {
+    pub fn add_reviewer(&mut self, reviewer: ActorId) -> Result<(), ContractError> {
         let admin = self.ensure_admin()?;
-        if judge == ActorId::zero() {
-            return Err(ContractError::UnknownJudge);
+        if reviewer == ActorId::zero() {
+            return Err(ContractError::UnknownReviewer);
         }
         let season_id = self.current_season;
         {
             let mut review = self.review.borrow_mut();
-            if review.judges.get(&(season_id, judge)).copied().unwrap_or(false) {
+            if review.reviewers.get(&(season_id, reviewer)).copied().unwrap_or(false) {
                 return Err(ContractError::AlreadyRegistered);
             }
-            review.judges.insert((season_id, judge), true);
+            review.reviewers.insert((season_id, reviewer), true);
         }
         let ts = exec::block_timestamp();
-        self.emit_event(ReviewEvent::JudgeAdded {
+        self.emit_event(ReviewEvent::ReviewerAdded {
             admin,
-            judge,
+            reviewer,
             season_id,
             ts,
         })
-        .expect("emit JudgeAdded failed");
+        .expect("emit ReviewerAdded failed");
         Ok(())
     }
 
     #[export(unwrap_result)]
-    pub fn remove_judge(&mut self, judge: ActorId) -> Result<(), ContractError> {
+    pub fn remove_reviewer(&mut self, reviewer: ActorId) -> Result<(), ContractError> {
         let admin = self.ensure_admin()?;
         let season_id = self.current_season;
         {
             let mut review = self.review.borrow_mut();
-            if !review.judges.get(&(season_id, judge)).copied().unwrap_or(false) {
-                return Err(ContractError::UnknownJudge);
+            if !review.reviewers.get(&(season_id, reviewer)).copied().unwrap_or(false) {
+                return Err(ContractError::UnknownReviewer);
             }
-            review.judges.insert((season_id, judge), false);
+            review.reviewers.insert((season_id, reviewer), false);
         }
         let ts = exec::block_timestamp();
-        self.emit_event(ReviewEvent::JudgeRemoved {
+        self.emit_event(ReviewEvent::ReviewerRemoved {
             admin,
-            judge,
+            reviewer,
             season_id,
             ts,
         })
-        .expect("emit JudgeRemoved failed");
+        .expect("emit ReviewerRemoved failed");
         Ok(())
     }
 
     #[export]
-    pub fn is_judge(&self, judge: ActorId) -> bool {
-        is_active_judge(&self.review.borrow(), self.current_season, judge)
+    pub fn is_reviewer(&self, reviewer: ActorId) -> bool {
+        is_active_reviewer(&self.review.borrow(), self.current_season, reviewer)
     }
 
     #[export]
-    pub fn list_judges(&self) -> Vec<ActorId> {
+    pub fn list_reviewers(&self) -> Vec<ActorId> {
         self.review
             .borrow()
-            .judges
+            .reviewers
             .iter()
-            .filter_map(|((season, judge), active)| {
+            .filter_map(|((season, reviewer), active)| {
                 if *season == self.current_season && *active {
-                    Some(*judge)
+                    Some(*reviewer)
                 } else {
                     None
                 }
@@ -227,19 +227,19 @@ impl<'a> ReviewService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn post_judge_comment(
+    pub fn post_reviewer_comment(
         &mut self,
         program_id: ActorId,
         expected_revision: u32,
         body: String,
     ) -> Result<(), ContractError> {
         let (author, ts, season_id) =
-            self.post_comment(program_id, expected_revision, &body, ReviewAuthorRole::Judge)?;
+            self.post_comment(program_id, expected_revision, &body, ReviewAuthorRole::Reviewer)?;
         self.emit_event(ReviewEvent::ReviewCommentPosted {
             program_id,
             revision: expected_revision,
             author,
-            author_role: ReviewAuthorRole::Judge,
+            author_role: ReviewAuthorRole::Reviewer,
             body,
             ts,
             season_id,
@@ -271,25 +271,25 @@ impl<'a> ReviewService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn decide_accepted(
+    pub fn approve_for_listing(
         &mut self,
         program_id: ActorId,
         expected_revision: u32,
         reason: String,
         criteria: ReviewCriteria,
     ) -> Result<(), ContractError> {
-        let (judge, old_status, new_status, decided_at, season_id) = self.decide(
+        let (reviewer, old_status, new_status, decided_at, season_id) = self.decide(
             program_id,
             expected_revision,
-            ReviewVerdict::Accepted,
+            ReviewVerdict::ApprovedForListing,
             &reason,
             &criteria,
         )?;
         self.emit_event(ReviewEvent::ReviewDecisionRecorded {
             program_id,
             revision: expected_revision,
-            judge,
-            verdict: ReviewVerdict::Accepted,
+            reviewer,
+            verdict: ReviewVerdict::ApprovedForListing,
             reason,
             criteria,
             old_status,
@@ -302,25 +302,25 @@ impl<'a> ReviewService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn decide_rejected(
+    pub fn request_revision(
         &mut self,
         program_id: ActorId,
         expected_revision: u32,
         reason: String,
         criteria: ReviewCriteria,
     ) -> Result<(), ContractError> {
-        let (judge, old_status, new_status, decided_at, season_id) = self.decide(
+        let (reviewer, old_status, new_status, decided_at, season_id) = self.decide(
             program_id,
             expected_revision,
-            ReviewVerdict::Rejected,
+            ReviewVerdict::RevisionRequested,
             &reason,
             &criteria,
         )?;
         self.emit_event(ReviewEvent::ReviewDecisionRecorded {
             program_id,
             revision: expected_revision,
-            judge,
-            verdict: ReviewVerdict::Rejected,
+            reviewer,
+            verdict: ReviewVerdict::RevisionRequested,
             reason,
             criteria,
             old_status,
@@ -361,10 +361,10 @@ impl<'a> ReviewService<'a> {
                 .ok_or(ContractError::UnknownApplication)?;
             ensure_reviewable_status(app.status)?;
             match role {
-                ReviewAuthorRole::Judge => {
+                ReviewAuthorRole::Reviewer => {
                     let review = self.review.borrow();
-                    if !is_active_judge(&review, season_id, caller) {
-                        return Err(ContractError::NotJudge);
+                    if !is_active_reviewer(&review, season_id, caller) {
+                        return Err(ContractError::NotReviewer);
                     }
                     ensure_not_self_review(caller, app)?;
                 }
@@ -387,7 +387,7 @@ impl<'a> ReviewService<'a> {
             if summary.display_revision != Some(expected_revision) {
                 return Err(ContractError::ReviewRevisionMismatch);
             }
-            if role == ReviewAuthorRole::Judge
+            if role == ReviewAuthorRole::Reviewer
                 && summary.active_request_revision == Some(expected_revision)
             {
                 summary.active_request_acknowledged = true;
@@ -421,8 +421,8 @@ impl<'a> ReviewService<'a> {
             let mut reg = self.registry.borrow_mut();
             let mut review = self.review.borrow_mut();
             ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
-            if !is_active_judge(&review, season_id, caller) {
-                return Err(ContractError::NotJudge);
+            if !is_active_reviewer(&review, season_id, caller) {
+                return Err(ContractError::NotReviewer);
             }
             decide_application(
                 &mut reg,
@@ -450,7 +450,7 @@ pub fn init_application(review: &mut ReviewState, program_id: ActorId) {
             active_request_revision: None,
             active_request_acknowledged: false,
             latest_verdict: None,
-            latest_judge: None,
+            latest_reviewer: None,
             latest_reason: None,
             current_revision_comment_count: 0,
             total_comment_count: 0,
@@ -548,7 +548,7 @@ fn decide_application(
     reg: &mut RegistryState,
     review: &mut ReviewState,
     program_id: ActorId,
-    judge: ActorId,
+    reviewer: ActorId,
     expected_revision: u32,
     verdict: ReviewVerdict,
     reason: String,
@@ -557,7 +557,7 @@ fn decide_application(
         .applications
         .get_mut(&program_id)
         .ok_or(ContractError::UnknownApplication)?;
-    ensure_not_self_review(judge, app)?;
+    ensure_not_self_review(reviewer, app)?;
     if app.status != AppStatus::Submitted {
         return Err(ContractError::ReviewNotAllowedForStatus);
     }
@@ -580,20 +580,20 @@ fn decide_application(
 
     let old_status = app.status;
     let new_status = match verdict {
-        ReviewVerdict::Accepted => AppStatus::Live,
-        ReviewVerdict::Rejected => AppStatus::Building,
+        ReviewVerdict::ApprovedForListing => AppStatus::Live,
+        ReviewVerdict::RevisionRequested => AppStatus::Building,
     };
     app.status = new_status;
     review.decisions.insert((program_id, expected_revision), true);
 
     summary.latest_verdict = Some(verdict);
-    summary.latest_judge = Some(judge);
+    summary.latest_reviewer = Some(reviewer);
     summary.latest_reason = Some(reason);
     summary.active_request_revision = None;
     summary.active_request_acknowledged = false;
     summary.current_revision_comment_count = 0;
     summary.manual_override = false;
-    if verdict == ReviewVerdict::Rejected {
+    if verdict == ReviewVerdict::RevisionRequested {
         let next_revision = expected_revision.saturating_add(1);
         summary.pending_submission_revision = Some(next_revision);
         summary.submission_revision = Some(expected_revision);
@@ -616,8 +616,8 @@ fn ensure_rate_limit(
         .map_err(|()| ContractError::RateLimited)
 }
 
-fn is_active_judge(review: &ReviewState, season_id: u32, judge: ActorId) -> bool {
-    review.judges.get(&(season_id, judge)).copied().unwrap_or(false)
+fn is_active_reviewer(review: &ReviewState, season_id: u32, reviewer: ActorId) -> bool {
+    review.reviewers.get(&(season_id, reviewer)).copied().unwrap_or(false)
 }
 
 fn ensure_summary(review: &mut ReviewState, program_id: ActorId) -> &mut ReviewSummary {
@@ -630,8 +630,8 @@ fn ensure_summary(review: &mut ReviewState, program_id: ActorId) -> &mut ReviewS
         .expect("summary just initialized")
 }
 
-fn ensure_not_self_review(judge: ActorId, app: &Application) -> Result<(), ContractError> {
-    if judge == app.owner || judge == app.program_id {
+fn ensure_not_self_review(reviewer: ActorId, app: &Application) -> Result<(), ContractError> {
+    if reviewer == app.owner || reviewer == app.program_id {
         return Err(ContractError::SelfReviewForbidden);
     }
     Ok(())

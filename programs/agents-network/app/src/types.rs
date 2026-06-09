@@ -144,8 +144,8 @@ pub enum ContractError {
     ConfigInvalid,
     InvalidStatusTransition,
     ReviewDisabled,
-    NotJudge,
-    UnknownJudge,
+    NotReviewer,
+    UnknownReviewer,
     SelfReviewForbidden,
     ReviewAlreadyRequested,
     ReviewRequestLimitReached,
@@ -307,7 +307,7 @@ pub struct ApplicationPage {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum ReviewAuthorRole {
-    Judge,
+    Reviewer,
     Owner,
 }
 
@@ -315,8 +315,8 @@ pub enum ReviewAuthorRole {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum ReviewVerdict {
-    Accepted,
-    Rejected,
+    ApprovedForListing,
+    RevisionRequested,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
@@ -358,7 +358,7 @@ pub struct ReviewSummary {
     pub active_request_revision: Option<u32>,
     pub active_request_acknowledged: bool,
     pub latest_verdict: Option<ReviewVerdict>,
-    pub latest_judge: Option<ActorId>,
+    pub latest_reviewer: Option<ActorId>,
     pub latest_reason: Option<String>,
     pub current_revision_comment_count: u32,
     pub total_comment_count: u32,

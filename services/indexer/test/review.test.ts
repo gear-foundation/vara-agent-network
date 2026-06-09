@@ -7,8 +7,8 @@ import {
 } from "../src/handlers/review.js";
 
 test("review decision statuses match public summary badges", () => {
-  assert.equal(summaryStatusFromDecision("Accepted"), "Accepted");
-  assert.equal(summaryStatusFromDecision("Rejected"), "Rejected");
+  assert.equal(summaryStatusFromDecision("ApprovedForListing"), "ApprovedForListing");
+  assert.equal(summaryStatusFromDecision("RevisionRequested"), "RevisionRequested");
 });
 
 test("submitted revisions preserve current visible review comments", () => {
@@ -55,9 +55,9 @@ test("comments keep submitted revisions in the decision queue", () => {
   );
   assert.equal(
     summaryStatusAfterComment(
-      { reviewStatus: "Rejected", latestVerdict: "Rejected", submissionRevision: 1 },
+      { reviewStatus: "RevisionRequested", latestVerdict: "RevisionRequested", submissionRevision: 1 },
       2,
     ),
-    "Rejected",
+    "RevisionRequested",
   );
 });

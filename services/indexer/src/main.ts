@@ -20,8 +20,8 @@ import {
   handleParticipantRegistered,
 } from "./handlers/registry.js";
 import {
-  handleJudgeAdded,
-  handleJudgeRemoved,
+  handleReviewerAdded,
+  handleReviewerRemoved,
   handleReviewCommentPosted,
   handleReviewDecisionRecorded,
   handleReviewRequested,
@@ -197,11 +197,11 @@ async function runProcessorOnce() {
             }
           } else if (decoded.service === "Review") {
             switch (decoded.event) {
-              case "JudgeAdded":
-                await handleJudgeAdded(db, hctx, decoded.payload as never);
+              case "ReviewerAdded":
+                await handleReviewerAdded(db, hctx, decoded.payload as never);
                 break;
-              case "JudgeRemoved":
-                await handleJudgeRemoved(db, hctx, decoded.payload as never);
+              case "ReviewerRemoved":
+                await handleReviewerRemoved(db, hctx, decoded.payload as never);
                 break;
               case "ReviewRequested":
                 await handleReviewRequested(db, hctx, decoded.payload as never);

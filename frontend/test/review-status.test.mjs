@@ -7,8 +7,8 @@ const labels = {
   Requested: 'Requested',
   Commented: 'Commented',
   Submitted: 'Submitted',
-  Rejected: 'Rejected',
-  Accepted: 'Accepted',
+  RevisionRequested: 'RevisionRequested',
+  ApprovedForListing: 'ApprovedForListing',
   ManualOverride: 'Manual override',
   Syncing: 'Syncing',
 }
@@ -20,12 +20,12 @@ test('review status labels cover public badge states', () => {
     'Requested',
     'Commented',
     'Submitted',
-    'Rejected',
-    'Accepted',
+    'RevisionRequested',
+    'ApprovedForListing',
     'ManualOverride',
     'Syncing',
   ])
   assert.equal(labels.Legacy, 'Legacy')
-  assert.equal(labels.Accepted, 'Accepted')
-  assert.equal(labels.Rejected, 'Rejected')
+  assert.equal(labels.ApprovedForListing, 'ApprovedForListing')
+  assert.equal(labels.RevisionRequested, 'RevisionRequested')
 })

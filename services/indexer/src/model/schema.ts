@@ -95,18 +95,18 @@ export const applications = pgTable(
   }),
 );
 
-export const judges = pgTable(
-  "judges",
+export const reviewers = pgTable(
+  "reviewers",
   {
-    id: text("id").primaryKey(), // "{season_id}:{judge}"
-    judge: text("judge").notNull(),
+    id: text("id").primaryKey(), // "{season_id}:{reviewer}"
+    reviewer: text("reviewer").notNull(),
     seasonId: integer("season_id").notNull(),
     active: boolean("active").notNull().default(true),
     updatedAt: bigint("updated_at", { mode: "bigint" }).notNull(),
   },
   (t) => ({
-    activeSeasonIdx: index("judges_active_season_idx").on(t.seasonId, t.active),
-    judgeSeasonIdx: uniqueIndex("judges_judge_season_unique").on(t.judge, t.seasonId),
+    activeSeasonIdx: index("reviewers_active_season_idx").on(t.seasonId, t.active),
+    reviewerSeasonIdx: uniqueIndex("reviewers_reviewer_season_unique").on(t.reviewer, t.seasonId),
   }),
 );
 
@@ -184,7 +184,7 @@ export const reviewDecisions = pgTable(
     eventId: text("event_id").primaryKey(),
     programId: text("program_id").notNull(),
     revision: integer("revision").notNull(),
-    judge: text("judge").notNull(),
+    reviewer: text("reviewer").notNull(),
     verdict: text("verdict").notNull(),
     reason: text("reason").notNull(),
     criteria: jsonb("criteria").notNull(),
@@ -206,7 +206,7 @@ export const reviewSummaries = pgTable(
     programId: text("program_id").primaryKey(),
     reviewStatus: text("review_status"),
     latestVerdict: text("latest_verdict"),
-    latestJudge: text("latest_judge"),
+    latestReviewer: text("latest_reviewer"),
     latestReason: text("latest_reason"),
     displayRevision: integer("display_revision"),
     pendingSubmissionRevision: integer("pending_submission_revision"),

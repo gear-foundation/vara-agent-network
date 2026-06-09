@@ -646,78 +646,71 @@ pub mod review {
     use super::*;
     pub trait Review {
         type Env: sails_rs::client::GearEnv;
-        fn add_judge(
+        fn add_reviewer(
             &mut self,
-            judge: ActorId,
-        ) -> sails_rs::client::PendingCall<io::AddJudge, Self::Env>;
-        fn decide_accepted(
-            &mut self,
-            program_id: ActorId,
-            expected_revision: u32,
-            reason: String,
-            criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::DecideAccepted, Self::Env>;
-        fn decide_rejected(
+            reviewer: ActorId,
+        ) -> sails_rs::client::PendingCall<io::AddReviewer, Self::Env>;
+        fn approve_for_listing(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             reason: String,
             criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::DecideRejected, Self::Env>;
+        ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env>;
         fn owner_reply(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             body: String,
         ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env>;
-        fn post_judge_comment(
+        fn post_reviewer_comment(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             body: String,
-        ) -> sails_rs::client::PendingCall<io::PostJudgeComment, Self::Env>;
-        fn remove_judge(
+        ) -> sails_rs::client::PendingCall<io::PostReviewerComment, Self::Env>;
+        fn remove_reviewer(
             &mut self,
-            judge: ActorId,
-        ) -> sails_rs::client::PendingCall<io::RemoveJudge, Self::Env>;
+            reviewer: ActorId,
+        ) -> sails_rs::client::PendingCall<io::RemoveReviewer, Self::Env>;
         fn request_review(
             &mut self,
             program_id: ActorId,
             reason: String,
         ) -> sails_rs::client::PendingCall<io::RequestReview, Self::Env>;
+        fn request_revision(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env>;
         fn get_review_summary(
             &self,
             program_id: ActorId,
         ) -> sails_rs::client::PendingCall<io::GetReviewSummary, Self::Env>;
-        fn is_judge(&self, judge: ActorId)
-        -> sails_rs::client::PendingCall<io::IsJudge, Self::Env>;
-        fn list_judges(&self) -> sails_rs::client::PendingCall<io::ListJudges, Self::Env>;
+        fn is_reviewer(
+            &self,
+            reviewer: ActorId,
+        ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env>;
+        fn list_reviewers(&self) -> sails_rs::client::PendingCall<io::ListReviewers, Self::Env>;
     }
     pub struct ReviewImpl;
     impl<E: sails_rs::client::GearEnv> Review for sails_rs::client::Service<ReviewImpl, E> {
         type Env = E;
-        fn add_judge(
+        fn add_reviewer(
             &mut self,
-            judge: ActorId,
-        ) -> sails_rs::client::PendingCall<io::AddJudge, Self::Env> {
-            self.pending_call((judge,))
+            reviewer: ActorId,
+        ) -> sails_rs::client::PendingCall<io::AddReviewer, Self::Env> {
+            self.pending_call((reviewer,))
         }
-        fn decide_accepted(
+        fn approve_for_listing(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             reason: String,
             criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::DecideAccepted, Self::Env> {
-            self.pending_call((program_id, expected_revision, reason, criteria))
-        }
-        fn decide_rejected(
-            &mut self,
-            program_id: ActorId,
-            expected_revision: u32,
-            reason: String,
-            criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::DecideRejected, Self::Env> {
+        ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env> {
             self.pending_call((program_id, expected_revision, reason, criteria))
         }
         fn owner_reply(
@@ -728,19 +721,19 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env> {
             self.pending_call((program_id, expected_revision, body))
         }
-        fn post_judge_comment(
+        fn post_reviewer_comment(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             body: String,
-        ) -> sails_rs::client::PendingCall<io::PostJudgeComment, Self::Env> {
+        ) -> sails_rs::client::PendingCall<io::PostReviewerComment, Self::Env> {
             self.pending_call((program_id, expected_revision, body))
         }
-        fn remove_judge(
+        fn remove_reviewer(
             &mut self,
-            judge: ActorId,
-        ) -> sails_rs::client::PendingCall<io::RemoveJudge, Self::Env> {
-            self.pending_call((judge,))
+            reviewer: ActorId,
+        ) -> sails_rs::client::PendingCall<io::RemoveReviewer, Self::Env> {
+            self.pending_call((reviewer,))
         }
         fn request_review(
             &mut self,
@@ -749,35 +742,44 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::RequestReview, Self::Env> {
             self.pending_call((program_id, reason))
         }
+        fn request_revision(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env> {
+            self.pending_call((program_id, expected_revision, reason, criteria))
+        }
         fn get_review_summary(
             &self,
             program_id: ActorId,
         ) -> sails_rs::client::PendingCall<io::GetReviewSummary, Self::Env> {
             self.pending_call((program_id,))
         }
-        fn is_judge(
+        fn is_reviewer(
             &self,
-            judge: ActorId,
-        ) -> sails_rs::client::PendingCall<io::IsJudge, Self::Env> {
-            self.pending_call((judge,))
+            reviewer: ActorId,
+        ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env> {
+            self.pending_call((reviewer,))
         }
-        fn list_judges(&self) -> sails_rs::client::PendingCall<io::ListJudges, Self::Env> {
+        fn list_reviewers(&self) -> sails_rs::client::PendingCall<io::ListReviewers, Self::Env> {
             self.pending_call(())
         }
     }
 
     pub mod io {
         use super::*;
-        sails_rs::io_struct_impl!(AddJudge (judge: ActorId) -> ());
-        sails_rs::io_struct_impl!(DecideAccepted (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
-        sails_rs::io_struct_impl!(DecideRejected (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(AddReviewer (reviewer: ActorId) -> ());
+        sails_rs::io_struct_impl!(ApproveForListing (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
         sails_rs::io_struct_impl!(OwnerReply (program_id: ActorId, expected_revision: u32, body: String) -> ());
-        sails_rs::io_struct_impl!(PostJudgeComment (program_id: ActorId, expected_revision: u32, body: String) -> ());
-        sails_rs::io_struct_impl!(RemoveJudge (judge: ActorId) -> ());
+        sails_rs::io_struct_impl!(PostReviewerComment (program_id: ActorId, expected_revision: u32, body: String) -> ());
+        sails_rs::io_struct_impl!(RemoveReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(RequestReview (program_id: ActorId, reason: String) -> ());
+        sails_rs::io_struct_impl!(RequestRevision (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
         sails_rs::io_struct_impl!(GetReviewSummary (program_id: ActorId) -> Option<super::ReviewSummary>);
-        sails_rs::io_struct_impl!(IsJudge (judge: ActorId) -> bool);
-        sails_rs::io_struct_impl!(ListJudges () -> Vec<ActorId>);
+        sails_rs::io_struct_impl!(IsReviewer (reviewer: ActorId) -> bool);
+        sails_rs::io_struct_impl!(ListReviewers () -> Vec<ActorId>);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -786,15 +788,15 @@ pub mod review {
         #[derive(PartialEq, Debug, Encode, Decode)]
         #[codec(crate = sails_rs::scale_codec)]
         pub enum ReviewEvents {
-            JudgeAdded {
+            ReviewerAdded {
                 admin: ActorId,
-                judge: ActorId,
+                reviewer: ActorId,
                 season_id: u32,
                 ts: u64,
             },
-            JudgeRemoved {
+            ReviewerRemoved {
                 admin: ActorId,
-                judge: ActorId,
+                reviewer: ActorId,
                 season_id: u32,
                 ts: u64,
             },
@@ -818,7 +820,7 @@ pub mod review {
             ReviewDecisionRecorded {
                 program_id: ActorId,
                 revision: u32,
-                judge: ActorId,
+                reviewer: ActorId,
                 verdict: ReviewVerdict,
                 reason: String,
                 criteria: ReviewCriteria,
@@ -830,8 +832,8 @@ pub mod review {
         }
         impl sails_rs::client::Event for ReviewEvents {
             const EVENT_NAMES: &'static [Route] = &[
-                "JudgeAdded",
-                "JudgeRemoved",
+                "ReviewerAdded",
+                "ReviewerRemoved",
                 "ReviewRequested",
                 "ReviewCommentPosted",
                 "ReviewDecisionRecorded",
@@ -1130,7 +1132,7 @@ pub struct ReviewSummary {
     pub active_request_revision: Option<u32>,
     pub active_request_acknowledged: bool,
     pub latest_verdict: Option<ReviewVerdict>,
-    pub latest_judge: Option<ActorId>,
+    pub latest_reviewer: Option<ActorId>,
     pub latest_reason: Option<String>,
     pub current_revision_comment_count: u32,
     pub total_comment_count: u32,
@@ -1141,13 +1143,13 @@ pub struct ReviewSummary {
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum ReviewVerdict {
-    Accepted,
-    Rejected,
+    ApprovedForListing,
+    RevisionRequested,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum ReviewAuthorRole {
-    Judge,
+    Reviewer,
     Owner,
 }

@@ -23,7 +23,7 @@ fn criteria() -> ReviewCriteria {
 }
 
 #[tokio::test]
-async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
+async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -38,7 +38,7 @@ async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
 
     program
         .review()
-        .add_judge(CAROL.into())
+        .add_reviewer(CAROL.into())
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
@@ -61,14 +61,17 @@ async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
 
     program
         .review()
-        .request_review(STUB_PROGRAM_ALPHA.into(), "please check the agent".to_string())
+        .request_review(
+            STUB_PROGRAM_ALPHA.into(),
+            "please check the agent".to_string(),
+        )
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
 
     program
         .review()
-        .post_judge_comment(STUB_PROGRAM_ALPHA.into(), 1, "add usage proof".to_string())
+        .post_reviewer_comment(STUB_PROGRAM_ALPHA.into(), 1, "add usage proof".to_string())
         .with_actor_id(CAROL.into())
         .await
         .unwrap();
@@ -109,7 +112,7 @@ async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
 
     program
         .review()
-        .decide_rejected(
+        .request_revision(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "needs a runnable demo".to_string(),
@@ -133,7 +136,10 @@ async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(summary.latest_verdict, Some(ReviewVerdict::Rejected));
+    assert_eq!(
+        summary.latest_verdict,
+        Some(ReviewVerdict::RevisionRequested)
+    );
     assert_eq!(summary.pending_submission_revision, Some(2));
     assert_eq!(summary.submission_revision, Some(1));
     assert_eq!(summary.display_revision, Some(2));
@@ -141,7 +147,7 @@ async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
 
     program
         .review()
-        .decide_accepted(
+        .approve_for_listing(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "stale retry".to_string(),
@@ -160,7 +166,7 @@ async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
 
     program
         .review()
-        .decide_accepted(
+        .approve_for_listing(
             STUB_PROGRAM_ALPHA.into(),
             2,
             "ready for public listing".to_string(),
@@ -184,7 +190,10 @@ async fn judge_rejection_then_acceptance_loop_tracks_revisions() {
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(summary.latest_verdict, Some(ReviewVerdict::Accepted));
+    assert_eq!(
+        summary.latest_verdict,
+        Some(ReviewVerdict::ApprovedForListing)
+    );
     assert_eq!(summary.submission_revision, Some(2));
     assert_eq!(summary.display_revision, Some(2));
     assert_eq!(summary.pending_submission_revision, None);
@@ -206,13 +215,13 @@ async fn review_guards_reject_self_review_and_stale_revision() {
 
     program
         .review()
-        .add_judge(ALICE.into())
+        .add_reviewer(ALICE.into())
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
     program
         .review()
-        .add_judge(CAROL.into())
+        .add_reviewer(CAROL.into())
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
@@ -226,15 +235,46 @@ async fn review_guards_reject_self_review_and_stale_revision() {
 
     program
         .review()
-        .post_judge_comment(STUB_PROGRAM_ALPHA.into(), 1, "owner judge".to_string())
+        .post_reviewer_comment(STUB_PROGRAM_ALPHA.into(), 1, "owner reviewer".to_string())
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
 
     program
         .review()
-        .post_judge_comment(STUB_PROGRAM_ALPHA.into(), 99, "stale".to_string())
+        .post_reviewer_comment(STUB_PROGRAM_ALPHA.into(), 99, "stale".to_string())
         .with_actor_id(CAROL.into())
+        .await
+        .unwrap_err();
+
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .approve_for_listing(
+            STUB_PROGRAM_ALPHA.into(),
+            1,
+            "owner reviewer cannot approve".to_string(),
+            criteria(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    program
+        .review()
+        .request_revision(
+            STUB_PROGRAM_ALPHA.into(),
+            1,
+            "owner reviewer cannot request revision".to_string(),
+            criteria(),
+        )
+        .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
 }
@@ -255,7 +295,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
 
     program
         .review()
-        .add_judge(CAROL.into())
+        .add_reviewer(CAROL.into())
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
@@ -276,7 +316,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
 
     program
         .review()
-        .decide_accepted(
+        .approve_for_listing(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "initially ready".to_string(),
@@ -322,7 +362,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
 
     program
         .review()
-        .decide_accepted(
+        .approve_for_listing(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "old revision should stay closed".to_string(),
@@ -334,7 +374,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
 
     program
         .review()
-        .decide_accepted(
+        .approve_for_listing(
             STUB_PROGRAM_ALPHA.into(),
             2,
             "reopened revision is ready".to_string(),

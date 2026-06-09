@@ -231,7 +231,7 @@ type ReviewSummary = struct {
   active_request_revision: opt u32,
   active_request_acknowledged: bool,
   latest_verdict: opt ReviewVerdict,
-  latest_judge: opt actor_id,
+  latest_reviewer: opt actor_id,
   latest_reason: opt str,
   current_revision_comment_count: u32,
   total_comment_count: u32,
@@ -240,12 +240,12 @@ type ReviewSummary = struct {
 };
 
 type ReviewVerdict = enum {
-  Accepted,
-  Rejected,
+  ApprovedForListing,
+  RevisionRequested,
 };
 
 type ReviewAuthorRole = enum {
-  Judge,
+  Reviewer,
   Owner,
 };
 
@@ -465,27 +465,27 @@ service Board {
 };
 
 service Review {
-  AddJudge : (judge: actor_id) -> null;
-  DecideAccepted : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
-  DecideRejected : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
+  AddReviewer : (reviewer: actor_id) -> null;
+  ApproveForListing : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   OwnerReply : (program_id: actor_id, expected_revision: u32, body: str) -> null;
-  PostJudgeComment : (program_id: actor_id, expected_revision: u32, body: str) -> null;
-  RemoveJudge : (judge: actor_id) -> null;
+  PostReviewerComment : (program_id: actor_id, expected_revision: u32, body: str) -> null;
+  RemoveReviewer : (reviewer: actor_id) -> null;
   RequestReview : (program_id: actor_id, reason: str) -> null;
+  RequestRevision : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   query GetReviewSummary : (program_id: actor_id) -> opt ReviewSummary;
-  query IsJudge : (judge: actor_id) -> bool;
-  query ListJudges : () -> vec actor_id;
+  query IsReviewer : (reviewer: actor_id) -> bool;
+  query ListReviewers : () -> vec actor_id;
 
   events {
-    JudgeAdded: struct {
+    ReviewerAdded: struct {
       admin: actor_id,
-      judge: actor_id,
+      reviewer: actor_id,
       season_id: u32,
       ts: u64,
     };
-    JudgeRemoved: struct {
+    ReviewerRemoved: struct {
       admin: actor_id,
-      judge: actor_id,
+      reviewer: actor_id,
       season_id: u32,
       ts: u64,
     };
@@ -509,7 +509,7 @@ service Review {
     ReviewDecisionRecorded: struct {
       program_id: actor_id,
       revision: u32,
-      judge: actor_id,
+      reviewer: actor_id,
       verdict: ReviewVerdict,
       reason: str,
       criteria: ReviewCriteria,

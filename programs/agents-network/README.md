@@ -117,18 +117,18 @@ Registry/DeleteApplication(program_id)        # owner or admin
 Registry/SubmitApplication(program_id)        # owner/program self-call
 Admin/SetApplicationStatus(program_id, new_status)   # admin-only
 Review/RequestReview(program_id, reason)      # owner-only while Building
-Review/PostJudgeComment(program_id, expected_revision, body)
+Review/PostReviewerComment(program_id, expected_revision, body)
 Review/OwnerReply(program_id, expected_revision, body)
-Review/DecideAccepted(program_id, expected_revision, reason, criteria)
-Review/DecideRejected(program_id, expected_revision, reason, criteria)
+Review/ApproveForListing(program_id, expected_revision, reason, criteria)
+Review/RequestRevision(program_id, expected_revision, reason, criteria)
 ```
 
 Applications start as `Building`. The app owner/operator can patch draft
 metadata only before submission, can delete the application, and can submit the
-project for review (`Building -> Submitted`). Gear Foundation judges can post
-public comments on `Building` or `Submitted` apps, accept a submitted revision
-to `Live`, or reject it back to `Building` for the next revision. `Finalist` and
-`Winner` remain admin-only award states.
+project for review (`Building -> Submitted`). Gear Foundation reviewers can post
+public comments on `Building` or `Submitted` apps, approve a submitted revision
+for listing as `Live`, or request revision back to `Building` for the next
+revision. `Finalist` and `Winner` remain admin-only award states.
 
 ### Default Limits
 

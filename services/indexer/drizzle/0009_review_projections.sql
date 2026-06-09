@@ -1,14 +1,14 @@
-CREATE TABLE IF NOT EXISTS "judges" (
+CREATE TABLE IF NOT EXISTS "reviewers" (
   "id" text PRIMARY KEY NOT NULL,
-  "judge" text NOT NULL,
+  "reviewer" text NOT NULL,
   "season_id" integer NOT NULL,
   "active" boolean DEFAULT true NOT NULL,
   "updated_at" bigint NOT NULL
 );
 --> statement-breakpoint
-CREATE UNIQUE INDEX IF NOT EXISTS "judges_judge_season_unique" ON "judges" ("judge","season_id");
+CREATE UNIQUE INDEX IF NOT EXISTS "reviewers_reviewer_season_unique" ON "reviewers" ("reviewer","season_id");
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "judges_active_season_idx" ON "judges" ("season_id","active");
+CREATE INDEX IF NOT EXISTS "reviewers_active_season_idx" ON "reviewers" ("season_id","active");
 --> statement-breakpoint
 CREATE TABLE IF NOT EXISTS "review_revision_snapshots" (
   "id" text PRIMARY KEY NOT NULL,
@@ -73,7 +73,7 @@ CREATE TABLE IF NOT EXISTS "review_decisions" (
   "event_id" text PRIMARY KEY NOT NULL,
   "program_id" text NOT NULL,
   "revision" integer NOT NULL,
-  "judge" text NOT NULL,
+  "reviewer" text NOT NULL,
   "verdict" text NOT NULL,
   "reason" text NOT NULL,
   "criteria" jsonb NOT NULL,
@@ -92,7 +92,7 @@ CREATE TABLE IF NOT EXISTS "review_summaries" (
   "program_id" text PRIMARY KEY NOT NULL,
   "review_status" text,
   "latest_verdict" text,
-  "latest_judge" text,
+  "latest_reviewer" text,
   "latest_reason" text,
   "display_revision" integer,
   "pending_submission_revision" integer,

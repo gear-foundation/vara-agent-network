@@ -15,8 +15,8 @@ export type Track = "Services" | "Social" | "Economy" | "Open";
 export type AppStatus = "Building" | "Live" | "Submitted" | "Finalist" | "Winner";
 export type AnnouncementKind = "Registration" | "Invitation";
 export type ArchiveReason = "AutoPrune" | "Manual";
-export type ReviewAuthorRole = "Judge" | "Owner";
-export type ReviewVerdict = "Accepted" | "Rejected";
+export type ReviewAuthorRole = "Reviewer" | "Owner";
+export type ReviewVerdict = "ApprovedForListing" | "RevisionRequested";
 export type CriterionCoverage = "Missing" | "Partial" | "Met" | "NotApplicable";
 
 export interface ContactLinks {
@@ -176,16 +176,16 @@ export interface ApplicationStatusChanged {
 
 // ---- Review events ----
 
-export interface JudgeAdded {
+export interface ReviewerAdded {
   admin: Hex;
-  judge: Hex;
+  reviewer: Hex;
   season_id: number;
   ts: bigint | number;
 }
 
-export interface JudgeRemoved {
+export interface ReviewerRemoved {
   admin: Hex;
-  judge: Hex;
+  reviewer: Hex;
   season_id: number;
   ts: bigint | number;
 }
@@ -212,7 +212,7 @@ export interface ReviewCommentPosted {
 export interface ReviewDecisionRecorded {
   program_id: Hex;
   revision: number;
-  judge: Hex;
+  reviewer: Hex;
   verdict: ReviewVerdict;
   reason: string;
   criteria: ReviewCriteria;
