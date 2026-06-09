@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  initialReviewSummaryValues,
   submittedCurrentRevisionVisibleCommentCount,
   summaryStatusAfterComment,
   summaryStatusFromDecision,
@@ -59,5 +60,29 @@ test("comments keep submitted revisions in the decision queue", () => {
       2,
     ),
     "RevisionRequested",
+  );
+});
+
+test("registration reset clears stale review summary state", () => {
+  assert.deepEqual(
+    initialReviewSummaryValues("0xabc", 2, 123n),
+    {
+      programId: "0xabc",
+      reviewStatus: "NotRequested",
+      latestVerdict: null,
+      latestReviewer: null,
+      latestReason: null,
+      displayRevision: 1,
+      pendingSubmissionRevision: 1,
+      submissionRevision: null,
+      currentRevisionVisibleCommentCount: 0,
+      totalVisibleCommentCount: 0,
+      activeRequestRevision: null,
+      activeRequestAcknowledged: false,
+      manualOverride: false,
+      tombstoned: false,
+      seasonId: 2,
+      updatedAt: 123n,
+    },
   );
 });

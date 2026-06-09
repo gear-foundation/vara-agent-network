@@ -48,36 +48,55 @@ export function summaryStatusAfterComment(
   return existingSummary.reviewStatus ?? "Commented";
 }
 
+export function initialReviewSummaryValues(programId: string, seasonId: number, updatedAt: bigint) {
+  return {
+    programId,
+    reviewStatus: "NotRequested",
+    latestVerdict: null,
+    latestReviewer: null,
+    latestReason: null,
+    displayRevision: 1,
+    pendingSubmissionRevision: 1,
+    submissionRevision: null,
+    currentRevisionVisibleCommentCount: 0,
+    totalVisibleCommentCount: 0,
+    activeRequestRevision: null,
+    activeRequestAcknowledged: false,
+    manualOverride: false,
+    tombstoned: false,
+    seasonId,
+    updatedAt,
+  };
+}
+
 export async function initializeReviewSummary(
   db: Db,
   programId: string,
   seasonId: number,
   updatedAt: bigint,
 ): Promise<void> {
+  const values = initialReviewSummaryValues(programId, seasonId, updatedAt);
   await db
     .insert(schema.reviewSummaries)
-    .values({
-      programId,
-      reviewStatus: "NotRequested",
-      displayRevision: 1,
-      pendingSubmissionRevision: 1,
-      submissionRevision: null,
-      activeRequestRevision: null,
-      activeRequestAcknowledged: false,
-      manualOverride: false,
-      tombstoned: false,
-      seasonId,
-      updatedAt,
-    })
+    .values(values)
     .onConflictDoUpdate({
       target: schema.reviewSummaries.programId,
       set: {
-        displayRevision: 1,
-        pendingSubmissionRevision: 1,
-        tombstoned: false,
-        manualOverride: false,
-        seasonId,
-        updatedAt,
+        reviewStatus: values.reviewStatus,
+        latestVerdict: values.latestVerdict,
+        latestReviewer: values.latestReviewer,
+        latestReason: values.latestReason,
+        displayRevision: values.displayRevision,
+        pendingSubmissionRevision: values.pendingSubmissionRevision,
+        submissionRevision: values.submissionRevision,
+        currentRevisionVisibleCommentCount: values.currentRevisionVisibleCommentCount,
+        totalVisibleCommentCount: values.totalVisibleCommentCount,
+        activeRequestRevision: values.activeRequestRevision,
+        activeRequestAcknowledged: values.activeRequestAcknowledged,
+        manualOverride: values.manualOverride,
+        tombstoned: values.tombstoned,
+        seasonId: values.seasonId,
+        updatedAt: values.updatedAt,
       },
     });
 }
@@ -96,6 +115,9 @@ export async function tombstoneReviewRows(db: Db, programId: string, updatedAt: 
       .update(schema.reviewDecisions)
       .set({ tombstoned: true })
       .where(sql`${schema.reviewDecisions.programId} = ${programId}`);
+    await tx
+      .delete(schema.reviewRevisionSnapshots)
+      .where(sql`${schema.reviewRevisionSnapshots.programId} = ${programId}`);
     await tx
       .update(schema.reviewSummaries)
       .set({
