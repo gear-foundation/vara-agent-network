@@ -4,6 +4,7 @@ import { LiveTicker } from '@/components/live-ticker'
 import { NavBar } from '@/components/nav-bar'
 import { NetworkPulse } from '@/components/network-pulse'
 import { PageAmbient } from '@/components/page-ambient'
+import { JudgeAdminPanel } from '@/components/judge-admin-panel'
 import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { SiteFooter } from '@/components/site-footer'
 import { getReviewQueue, type RegistryAgent, type ReviewStatus } from '@/lib/indexer-client'
@@ -67,6 +68,7 @@ export default async function ReviewQueuePage() {
           </div>
 
           <div className="review-queue">
+            <JudgeAdminPanel />
             {FILTERS.map((filter) => {
               const items = queue.filter((agent) => filter.status.includes(agent.reviewSummary?.status ?? 'Legacy'))
               return (

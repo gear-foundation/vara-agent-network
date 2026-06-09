@@ -294,6 +294,27 @@ export async function isReviewJudge(address: string) {
   return Boolean(await sails.services.Review.queries.IsJudge(actorId).withAddress(address).call())
 }
 
+export async function listReviewJudges(address?: string) {
+  const sails = await getSailsClient()
+  const query = sails.services.Review.queries.ListJudges()
+  const result = address ? await query.withAddress(address).call() : await query.call()
+  return (Array.isArray(result) ? result : []) as string[]
+}
+
+export async function addReviewJudge(account: WalletAccount, judge: string) {
+  const actorId = judge.startsWith('0x') ? judge : await addressToActorId(judge)
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.AddJudge(actorId)
+  return sendTx(account, 'review.tx.AddJudge', tx)
+}
+
+export async function removeReviewJudge(account: WalletAccount, judge: string) {
+  const actorId = judge.startsWith('0x') ? judge : await addressToActorId(judge)
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.RemoveJudge(actorId)
+  return sendTx(account, 'review.tx.RemoveJudge', tx)
+}
+
 export async function submitApplication(account: WalletAccount, programId: string) {
   const sails = await getSailsClient()
   const tx = sails.services.Registry.functions.SubmitApplication(programId)
