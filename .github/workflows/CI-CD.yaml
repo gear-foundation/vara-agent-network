@@ -1,0 +1,138 @@
+name: Build and Deploy Vara Agent Network
+
+on:
+  push:
+    branches: [main, master]
+    paths-ignore:
+      - '.github/**'
+      - '**.md'
+    tags: ["*-v*"]
+  workflow_dispatch:
+    inputs:
+      env:
+        type: choice
+        description: Target environment
+        required: false
+        options:
+          - dev
+          - stg
+          - prod
+      deploy_indexer:
+        type: boolean
+        description: Deploy indexer
+        default: true
+      deploy_explorer:
+        type: boolean
+        description: Deploy explorer
+        default: true
+      deploy_seed:
+        type: boolean
+        description: Deploy seed
+        default: true
+      deploy_voucher:
+        type: boolean
+        description: Deploy voucher
+        default: true
+      deploy_frontend:
+        type: boolean
+        description: Deploy frontend
+        default: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: write
+  packages: write
+  actions: write
+  id-token: write
+
+jobs:
+  deploy_indexer:
+    uses: gear-ops/actions/.github/workflows/build-deploy.yaml@main
+    with:
+      argocd_server: ${{ vars.ARGOCD_SERVER }}
+      vault_server: ${{ vars.VAULT_SERVER }}
+      app: vara-agent-network
+      component: indexer
+      init_containers: |
+        migrations
+      env: ${{ inputs.env }}
+      dockerfile: services/indexer/Dockerfile
+      context: .
+      paths_filter: |
+        services/indexer/**
+        programs/**
+    secrets:
+      WORKLOADS_REPO_TOKEN: ${{ secrets.WORKLOADS_REPO_TOKEN }}
+      ARGOCD_TOKEN:         ${{ secrets.ARGOCD_TOKEN }}
+
+  deploy_explorer:
+    uses: gear-ops/actions/.github/workflows/build-deploy.yaml@main
+    with:
+      argocd_server: ${{ vars.ARGOCD_SERVER }}
+      vault_server: ${{ vars.VAULT_SERVER }}
+      app: vara-agent-network
+      component: explorer
+      env: ${{ inputs.env }}
+      dockerfile: services/indexer/Dockerfile
+      context: .
+      paths_filter: |
+        services/indexer/**
+        programs/**
+    secrets:
+      WORKLOADS_REPO_TOKEN: ${{ secrets.WORKLOADS_REPO_TOKEN }}
+      ARGOCD_TOKEN:         ${{ secrets.ARGOCD_TOKEN }}
+
+  deploy_seed:
+    uses: gear-ops/actions/.github/workflows/build-deploy.yaml@main
+    with:
+      argocd_server: ${{ vars.ARGOCD_SERVER }}
+      vault_server: ${{ vars.VAULT_SERVER }}
+      app: vara-agent-network
+      component: seed
+      init_containers: |
+        migrations
+      env: ${{ inputs.env }}
+      dockerfile: services/seed-backend/Dockerfile
+      context: services/seed-backend
+      paths_filter: |
+        services/seed-backend/**
+    secrets:
+      WORKLOADS_REPO_TOKEN: ${{ secrets.WORKLOADS_REPO_TOKEN }}
+      ARGOCD_TOKEN:         ${{ secrets.ARGOCD_TOKEN }}
+
+  deploy_voucher:
+    uses: gear-ops/actions/.github/workflows/build-deploy.yaml@main
+    with:
+      argocd_server: ${{ vars.ARGOCD_SERVER }}
+      vault_server: ${{ vars.VAULT_SERVER }}
+      app: vara-agent-network
+      component: voucher
+      init_containers: |
+        migrations
+      env: ${{ inputs.env }}
+      dockerfile: services/voucher-backend/Dockerfile
+      context: services/voucher-backend
+      paths_filter: |
+        services/voucher-backend/**
+    secrets:
+      WORKLOADS_REPO_TOKEN: ${{ secrets.WORKLOADS_REPO_TOKEN }}
+      ARGOCD_TOKEN:         ${{ secrets.ARGOCD_TOKEN }}
+
+  deploy_frontend:
+    uses: gear-ops/actions/.github/workflows/build-deploy.yaml@main
+    with:
+      argocd_server: ${{ vars.ARGOCD_SERVER }}
+      vault_server: ${{ vars.VAULT_SERVER }}
+      app: vara-agent-network
+      component: frontend
+      env: ${{ inputs.env }}
+      dockerfile: frontend/Dockerfile
+      context: ./frontend
+      paths_filter: |
+        frontend/**
+    secrets:
+      WORKLOADS_REPO_TOKEN: ${{ secrets.WORKLOADS_REPO_TOKEN }}
+      ARGOCD_TOKEN:         ${{ secrets.ARGOCD_TOKEN }}
