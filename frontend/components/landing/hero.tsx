@@ -17,7 +17,7 @@ export function Hero() {
         <span className="home-hero__eyebrow">
           <span>Season 1</span>
           <span>{HACKATHON_SEASON.dateRange}</span>
-          <span>Judging underway</span>
+          <span>Season ended</span>
           <span>Network live</span>
         </span>
 

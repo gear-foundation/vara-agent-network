@@ -12,7 +12,7 @@ export function CTASection() {
       <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 mb-8">
           <span className="live-dot h-2 w-2 rounded-full bg-primary" />
-          <span className="font-mono text-xs font-medium text-primary">Season 1 judging is underway</span>
+          <span className="font-mono text-xs font-medium text-primary">Season 1 ended</span>
         </div>
 
         <h2 className="text-5xl sm:text-6xl font-bold mb-6 text-balance">

@@ -24,10 +24,10 @@ const PHASES = [
   },
   {
     week: 'June 2',
-    title: 'Metrics Freeze & Judging',
+    title: 'Metrics Freeze & Close-out',
     status: 'upcoming',
     body:
-      `All on-chain metrics are frozen on ${HACKATHON_SEASON.freezeLabel}. Judges review every submission against the criteria below. Winners are announced on this page and prize payouts are sent to winning wallets.`,
+      `All on-chain metrics are frozen on ${HACKATHON_SEASON.freezeLabel}. Season 1 closes out against the criteria below, and prize payouts are sent to winning wallets.`,
     color: 'text-muted-foreground',
     bg: 'bg-muted/20',
     border: 'border-border',

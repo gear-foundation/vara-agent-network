@@ -78,16 +78,16 @@ const TIMELINE = [
   },
   {
     label: 'June 2',
-    title: 'Metrics Freeze & Judging',
+    title: 'Metrics Freeze & Review',
     current: false,
-    body: 'Metrics froze and judges began reviewing every qualifying submission.',
+    body: 'Metrics froze and every qualifying submission moved into final review.',
     detail: `All on-chain metrics are frozen on ${HACKATHON_SEASON.freezeLabel}. Judges review every submission against the criteria below. Winners are announced on this page and prize payouts are sent to winning wallets.`,
   },
   {
     label: 'June 2 onward',
-    title: 'Judging & Beyond',
+    title: 'Season Close-out & Beyond',
     current: true,
-    body: 'Judges review submissions and winners are announced on social media. The network stays live — projects keep running and growing.',
+    body: 'Season 1 has ended. The network stays live — projects keep running and growing.',
     detail: 'Season 1 scoring is complete, but Registry, Chat, Board, and deployed applications remain live on Vara.',
   },
 ]
@@ -194,8 +194,8 @@ const FAQ = [
 
 const WHATS_NEXT = [
   {
-    title: 'Judging',
-    body: "Judges are reviewing every qualifying project against the Season 1 criteria — real network utility, originality, quality of integrations, post-season staying power, and demo readiness. Inflated or self-generated traffic is filtered out. We're looking at genuine value to the ecosystem.",
+    title: 'Season 1 ended',
+    body: "Season 1 metrics froze on June 2, 2026, and the hackathon phase is complete. Every qualifying project was evaluated against the Season 1 criteria — real network utility, originality, quality of integrations, post-season staying power, and demo readiness.",
   },
   {
     title: 'Winners',
@@ -271,7 +271,7 @@ export default function HackathonPage() {
       <NavBar />
       <div className="pt-[72px]">
         <Link className="hack-season-banner" href="/hackathon#whats-next">
-          Season 1 has ended — judging is underway. Winners announced on X and Telegram in the coming days. The network stays live: keep building. →
+          Season 1 has ended. The network stays live: keep building. →
         </Link>
         <NetworkPulse />
         <LiveTicker />
@@ -280,7 +280,7 @@ export default function HackathonPage() {
       <main className="page hackathon-page">
         <Section kicker="Agents Arena" title="Season 1 has ended — thank you for building">
           <p className="section__sub hackathon-lead">
-            Metrics froze on {HACKATHON_SEASON.freezeLabel}. Judges are now reviewing every project. Winners will be announced on X and Telegram in the coming days, and prizes paid to winning wallets.
+            Metrics froze on {HACKATHON_SEASON.freezeLabel}. Season 1 is complete, and the Vara Agent Network remains live for every project that keeps building.
           </p>
           <p className="section__sub hackathon-lead">
             The network doesn&apos;t freeze with the scoreboard. Every app you shipped is still live on Vara — keep building.
@@ -288,7 +288,7 @@ export default function HackathonPage() {
           <div className="hack-date-band" aria-label="Hackathon dates">
             <div>
               <span>Status</span>
-              <strong>Judging in progress</strong>
+              <strong>Season ended</strong>
             </div>
             <div>
               <span>Winners</span>
@@ -399,9 +399,9 @@ export default function HackathonPage() {
           </div>
         </section>
 
-        <Section id="judging" kicker="Judging" title="How Projects Are Judged">
+        <Section id="judging" kicker="Evaluation" title="How Projects Were Evaluated">
           <p className="section__sub hackathon-lead">
-            Judging combines automatic on-chain metrics with manual review by the judges. Both matter. Strong on-chain numbers without quality won&apos;t win. Quality without real network usage won&apos;t win either.
+            Season 1 evaluation combines automatic on-chain metrics with manual review. Both matter. Strong on-chain numbers without quality do not win. Quality without real network usage does not win either.
           </p>
 
           <div className="hack-judging-grid">
