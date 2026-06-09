@@ -362,6 +362,25 @@ export type InteractionGraphData = {
   edges: InteractionGraphEdge[]
 }
 
+const REVIEW_SUMMARY_FIELDS = `
+        programId
+        reviewStatus
+        latestVerdict
+        latestReviewer
+        latestReason
+        displayRevision
+        pendingSubmissionRevision
+        submissionRevision
+        currentRevisionVisibleCommentCount
+        totalVisibleCommentCount
+        activeRequestRevision
+        activeRequestAcknowledged
+        manualOverride
+        tombstoned
+        seasonId
+        updatedAt
+`
+
 const DASHBOARD_QUERY = `
   query DashboardSnapshot {
     latestNetworkMetrics: allNetworkMetrics(first: 1, orderBy: DATE_DESC) {
@@ -439,22 +458,7 @@ const REGISTRY_QUERY = `
     }
     reviewSummaries: allReviewSummaries(first: 250) {
       nodes {
-        programId
-        reviewStatus
-        latestVerdict
-        latestReviewer
-        latestReason
-        displayRevision
-        pendingSubmissionRevision
-        submissionRevision
-        currentRevisionVisibleCommentCount
-        totalVisibleCommentCount
-        activeRequestRevision
-        activeRequestAcknowledged
-        manualOverride
-        tombstoned
-        seasonId
-        updatedAt
+${REVIEW_SUMMARY_FIELDS}
       }
     }
   }
@@ -500,22 +504,7 @@ const REGISTRY_IDENTITIES_QUERY = `
     }
     reviewSummaries: allReviewSummaries(first: 250) {
       nodes {
-        programId
-        reviewStatus
-        latestVerdict
-        latestReviewer
-        latestReason
-        displayRevision
-        pendingSubmissionRevision
-        submissionRevision
-        currentRevisionVisibleCommentCount
-        totalVisibleCommentCount
-        activeRequestRevision
-        activeRequestAcknowledged
-        manualOverride
-        tombstoned
-        seasonId
-        updatedAt
+${REVIEW_SUMMARY_FIELDS}
       }
     }
   }
@@ -588,22 +577,7 @@ const BOARD_QUERY = `
     }
     reviewSummaries: allReviewSummaries(first: 250) {
       nodes {
-        programId
-        reviewStatus
-        latestVerdict
-        latestReviewer
-        latestReason
-        displayRevision
-        pendingSubmissionRevision
-        submissionRevision
-        currentRevisionVisibleCommentCount
-        totalVisibleCommentCount
-        activeRequestRevision
-        activeRequestAcknowledged
-        manualOverride
-        tombstoned
-        seasonId
-        updatedAt
+${REVIEW_SUMMARY_FIELDS}
       }
     }
   }
@@ -754,22 +728,7 @@ const TOP_APPLICATIONS_LIVE_QUERY = `
     }
     reviewSummaries: allReviewSummaries(first: 500) {
       nodes {
-        programId
-        reviewStatus
-        latestVerdict
-        latestReviewer
-        latestReason
-        displayRevision
-        pendingSubmissionRevision
-        submissionRevision
-        currentRevisionVisibleCommentCount
-        totalVisibleCommentCount
-        activeRequestRevision
-        activeRequestAcknowledged
-        manualOverride
-        tombstoned
-        seasonId
-        updatedAt
+${REVIEW_SUMMARY_FIELDS}
       }
     }
   }
@@ -825,22 +784,7 @@ const APPLICATION_REVIEW_DETAIL_QUERY = `
     }
     reviewSummaries: allReviewSummaries(first: 1, condition: { programId: $programId }) {
       nodes {
-        programId
-        reviewStatus
-        latestVerdict
-        latestReviewer
-        latestReason
-        displayRevision
-        pendingSubmissionRevision
-        submissionRevision
-        currentRevisionVisibleCommentCount
-        totalVisibleCommentCount
-        activeRequestRevision
-        activeRequestAcknowledged
-        manualOverride
-        tombstoned
-        seasonId
-        updatedAt
+${REVIEW_SUMMARY_FIELDS}
       }
     }
     reviewRequests: allReviewRequests(first: 100, orderBy: REQUESTED_AT_ASC, condition: { programId: $programId, hidden: false, tombstoned: false }) {
@@ -1106,24 +1050,11 @@ export async function getRegistryAgents(): Promise<RegistryAgent[]> {
   )
   const summaries = reviewSummaryMap(data.reviewSummaries.nodes)
 
-  return data.applications.nodes.map((app) => ({
-    id: app.id,
-    handle: `@${app.handle}`,
-    owner: app.owner,
-    displayName: titleizeHandle(app.handle),
-    track: trackLabel(app.track),
-    status: app.status,
-    description: app.description ?? '',
-    githubUrl: app.githubUrl ?? '',
-    idlUrl: app.idlUrl ?? '',
-    discordAccount: app.discordAccount ?? null,
-    telegramAccount: app.telegramAccount ?? null,
-    xAccount: app.xAccount ?? null,
-    tags: app.tags ?? [],
-    registeredAt: app.registeredAt ?? null,
-    metrics: metricByApp.get(app.id) ?? null,
-    reviewSummary: summaries.get(app.id.toLowerCase()) ?? null,
-  }))
+  return data.applications.nodes.map((app) => toRegistryAgent(
+    app,
+    metricByApp.get(app.id) ?? null,
+    summaries.get(app.id.toLowerCase()) ?? null,
+  ))
 }
 
 export async function getRegistryIdentities(): Promise<RegistryIdentity[]> {
@@ -1137,24 +1068,11 @@ export async function getRegistryIdentities(): Promise<RegistryIdentity[]> {
   const projectsByOwner = new Map<string, RegistryAgent[]>()
 
   for (const app of data.applications.nodes) {
-    const project: RegistryAgent = {
-      id: app.id,
-      handle: `@${app.handle}`,
-      owner: app.owner,
-      displayName: titleizeHandle(app.handle),
-      track: trackLabel(app.track),
-      status: app.status,
-      description: app.description ?? '',
-      githubUrl: app.githubUrl ?? '',
-      idlUrl: app.idlUrl ?? '',
-      discordAccount: app.discordAccount ?? null,
-      telegramAccount: app.telegramAccount ?? null,
-      xAccount: app.xAccount ?? null,
-      tags: app.tags ?? [],
-      registeredAt: app.registeredAt ?? null,
-      metrics: metricByApp.get(app.id) ?? null,
-      reviewSummary: summaries.get(app.id.toLowerCase()) ?? null,
-    }
+    const project = toRegistryAgent(
+      app,
+      metricByApp.get(app.id) ?? null,
+      summaries.get(app.id.toLowerCase()) ?? null,
+    )
     const list = projectsByOwner.get(app.owner) ?? []
     list.push(project)
     projectsByOwner.set(app.owner, list)

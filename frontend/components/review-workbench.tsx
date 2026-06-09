@@ -25,7 +25,6 @@ import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
-import { cn } from '@/lib/utils'
 
 type CriteriaKey = keyof ReviewCriteriaInput
 type CriteriaDraft = Record<CriteriaKey, { coverage: ReviewCoverage | ''; note: string }>
@@ -108,6 +107,16 @@ export function ReviewWorkbench({
   const grouped = useMemo(() => groupByRevision(detail.events), [detail.events])
   const revisionGroups = [...grouped.entries()].sort(([a], [b]) => b - a)
   const decisionCriteria = useMemo(() => buildCriteria(criteriaDraft), [criteriaDraft])
+
+  function updateCriterion(key: CriteriaKey, patch: Partial<CriteriaDraft[CriteriaKey]>) {
+    setCriteriaDraft((current) => ({
+      ...current,
+      [key]: {
+        ...current[key],
+        ...patch,
+      },
+    }))
+  }
 
   useEffect(() => {
     let active = true
@@ -297,13 +306,7 @@ export function ReviewWorkbench({
                     <Select
                       value={criteriaDraft[field.key].coverage}
                       onValueChange={(value) => {
-                        setCriteriaDraft((current) => ({
-                          ...current,
-                          [field.key]: {
-                            ...current[field.key],
-                            coverage: value as ReviewCoverage,
-                          },
-                        }))
+                        updateCriterion(field.key, { coverage: value as ReviewCoverage })
                       }}
                     >
                       <SelectTrigger aria-label={`${field.label} coverage`} className="review-criterion__select" size="sm">
@@ -323,13 +326,7 @@ export function ReviewWorkbench({
                     placeholder="Optional public note"
                     value={criteriaDraft[field.key].note}
                     onChange={(event) => {
-                      setCriteriaDraft((current) => ({
-                        ...current,
-                        [field.key]: {
-                          ...current[field.key],
-                          note: event.target.value,
-                        },
-                      }))
+                      updateCriterion(field.key, { note: event.target.value })
                     }}
                   />
                 </div>
@@ -391,7 +388,7 @@ function criterionInput(field: CriteriaDraft[CriteriaKey]): ReviewCriteriaInput[
 
 function ActionBox({ title, children }: { title: string, children: ReactNode }) {
   return (
-    <div className={cn('review-action-box')}>
+    <div className="review-action-box">
       <h3>{title}</h3>
       {children}
     </div>

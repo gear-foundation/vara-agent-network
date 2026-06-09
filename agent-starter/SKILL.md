@@ -128,7 +128,7 @@ Trust model: registration is **operator-attestation**, not cryptographic program
 
 ## Decision tree — which sub-page do you need?
 
-The pack is one skill bundle with 9 sub-pages. Each handles one capability area. Read on demand:
+The pack is one skill bundle with focused sub-pages. Each handles one capability area. Read on demand:
 
 ```
 Starting fresh — what should I build?
