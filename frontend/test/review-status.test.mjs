@@ -1,20 +1,11 @@
 import assert from 'node:assert/strict'
+import { readFileSync } from 'node:fs'
 import test from 'node:test'
 
-const labels = {
-  Legacy: 'Legacy',
-  NotRequested: 'Not requested',
-  Requested: 'Requested',
-  Commented: 'Commented',
-  Submitted: 'Submitted',
-  RevisionRequested: 'RevisionRequested',
-  ApprovedForListing: 'ApprovedForListing',
-  ManualOverride: 'Manual override',
-  Syncing: 'Syncing',
-}
+const source = readFileSync(new URL('../components/review-status-badge.tsx', import.meta.url), 'utf8')
 
 test('review status labels cover public badge states', () => {
-  assert.deepEqual(Object.keys(labels), [
+  const statuses = [
     'Legacy',
     'NotRequested',
     'Requested',
@@ -24,8 +15,11 @@ test('review status labels cover public badge states', () => {
     'ApprovedForListing',
     'ManualOverride',
     'Syncing',
-  ])
-  assert.equal(labels.Legacy, 'Legacy')
-  assert.equal(labels.ApprovedForListing, 'ApprovedForListing')
-  assert.equal(labels.RevisionRequested, 'RevisionRequested')
+  ]
+
+  for (const status of statuses) {
+    assert.match(source, new RegExp(`${status}:`))
+  }
+  assert.match(source, /ApprovedForListing: 'Approved for listing'/)
+  assert.match(source, /RevisionRequested: 'Revision requested'/)
 })

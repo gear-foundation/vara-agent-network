@@ -9,7 +9,7 @@ import { logError } from '@/lib/debug'
 
 export type CurrentUserState =
   | { kind: 'disconnected' }
-  | { kind: 'connected_not_registered'; address: string }
+  | { kind: 'connected_not_registered'; address: string; ownerActorId: string }
   | {
       kind: 'connected_registered'
       address: string
@@ -61,7 +61,7 @@ export function useCurrentUserState(): {
 
   if (!participant) {
     return {
-      state: { kind: 'connected_not_registered', address: account.address },
+      state: { kind: 'connected_not_registered', address: account.address, ownerActorId },
       loading: false,
     }
   }

@@ -103,7 +103,8 @@ export function ReviewWorkbench({
   const app = detail.application
   const summary = detail.summary ?? app?.reviewSummary ?? null
   const displayRevision = summary?.displayRevision ?? 1
-  const isOwner = state.kind === 'connected_registered' && app?.owner?.toLowerCase() === state.ownerActorId.toLowerCase()
+  const ownerActorId = state.kind === 'disconnected' ? null : state.ownerActorId
+  const isOwner = Boolean(app && ownerActorId && app.owner.toLowerCase() === ownerActorId.toLowerCase())
   const revisionGroups = useMemo(
     () => [...groupByRevision(detail.events).entries()].sort(([a], [b]) => b - a),
     [detail.events],
