@@ -466,6 +466,9 @@ pub fn delete_application(review: &mut ReviewState, program_id: ActorId) {
         summary.active_request_acknowledged = false;
         summary.deleted = true;
     }
+    review
+        .decisions
+        .retain(|(decision_program_id, _), _| *decision_program_id != program_id);
 }
 
 pub fn manual_status_override(
@@ -508,10 +511,7 @@ pub fn submit_application(
         return Err(ContractError::InvalidStatusTransition);
     }
 
-    let summary = review
-        .summaries
-        .get_mut(&program_id)
-        .ok_or(ContractError::ReviewRevisionMismatch)?;
+    let summary = ensure_summary(review, program_id);
     let revision = summary.pending_submission_revision.unwrap_or(1);
     let previous_display_revision = summary.display_revision;
     app.status = AppStatus::Submitted;
@@ -641,5 +641,54 @@ fn ensure_reviewable_status(status: AppStatus) -> Result<(), ContractError> {
     match status {
         AppStatus::Building | AppStatus::Submitted => Ok(()),
         _ => Err(ContractError::ReviewNotAllowedForStatus),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn app(program_id: ActorId, owner: ActorId) -> Application {
+        Application {
+            program_id,
+            owner,
+            handle: "legacy-app".to_string(),
+            description: "legacy app".to_string(),
+            track: Track::Services,
+            github_url: "https://github.com/legacy-app".to_string(),
+            skills_hash: [1; 32],
+            skills_url: "https://example.com/legacy/skills.json".to_string(),
+            idl_hash: [2; 32],
+            idl_url: "https://example.com/legacy/agent.idl".to_string(),
+            contacts: None,
+            registered_at: 1,
+            season_id: 1,
+            status: AppStatus::Building,
+        }
+    }
+
+    #[test]
+    fn submit_legacy_application_initializes_missing_review_summary() {
+        let program_id = ActorId::from(200u64);
+        let owner = ActorId::from(101u64);
+        let mut registry = RegistryState::default();
+        registry.applications.insert(program_id, app(program_id, owner));
+        let mut review = ReviewState::default();
+
+        let (submitted_owner, revision, snapshot) =
+            submit_application(&mut registry, &mut review, program_id, owner, 99).unwrap();
+
+        assert_eq!(submitted_owner, owner);
+        assert_eq!(revision, 1);
+        assert_eq!(snapshot.revision, 1);
+        assert_eq!(
+            registry.applications.get(&program_id).unwrap().status,
+            AppStatus::Submitted
+        );
+
+        let summary = review.summaries.get(&program_id).unwrap();
+        assert_eq!(summary.submission_revision, Some(1));
+        assert_eq!(summary.display_revision, Some(1));
+        assert_eq!(summary.pending_submission_revision, None);
     }
 }

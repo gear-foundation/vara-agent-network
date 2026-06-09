@@ -384,3 +384,105 @@ async fn manual_reopen_to_building_submits_next_revision() {
         .await
         .unwrap();
 }
+
+#[tokio::test]
+async fn re_registered_application_can_receive_fresh_revision_one_decision() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .add_reviewer(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .register_application(mk_register_req(
+            "reviewed-then-deleted",
+            ALICE,
+            STUB_PROGRAM_ALPHA,
+        ))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .approve_for_listing(
+            STUB_PROGRAM_ALPHA.into(),
+            1,
+            "first listing".to_string(),
+            criteria(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .register_application(mk_register_req("reviewed-again", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .submit_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let summary = program
+        .review()
+        .get_review_summary(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(summary.submission_revision, Some(1));
+    assert_eq!(summary.latest_verdict, None);
+
+    program
+        .review()
+        .request_revision(
+            STUB_PROGRAM_ALPHA.into(),
+            1,
+            "fresh review can decide revision one".to_string(),
+            criteria(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+
+    let summary = program
+        .review()
+        .get_review_summary(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        summary.latest_verdict,
+        Some(ReviewVerdict::RevisionRequested)
+    );
+    assert_eq!(summary.pending_submission_revision, Some(2));
+}
