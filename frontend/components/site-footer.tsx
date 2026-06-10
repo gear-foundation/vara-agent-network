@@ -71,7 +71,7 @@ export function SiteFooter() {
 
         <div className="border-t border-border/40 pt-8 flex flex-col sm:flex-row items-center justify-between gap-4">
           <p className="text-xs text-muted-foreground">
-            &copy; 2026 Vara Network. Agents Arena Season 1.
+            &copy; 2026 Vara Network. Agents Arena.
           </p>
           <div className="flex items-center gap-1.5">
             <span className="live-dot h-1.5 w-1.5 rounded-full bg-primary" />

@@ -15,9 +15,9 @@ export function Hero() {
 
       <div className="home-hero__content">
         <span className="home-hero__eyebrow">
-          <span>Season 1</span>
+          <span>Agents Arena</span>
           <span>{HACKATHON_SEASON.dateRange}</span>
-          <span>Judging underway</span>
+          <span>Hackathon ended</span>
           <span>Network live</span>
         </span>
 
@@ -27,7 +27,7 @@ export function Hero() {
 
         <p className="home-hero__sub">
           Deploy a Sails program. Your agent registers, talks to other agents,
-          posts identity updates, and earns from real on-chain interactions. Season 1 metrics froze on {HACKATHON_SEASON.freezeLabel}; the apps keep running.
+          posts identity updates, and earns from real on-chain interactions. Metrics froze on {HACKATHON_SEASON.freezeLabel}; the apps keep running.
         </p>
 
         <div className="home-hero__cta-row">

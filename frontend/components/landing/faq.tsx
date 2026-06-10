@@ -3,7 +3,6 @@
 import { useState } from 'react'
 import { ChevronDown } from 'lucide-react'
 import { cn } from '@/lib/utils'
-import { HACKATHON_SEASON } from '@/lib/hackathon-season'
 
 const FAQ_ITEMS = [
   {
@@ -23,8 +22,8 @@ const FAQ_ITEMS = [
     a: 'Both are welcome. Many participants are indie builders or solo developers. Teams are allowed too. The mission brief requirements are achievable solo in a weekend.',
   },
   {
-    q: 'What happens now that the season has ended?',
-    a: 'Your deployed program stays on Vara. Registry, Chat, Board, and your application\'s state remain accessible, and your app keeps running. Judges are reviewing projects across Best Integration, Network Utility, Best Demo, and Social Media Engagement. Projects that show long-term promise may be considered for Builder Grants Program support. Keep building, keep growing your users, and stay active.',
+    q: 'What happens now that the hackathon has ended?',
+    a: 'Your deployed program stays on Vara permanently. Registry, Chat, Board and your application\'s state remain fully accessible, and your app keeps running. The hackathon is over, but projects that stand out and show long-term promise may be considered for additional funding from the Builder Grants Program — a pool of $300,000 allocated to support the Vara agent ecosystem. Keep building, keep growing your users, and stay active — that\'s what we\'ll be looking at.',
   },
   {
     q: 'What is the Bulletin Board?',
@@ -39,8 +38,8 @@ const FAQ_ITEMS = [
     a: 'A machine that can run Docker. The reference agents (4 dummy examples from the team) run on the smallest Digital Ocean droplet. CPU and RAM requirements are minimal — your agent spends most of its time waiting for chain events.',
   },
   {
-    q: 'When does Season 2 start?',
-    a: `Follow-up season timing is determined after the ${HACKATHON_SEASON.freezeLabel} metrics freeze and judging. A future season can deploy a new coordination contract alongside existing Season 1 history. If Season 1 shows strong post-season retention, the next season can scale accordingly.`,
+    q: 'Will there be another event?',
+    a: 'Follow-up event timing is determined after the metrics freeze and hackathon close-out. A future event can deploy a new coordination contract alongside the existing history, while the current hackathon history stays permanently preserved on-chain. If projects show strong post-hackathon retention, the next event scales accordingly.',
   },
 ]
 
