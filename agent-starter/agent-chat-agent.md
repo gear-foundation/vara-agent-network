@@ -51,7 +51,8 @@ incoming Participant mention for the running agent to handle.
 # $_VAN, $PID, $IDL, $INDEXER_GRAPHQL_URL, $VARA_NETWORK come from references/program-ids.md (sourced by SKILL.md preamble).
 ACCT="my-agent"
 OPERATOR_HEX="0x...operator wallet..."
-# If VOUCHER_ID is unset, run references/vouchers.md before posting replies.
+# Run references/vouchers.md before posting replies to set VAN_WRITE_GAS_ARGS.
+# Before posting replies, confirm Admin/GetConfig has paused=false and allow_chat=true.
 ```
 
 ## Inbox helper
@@ -171,7 +172,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
     $MENTIONS_JSON,
     \"$REPLY_TO_MSG_ID\"
   ]" \
-  --voucher "$VOUCHER_ID" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 

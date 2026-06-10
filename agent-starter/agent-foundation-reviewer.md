@@ -7,7 +7,8 @@ Do not use this page for hackathon prize or winner judging.
 
 **Prereqs**: see `SKILL.md` "Install prerequisites" and source the preamble first.
 You need `vara-wallet` 0.19+, `jq`, an account that is an active reviewer, a
-fresh `$IDL`, and `VOUCHER_ID` from `references/vouchers.md` for write calls.
+fresh `$IDL`, `allow_review=true` from `Admin/GetConfig`, and
+`VAN_WRITE_GAS_ARGS` from `references/vouchers.md` for write calls.
 
 ## Terminology
 
@@ -41,10 +42,10 @@ Admin roster operations:
 
 ```bash
 vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
-  Review/AddReviewer --args "[\"$REVIEWER_HEX\"]" --voucher "$VOUCHER_ID" --idl "$IDL"
+  Review/AddReviewer --args "[\"$REVIEWER_HEX\"]" "${VAN_WRITE_GAS_ARGS[@]}" --idl "$IDL"
 
 vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
-  Review/RemoveReviewer --args "[\"$REVIEWER_HEX\"]" --voucher "$VOUCHER_ID" --idl "$IDL"
+  Review/RemoveReviewer --args "[\"$REVIEWER_HEX\"]" "${VAN_WRITE_GAS_ARGS[@]}" --idl "$IDL"
 ```
 
 ## Queue triage
@@ -55,7 +56,7 @@ line work, query the indexer:
 ```bash
 curl -s "$INDEXER_GRAPHQL_URL" \
   -H 'content-type: application/json' \
-  --data '{"query":"query { allReviewSummaries(filter:{tombstoned:{equalTo:false}, manualOverride:{equalTo:false}}, orderBy:UPDATED_AT_ASC, first:50) { nodes { programId reviewStatus displayRevision submissionRevision activeRequestRevision activeRequestAcknowledged latestVerdict latestReason } } }"}' \
+  --data '{"query":"query { allReviewSummaries(filter:{tombstoned:{equalTo:false}}, orderBy:UPDATED_AT_ASC, first:50) { nodes { programId reviewStatus manualOverride displayRevision submissionRevision activeRequestRevision activeRequestAcknowledged latestVerdict latestReason } } }"}' \
   | jq '.data.allReviewSummaries.nodes[]'
 ```
 
@@ -64,6 +65,7 @@ Prioritize:
 - `Requested` or `Commented`: owner wants feedback while still `Building`
 - `Submitted`: ready for a listing decision
 - `RevisionRequested`: waiting on owner changes
+- `ManualOverride` with a new display/pending revision: admin reopened the app; treat it as the next review round and refresh the protocol summary before commenting
 - `ApprovedForListing`: closed unless a later manual reopen creates a new revision
 
 For the full public thread:
@@ -101,7 +103,7 @@ request for that revision.
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/PostReviewerComment \
   --args "[\"$APP_HEX\",$DISPLAY_REVISION,\"Please add a runnable smoke command and clarify the error behavior for your callable method.\"]" \
-  --voucher "$VOUCHER_ID" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 
@@ -128,7 +130,7 @@ Approve for listing:
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/ApproveForListing \
   --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Ready for public listing.\",$CRITERIA]" \
-  --voucher "$VOUCHER_ID" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 
@@ -138,7 +140,7 @@ Request revision:
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/RequestRevision \
   --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Please resubmit after adding live-call evidence and documenting error behavior.\",$CRITERIA]" \
-  --voucher "$VOUCHER_ID" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 

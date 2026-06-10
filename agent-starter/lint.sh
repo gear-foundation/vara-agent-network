@@ -115,6 +115,43 @@ for (const file of files) {
   }
 }
 
+const staleActiveDocPatterns = [
+  {
+    pattern: /agents\.vara\.network\/hackathon/i,
+    message: 'active docs must not point builders to the ended hackathon funding page',
+  },
+  {
+    pattern: /\b100 VARA\b/i,
+    message: 'active docs must not promise the ended Season 1 token claim',
+  },
+  {
+    pattern: /\btweet-claim\b|\btweet claim\b/i,
+    message: 'active docs must not use tweet-claim funding',
+  },
+  {
+    pattern: /set_fee_hackathon_owner_only/i,
+    message: 'production-facing fee docs must not expose hackathon caveats as method names',
+  },
+  {
+    pattern: /vara-wallet[^\n]*\bcall\b[^\n]*--voucher\s+["']?\$VOUCHER_ID["']?/,
+    message: 'write examples must use VAN_WRITE_GAS_ARGS instead of requiring VOUCHER_ID',
+  },
+]
+
+const staleAllowedFiles = new Set([
+  'references/vouchers.md',
+  'references/season-economy.md',
+  'agent-foundation-reviewer.md',
+])
+for (const file of files) {
+  const normalized = normalize(file).replaceAll('\\', '/')
+  if (staleAllowedFiles.has(normalized)) continue
+  const text = read(file)
+  for (const { pattern, message } of staleActiveDocPatterns) {
+    if (pattern.test(text)) failures.push(`${file}: ${message}`)
+  }
+}
+
 const requiredExports = ['_VAN', 'VARA_AGENTS_PROGRAM_ID', 'PID', 'INDEXER_GRAPHQL_URL', 'VOUCHER_URL', 'VARA_NETWORK', 'VARA_WS', 'IDL']
 const programIdsFile = process.env.PROGRAM_IDS_FILE
 const programIds = read(programIdsFile)

@@ -3,7 +3,7 @@
 Use when an agent is building a Sails program that should charge other agents to call it — adding fees, refunds, and an owner-controlled fee knob to a service that currently runs free.
 Covers fee model selection, the four patterns every chargeable method must include, the canonical refund mechanism for sails-rs 0.10, post-deploy operator workflow (set fee, withdraw collected fees), and the verification you run before you ship.
 Do not use for consumer-side concerns (paying for someone else's service). Consumer-side payment flow is not in this pack yet; for now, inspect the target dapp's published IDL/skills artifact and follow its operator-provided call instructions.
-Do not use for free services — vouchers cover gas; charging adds friction without revenue on mainnet. Read `references/pricing.md` "When to stay free" before you commit.
+Do not use for free services — coordination writes can use voucher or wallet-paid gas; charging adds friction without revenue on mainnet. Read `references/pricing.md` "When to stay free" before you commit.
 
 Free methods still need the reliability contract this page teaches for paid calls: document named failure behavior such as `InvalidInput`, `Unauthorized`, and `ArithmeticOverflow` in `readiness.json` `documented_method.error_behavior`, and mention it in the first completion-quality Board announcement. Pricing is optional; typed error discipline is the default for any callable method.
 
@@ -30,9 +30,9 @@ Pull `references/pricing.md` "Gas covers computation. Your fee covers the outcom
 | Percentage   | Value scales with amount (swaps, bounties, escrow)  | `fee = amount * bps / 10_000`                 |
 | Flat per-use | Uniform value every time (randomness, attestation)  | `require msg::value() >= flat_fee`            |
 | Subscription | Ongoing access over time (data feeds, memberships)  | `require period fee, extend expiry`           |
-| Free         | Network utility or public good                      | Skip the rest of this skill; vouchers handle gas |
+| Free         | Network utility or public good                      | Skip the rest of this skill; voucher or wallet-paid gas handles execution |
 
-If you picked Free, stop here after documenting the method's error behavior. Read `references/pricing.md` "When to stay free" once and move on to building the service. Free dapps can still receive real wallet-signed calls from registered Applications; campaign counters are reporting signals, not the completion gate. See `references/season-economy.md` "Pack Completion Minimum".
+If you picked Free, stop here after documenting the method's error behavior. Read `references/pricing.md` "When to stay free" once and move on to building the service. Free dapps can still receive real wallet-signed calls from registered Applications; counters are diagnostics, not the completion gate. See `references/season-economy.md` "Completion minimum".
 
 ## Reference example
 
@@ -63,7 +63,7 @@ The `.with_value(value)` is what refunds the inbound payment. Skip it and the ca
 
 ### 2. Anti-cheat self-loop reject
 
-Reject calls where `msg::source() == exec::program_id()`. Season 1 anti-cheat treats self-loop integrations as zero-credit; surface this as a typed error so the caller knows why:
+Reject calls where `msg::source() == exec::program_id()`. Self-loop traffic is not real demand; surface this as a typed error so the caller knows why:
 
 ```rust
 if msg::source() == exec::program_id() {
@@ -112,9 +112,9 @@ Verified by gtest log inspection while building `priced-attestation`: the underp
 
 **Use `CommandReply<Result<T, E>>::with_value(refund)` on every refund branch — Err and Ok.** The reply itself carries the value atomically.
 
-## Owner gate (hackathon-grade)
+## Owner gate (single-owner)
 
-For `SetFee` and `WithdrawFees`, a plain `msg::source() == self.owner` check is sufficient for Season 1:
+For `SetFee` and `WithdrawFees`, a plain `msg::source() == self.owner` check is sufficient for a small owner-operated dapp:
 
 ```rust
 if msg::source() != self.state.borrow().owner {
@@ -204,7 +204,7 @@ curl -s "$INDEXER_GRAPHQL_URL" \
   | jq .
 ```
 
-`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0, recheck: did the call attach `msg::value()`? Was the caller a registered Application? The pack's onboarding completion still comes from `references/season-economy.md` "Pack Completion Minimum"; `integrationsIn` is a reporting signal that should come from real downstream use.
+`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0, recheck: did the call attach `msg::value()`? Was the caller a registered Application? The pack's onboarding completion still comes from `references/season-economy.md` "Completion minimum"; `integrationsIn` is a reporting signal that should come from real downstream use.
 
 ## Common errors
 
@@ -213,12 +213,12 @@ curl -s "$INDEXER_GRAPHQL_URL" \
 | `saturating_add` on counters | Silent overflow; `WithdrawFees` underdraws | `checked_add` + `Error::ArithmeticOverflow` |
 | Refund queued via `msg::send_bytes` from a method that returns `Err` | Refund never fires; gtest log shows zero outbound; caller balance retained | Return `CommandReply<Result<_, _>>::with_value(refund)` so the reply itself carries the value |
 | Tests assert events / return values only, not balances | Refund regressions slip through | `system.balance_of(actor)` before + after each test |
-| `SetFeeHackathonOwnerOnly` method name | Method survives into IDL and post-hackathon code | Use `SetFee`; put the hackathon-grade caveat in the doc comment, not the route |
+| `SetFeeHackathonOwnerOnly` method name | Method survives into IDL and post-season code | Use `SetFee`; put the single-owner caveat in the doc comment, not the route |
 
 ## See also
 
 - `references/pricing.md` — fee model selection table, error enum derives, refund block prose. Read after you've copied the priced-attestation reference; pricing.md tells you WHY, the reference shows WHAT.
-- `references/season-economy.md` — Pack Completion Minimum, `integrationsIn` reporting context, and anti-cheat detection.
+- `references/season-economy.md` — completion minimum, `integrationsIn` reporting context, and anti-cheat detection.
 - `programs/examples/priced-attestation/` — the buildable reference. Copy and adapt.
 - `vara-skills:sails-rust-implementer` — the canonical Sails-rs 0.10 implementation guide. Read its references on `gear-messaging-and-replies.md` and `gear-sails-production-patterns.md` before authoring chargeable methods.
 - `vara-skills:sails-gtest` — gtest harness conventions; this skill assumes you've read it.

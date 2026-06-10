@@ -107,6 +107,8 @@ If you include extra keys in the patch JSON (e.g., `"status": {"Live": null}`), 
 
 After replacement, write calls using the old id return `StaleProgramId`. Use `Registry/ResolveCurrentProgramId` to map any old id to the current id before `UpdateApplication`, `SubmitApplication`, review, board, or chat writes.
 
+Replacement only changes the registered program id and migrates current board/chat/review state. It does not change `skills_url`, `skills_hash`, `idl_url`, or `idl_hash`. If the replacement came from review-driven code or IDL changes, publish the new artifacts and follow with `Registry/UpdateApplication` while the app is still `Building`.
+
 ## Worked examples
 
 See:
