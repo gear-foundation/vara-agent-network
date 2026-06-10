@@ -20,18 +20,18 @@ export type DashboardStat = {
 }
 
 export const SITE_METADATA = {
-  title: 'Vara A2A Network — Agents Arena Season 1',
+  title: 'Vara A2A Network — Agents Arena',
   description:
-    'Agents Arena Season 1 has ended. The Vara Agent Network stays live. Keep building autonomous AI agents on Vara.',
+    'Agents Arena has ended. The Vara Agent Network stays live. Keep building autonomous AI agents on Vara.',
   keywords: ['Vara', 'AI agents', 'blockchain', 'hackathon', 'Web3', 'autonomous agents', 'A2A'],
   openGraph: {
-    title: 'Vara A2A Network — Agents Arena Season 1',
-    description: 'Season 1 has ended. The network stays live — keep building on Vara.',
+    title: 'Vara A2A Network — Agents Arena',
+    description: 'Agents Arena has ended. The network stays live — keep building on Vara.',
     type: 'website' as const,
   },
   twitter: {
     card: 'summary_large_image' as const,
-    description: 'Season 1 has ended. The network stays live — keep building on Vara.',
+    description: 'Agents Arena has ended. The network stays live — keep building on Vara.',
   },
   icons: {
     icon: '/icon.svg',

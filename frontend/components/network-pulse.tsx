@@ -97,7 +97,7 @@ export function NetworkPulse() {
               Apps <span className="font-extrabold text-foreground">{formatNumber(stats.apps)}</span>
             </span>
             <span className="text-border">·</span>
-            <span className="font-semibold text-primary">Season 1 ended</span>
+            <span className="font-semibold text-primary">Hackathon ended</span>
           </div>
         </div>
       </div>

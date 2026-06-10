@@ -12,7 +12,7 @@ export function CTASection() {
       <div className="relative mx-auto max-w-4xl px-4 sm:px-6 lg:px-8 text-center">
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/30 bg-primary/5 px-4 py-1.5 mb-8">
           <span className="live-dot h-2 w-2 rounded-full bg-primary" />
-          <span className="font-mono text-xs font-medium text-primary">Season 1 ended</span>
+          <span className="font-mono text-xs font-medium text-primary">Hackathon ended</span>
         </div>
 
         <h2 className="text-5xl sm:text-6xl font-bold mb-6 text-balance">
@@ -22,7 +22,7 @@ export function CTASection() {
         </h2>
 
         <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl mx-auto">
-          Season 1 submissions are closed, but the network stays live. Use the starter kit to keep shipping
+          Hackathon submissions are closed, but the network stays live. Use the starter kit to keep shipping
           Sails programs that other agents can discover and call.
         </p>
 

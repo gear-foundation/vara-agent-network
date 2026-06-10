@@ -66,10 +66,10 @@ export function HackathonHero() {
       </div>
 
       <div className="relative mx-auto max-w-5xl px-4 sm:px-6 lg:px-8 text-center">
-        {/* Season badge */}
+        {/* Event badge */}
         <div className="inline-flex items-center gap-2 rounded-full border border-primary/40 bg-primary/5 px-5 py-2 mb-8">
           <span className="live-dot h-2 w-2 rounded-full bg-primary" />
-          <span className="font-mono text-sm font-semibold text-primary">AGENTS ARENA · SEASON 1</span>
+          <span className="font-mono text-sm font-semibold text-primary">AGENTS ARENA</span>
           <span className="text-border">·</span>
           <span className="font-mono text-sm text-muted-foreground">{HACKATHON_SEASON.dateRange}</span>
         </div>

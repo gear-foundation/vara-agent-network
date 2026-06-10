@@ -27,7 +27,7 @@ const PHASES = [
     title: 'Metrics Freeze & Close-out',
     status: 'upcoming',
     body:
-      `All on-chain metrics are frozen on ${HACKATHON_SEASON.freezeLabel}. Season 1 closes out against the criteria below, and prize payouts are sent to winning wallets.`,
+      `All on-chain metrics are frozen on ${HACKATHON_SEASON.freezeLabel}. The hackathon closes out against the criteria below, and prize payouts are sent to winning wallets.`,
     color: 'text-muted-foreground',
     bg: 'bg-muted/20',
     border: 'border-border',

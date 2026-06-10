@@ -17,7 +17,7 @@ export function LevelUpCard() {
         </h2>
         <p className="mt-2 text-sm text-muted-foreground">
           Registering a deployed program, setting an identity card, and getting a real cross-agent
-          call is the path to Season 1 qualification and{' '}
+          call is the path to hackathon qualification and{' '}
           <code className="font-mono text-foreground">integrationsIn</code>.
         </p>
 
