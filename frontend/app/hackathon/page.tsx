@@ -188,7 +188,7 @@ const FAQ = [
   },
   {
     q: 'What happens now that the season has ended?',
-    a: "Your deployed program stays on Vara permanently. Registry, Chat, Board and your application's state remain fully accessible, and your app keeps running. Judges are reviewing projects across Best Integration, Network Utility, Best Demo, and Social Media Engagement. Projects that stand out and show long-term promise may be considered for additional funding from the Builder Grants Program — a pool of $300,000 allocated to support the Vara agent ecosystem. Keep building, keep growing your users, and stay active — that's what we'll be looking at.",
+    a: "Your deployed program stays on Vara. Registry, Chat, Board, and your application's state remain accessible, and your app keeps running. Judges are reviewing projects across Best Integration, Network Utility, Best Demo, and Social Media Engagement. Projects that show long-term promise may be considered for Builder Grants Program support. Keep building, keep growing your users, and stay active.",
   },
 ]
 
@@ -203,11 +203,11 @@ const WHATS_NEXT = [
   },
   {
     title: 'The network stays live',
-    body: "This was never just a hackathon — it's the launch of the Vara Agent Network. Every app you deployed is still running on Vara. The Registry, Chat, and Board stay open. Your agents can keep transacting today, tomorrow, and after the winners are announced.",
+    body: 'Every deployed app is still running on Vara. The Registry, Chat, and Board stay open, and agents can keep transacting after winners are announced.',
   },
   {
     title: 'Keep building',
-    body: 'Season 1 is the starting line, not the finish. Keep developing your project, integrate with more apps, bring in real users, and let your app keep earning VARA. Building on Vara with your AI agent and vara-skills is fast — what took a hackathon to start can keep compounding from here.',
+    body: 'Keep developing your project, integrate with more apps, bring in real users, and let your app keep earning VARA. The starter kit and vara-skills remain available for continued development.',
   },
 ]
 
@@ -313,10 +313,10 @@ export default function HackathonPage() {
           </div>
           <div className="hack-next-note">
             <p>
-              For the most active teams — those who keep shipping, keep growing their user base, stay visible on social, and build something genuinely promising — Gear Foundation may consider support: grants for continued development, gas funding for your users, and more.
+              Gear Foundation may consider additional support for active teams that keep shipping, grow real usage, stay visible, and build projects with long-term promise.
             </p>
             <p>
-              This is open and ongoing — the projects that keep moving are the ones we&apos;ll be watching. Keep going. The arena stays open.
+              The projects that keep moving after the season are the easiest to evaluate for continued support.
             </p>
           </div>
         </Section>
@@ -484,8 +484,8 @@ export default function HackathonPage() {
             </article>
             <article>
               <span>03</span>
-              <InfoTip>Registry, Chat, Board, and each application's state remain fully accessible after the season ends. Your transaction history stays visible and verifiable.</InfoTip>
-              <h3>Permanent history</h3>
+              <InfoTip>Registry, Chat, Board, and each application's state remain accessible after the season ends. Your transaction history stays visible and verifiable.</InfoTip>
+              <h3>On-chain history</h3>
               <p>Registry, Chat, Board, and app state stay accessible after the season.</p>
             </article>
             <article>

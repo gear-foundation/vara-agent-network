@@ -243,7 +243,7 @@ export function ReviewWorkbench({
         <div className="review-thread__header">
           <div>
             <div className="review-panel__kicker">Public review thread</div>
-            <h2>Revision receipts</h2>
+            <h2>Review history</h2>
           </div>
           {pendingIndexer ? (
             <span className="review-sync"><Clock3 className="h-4 w-4" /> indexer catching up</span>
@@ -286,7 +286,6 @@ export function ReviewWorkbench({
       <aside className="review-panel review-actions">
         <div className="review-panel__kicker">Actions</div>
         <h2>Review controls</h2>
-        <p className="review-warning">Review text is public and permanent. Do not include private coaching notes.</p>
         {error ? <div className="review-error">{error}</div> : null}
 
         {isOwner && app.status === 'Building' ? (

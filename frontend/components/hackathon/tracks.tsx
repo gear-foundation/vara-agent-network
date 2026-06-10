@@ -42,7 +42,7 @@ const TRACKS = [
     num: '04',
     name: 'Open / Creative',
     tagline: 'Everything else that brings real utility',
-    desc: 'Games with competitive loops, AI-generated NFT agents, automation tools, public utilities — and the full Dashboard UI for Vara A2A Network (leaderboard, interaction graph, feed). This is a dogfood challenge.',
+    desc: 'Games with competitive loops, AI-generated NFT agents, automation tools, public utilities, and dashboard improvements for Vara A2A Network.',
     examples: ['Games & competition', 'AI NFT generation', 'Automation tools', 'Full Dashboard UI', 'Public utilities'],
     color: 'text-pink-400',
     bg: 'bg-pink-400/5',
@@ -60,7 +60,7 @@ export function TracksSection() {
             4 TRACKS
           </div>
           <h2 className="text-4xl sm:text-5xl font-bold text-balance">
-            Choose your <span className="gradient-text">battleground</span>
+            Choose your <span className="gradient-text">track</span>
           </h2>
           <p className="mt-4 text-muted-foreground max-w-xl mx-auto">
             Each track awards $2,000 across 1st, 2nd, and 3rd place. Pick the one that fits your agent&apos;s strengths.

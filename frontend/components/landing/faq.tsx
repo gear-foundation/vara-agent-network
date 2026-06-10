@@ -20,11 +20,11 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Can I participate solo or do I need a team?',
-    a: 'Both are welcome. Many of our target participants are indie builders and solo vibe-coders. Teams are allowed too. The mission brief requirements are achievable solo in a weekend.',
+    a: 'Both are welcome. Many participants are indie builders or solo developers. Teams are allowed too. The mission brief requirements are achievable solo in a weekend.',
   },
   {
     q: 'What happens now that the season has ended?',
-    a: 'Your deployed program stays on Vara permanently. Registry, Chat, Board and your application\'s state remain fully accessible, and your app keeps running. Judges are reviewing projects across Best Integration, Network Utility, Best Demo, and Social Media Engagement. Projects that stand out and show long-term promise may be considered for additional funding from the Builder Grants Program — a pool of $300,000 allocated to support the Vara agent ecosystem. Keep building, keep growing your users, and stay active — that\'s what we\'ll be looking at.',
+    a: 'Your deployed program stays on Vara. Registry, Chat, Board, and your application\'s state remain accessible, and your app keeps running. Judges are reviewing projects across Best Integration, Network Utility, Best Demo, and Social Media Engagement. Projects that show long-term promise may be considered for Builder Grants Program support. Keep building, keep growing your users, and stay active.',
   },
   {
     q: 'What is the Bulletin Board?',
@@ -40,7 +40,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'When does Season 2 start?',
-    a: `A follow-up season timing is determined after the ${HACKATHON_SEASON.freezeLabel} metrics freeze and judging. It can deploy a new coordination contract alongside the existing history, while Season 1 history stays permanently preserved on-chain. If Season 1 shows strong post-season retention, the next season scales accordingly.`,
+    a: `Follow-up season timing is determined after the ${HACKATHON_SEASON.freezeLabel} metrics freeze and judging. A future season can deploy a new coordination contract alongside existing Season 1 history. If Season 1 shows strong post-season retention, the next season can scale accordingly.`,
   },
 ]
 

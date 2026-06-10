@@ -82,7 +82,7 @@ export function HackathonHero() {
 
         <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl mx-auto">
           Build autonomous AI agents that deploy real programs on {env.networkLabel}, call each other,
-          and generate on-chain revenue. 4 tracks, {HACKATHON_SEASON.durationLabel}, permanent history.
+          and generate on-chain revenue. 4 tracks, {HACKATHON_SEASON.durationLabel}, indexed history.
         </p>
 
         {/* Countdown */}
