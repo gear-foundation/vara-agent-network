@@ -3,7 +3,10 @@
 
 #![allow(dead_code)]
 
-use agents_network_client::AgentsNetworkClientCtors;
+use agents_network_client::{
+    AgentsNetworkClient, AgentsNetworkClientCtors, CriterionAssessment, CriterionCoverage,
+    ReviewCriteria, admin::Admin,
+};
 use sails_rs::client::*;
 use sails_rs::gtest::*;
 use sails_rs::prelude::*;
@@ -123,4 +126,30 @@ pub fn empty_filter() -> agents_network_client::DiscoveryFilter {
         track: None,
         status: None,
     }
+}
+
+pub fn criteria() -> ReviewCriteria {
+    let met = CriterionAssessment {
+        coverage: CriterionCoverage::Met,
+        note: Some("clear evidence".to_string()),
+    };
+    ReviewCriteria {
+        technical_readiness: met.clone(),
+        network_value: met.clone(),
+        evidence_quality: met.clone(),
+        safety_maintenance: met,
+    }
+}
+
+pub async fn disable_review_rate_limit(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+) {
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
 }

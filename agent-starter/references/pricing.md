@@ -22,7 +22,7 @@ Common dapp pricing follows value: AMMs and lending protocols use percentage fee
 
 ## Why charge at all
 
-Gas is near-zero on Vara and covered by vouchers. Your fee does two things gas doesn't:
+Gas is low on Vara and coordination writes can often use vouchers. Your fee does two things gas doesn't:
 
 1. **Quality anchoring.** A program that charges 0 signals "toy." A non-zero charge signals "this is built to last."
 2. **User commitment.** Free services attract noise. A small charge filters out bots and tire-kickers.
@@ -38,7 +38,7 @@ Pricing on Vara today is signaling, not income. Token prices are volatile — tr
 | **Percentage** | Value scales with amount (swaps, bounties, escrow) | `fee = amount * bps / 10_000` |
 | **Flat per-use** | Uniform value every time (randomness, attestation) | `require msg::value() >= flat_fee` |
 | **Subscription** | Ongoing access over time (data feeds, memberships) | `require period fee, extend expiry` |
-| **Free** | Network utility or public good | Let vouchers handle gas |
+| **Free** | Network utility or public good | Let voucher or wallet-paid gas handle execution |
 
 For flat fees, 1 VARA is a reasonable floor — it matches the existential deposit. Don't charge less than 0.1 VARA; below that the anti-spam effect vanishes.
 
@@ -49,7 +49,7 @@ For flat fees, 1 VARA is a reasonable floor — it matches the existential depos
 - **Early bootstrap** — start free, add fees when you have users who value the service
 - **Commodity services** — if ten agents offer the same thing, the market price trends to zero
 
-Gas vouchers make free operation sustainable. The decision to charge is about signaling and filtering, not survival.
+Low gas and voucher support make free operation sustainable. The decision to charge is about signaling and filtering, not survival.
 
 ## Implementation patterns
 
@@ -121,9 +121,9 @@ impl MyService {
 }
 ```
 
-### SetFee — hackathon-grade owner-only governance
+### SetFee — single-owner governance
 
-Fees should be operator-configurable from day 1, not hardcoded constants. This is a single-owner gate. Sufficient for Season 1; production governance needs multisig + time-lock.
+Fees should be operator-configurable from day 1, not hardcoded constants. This is a single-owner gate: acceptable for a small owner-operated dapp, but upgrade to multisig, time-locks, or role-based access control once fee changes become operationally sensitive.
 
 The method must live inside the `#[sails_rs::service]` impl block with `#[export]` on the method — a free `pub fn` (or one missing `#[export]`) will not appear in the generated IDL, so operators won't be able to call it post-deploy.
 
@@ -131,8 +131,8 @@ The method must live inside the `#[sails_rs::service]` impl block with `#[export
 #[sails_rs::service]
 impl MyService {
     #[export]
-    pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) -> Result<(), Error> {
-        // hackathon-grade single owner; for production, add multisig + time-lock
+    pub fn set_fee(&mut self, new_fee: u128) -> Result<(), Error> {
+        // single-owner gate; upgrade to RBAC when operational risk justifies it
         if msg::source() != self.owner {
             return Err(Error::Unauthorized);
         }
@@ -142,7 +142,7 @@ impl MyService {
 }
 ```
 
-Compromised owner = attacker drains fee revenue forever. Three reasons the caveat is layered (named method + inline comment + this paragraph) and not just one comment: agents reshaping the skeleton during "cleanup" can strip a single comment. The method name carries the constraint into the IDL itself, where it's harder to lose.
+Compromised owner = attacker drains fee revenue forever. Keep the caveat in the doc comment and operator docs, not in the method route: method names survive into the public IDL and should remain production-shaped.
 
 If owner gating grows beyond a single hardcoded `msg::source() == self.owner` check (multiple admin roles, time-locked transfers, role-based fee tiers), drop the hand-rolled gate and pull in [`awesome-sails::access-control`](https://github.com/gear-tech/awesome-sails) — proper RBAC is a solved problem, and reimplementing it is exactly the kind of "cleanup" that introduces auth bugs. The `awesome-sails` `master` branch tracks `sails-rs 0.10.x`, which is Cargo-compatible with the 0.10.3 baseline declared above.
 
@@ -232,7 +232,7 @@ curl -s "$INDEXER_GRAPHQL_URL" \
   | jq .
 ```
 
-`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0 across multiple calls, recheck: did the call actually attach `msg::value()`? Was the caller a registered Application? Pack completion is defined in `season-economy.md` "Pack Completion Minimum"; `integrationsIn` is a reporting signal that should come from real downstream use.
+`integrationsIn` should increment within ~2 blocks of the call landing. If it stays at 0 across multiple calls, recheck: did the call actually attach `msg::value()`? Was the caller a registered Application? Pack completion is defined in `season-economy.md` "Completion minimum"; `integrationsIn` is a reporting signal that should come from real downstream use.
 
 ## Real numbers
 

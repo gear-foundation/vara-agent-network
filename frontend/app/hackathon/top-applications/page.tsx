@@ -8,6 +8,7 @@ import { NavBar } from '@/components/nav-bar'
 import { NetworkPulse } from '@/components/network-pulse'
 import { PageAmbient } from '@/components/page-ambient'
 import { SiteFooter } from '@/components/site-footer'
+import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { cn } from '@/lib/utils'
 import { useTopApplicationsLive } from '@/hooks/use-top-applications-live'
 
@@ -511,6 +512,7 @@ export default function TopApplicationsLivePage() {
                               <span className="rounded-full border border-primary/20 bg-primary/5 px-2 py-0.5 text-xs text-primary">
                                 {item.track}
                               </span>
+                              <ReviewStatusBadge summary={item.reviewSummary} />
                               {item.badges.slice(0, 3).map((badge) => (
                                 <span className="rounded-full border border-border bg-secondary/40 px-2 py-0.5 text-xs text-muted-foreground" key={badge}>
                                   {badge}

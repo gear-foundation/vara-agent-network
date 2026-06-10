@@ -64,6 +64,20 @@
       "when": 1777395600000,
       "tag": "0008_lowercase_actor_ids",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1780963200000,
+      "tag": "0009_review_projections",
+      "breakpoints": true
+    },
+    {
+      "idx": 10,
+      "version": "7",
+      "when": 1781016000000,
+      "tag": "0010_application_program_replacements",
+      "breakpoints": true
     }
   ]
 }

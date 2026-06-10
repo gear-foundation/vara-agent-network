@@ -9,7 +9,7 @@
 
 use crate::admin::AdminState;
 use crate::guards;
-use crate::registry::RegistryState;
+use crate::registry::{self, RegistryState};
 use crate::types::*;
 use alloc::collections::VecDeque;
 use sails_rs::cell::RefCell;
@@ -26,6 +26,7 @@ pub struct BoardState {
     pub identity_cards: BTreeMap<ActorId, IdentityCard>,
     pub announcements: BTreeMap<ActorId, VecDeque<Announcement>>,
     pub announcement_index: BTreeMap<PostId, ActorId>,
+    pub announcement_records: BTreeMap<PostId, Announcement>,
     pub next_post_id: PostId,
     /// Keyed per application (not per owning wallet). One wallet owning 20
     /// apps gets 20 independent 60s buckets.
@@ -69,12 +70,13 @@ impl BoardState {
             let evicted = queue.pop_front().map(|a| a.id);
             if let Some(evicted_id) = evicted {
                 self.announcement_index.remove(&evicted_id);
+                self.announcement_records.remove(&evicted_id);
             }
             evicted
         } else {
             None
         };
-        queue.push_back(Announcement {
+        let announcement = Announcement {
             id,
             title,
             body,
@@ -82,8 +84,10 @@ impl BoardState {
             kind,
             posted_at: ts,
             season_id,
-        });
+        };
+        queue.push_back(announcement.clone());
         self.announcement_index.insert(id, app);
+        self.announcement_records.insert(id, announcement);
         PushOutcome {
             new_id: id,
             evicted_id,
@@ -96,7 +100,23 @@ impl BoardState {
         if let Some(queue) = self.announcements.remove(&app) {
             for announcement in queue {
                 self.announcement_index.remove(&announcement.id);
+                self.announcement_records.remove(&announcement.id);
             }
+        }
+    }
+
+    pub fn replace_application_program(&mut self, old_app: ActorId, new_app: ActorId) {
+        if let Some(card) = self.identity_cards.remove(&old_app) {
+            self.identity_cards.insert(new_app, card);
+        }
+        if let Some(queue) = self.announcements.remove(&old_app) {
+            for announcement in &queue {
+                self.announcement_index.insert(announcement.id, new_app);
+            }
+            self.announcements.insert(new_app, queue);
+        }
+        if let Some(last_post_at) = self.last_board_post_at.remove(&old_app) {
+            self.last_board_post_at.insert(new_app, last_post_at);
         }
     }
 }
@@ -176,6 +196,7 @@ impl<'a> BoardService<'a> {
 
     fn authorize(&self, app: ActorId) -> Result<(), ContractError> {
         let reg = self.registry.borrow();
+        registry::ensure_current_program_id(&reg, app)?;
         let application = reg
             .applications
             .get(&app)
@@ -322,17 +343,21 @@ impl<'a> BoardService<'a> {
 
         {
             let mut board = self.board.borrow_mut();
-            let queue = board
-                .announcements
-                .get_mut(&app)
-                .ok_or(ContractError::UnknownAnnouncement)?;
-            let entry = queue
-                .iter_mut()
-                .find(|a| a.id == id)
-                .ok_or(ContractError::UnknownAnnouncement)?;
-            entry.title = req.title.clone();
-            entry.body = req.body.clone();
-            entry.tags = req.tags.clone();
+            let updated = {
+                let queue = board
+                    .announcements
+                    .get_mut(&app)
+                    .ok_or(ContractError::UnknownAnnouncement)?;
+                let entry = queue
+                    .iter_mut()
+                    .find(|a| a.id == id)
+                    .ok_or(ContractError::UnknownAnnouncement)?;
+                entry.title = req.title.clone();
+                entry.body = req.body.clone();
+                entry.tags = req.tags.clone();
+                entry.clone()
+            };
+            board.announcement_records.insert(id, updated);
         }
 
         self.emit_event(BoardEvent::AnnouncementEdited {
@@ -367,6 +392,7 @@ impl<'a> BoardService<'a> {
                 .ok_or(ContractError::UnknownAnnouncement)?;
             let _ = queue.remove(pos);
             board.announcement_index.remove(&id);
+            board.announcement_records.remove(&id);
         }
 
         self.emit_event(BoardEvent::AnnouncementArchived {
@@ -412,10 +438,7 @@ impl<'a> BoardService<'a> {
             if cursor.map_or(false, |c| *post_id <= c) {
                 continue;
             }
-            let Some(queue) = board.announcements.get(app) else {
-                continue;
-            };
-            let Some(announcement) = queue.iter().find(|a| a.id == *post_id) else {
+            let Some(announcement) = board.announcement_records.get(post_id) else {
                 continue;
             };
             if items.len() == limit {

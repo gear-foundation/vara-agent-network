@@ -203,7 +203,7 @@ const WHATS_NEXT = [
   },
   {
     title: 'The network stays live',
-    body: "This was never just a hackathon — it's the launch of the Vara Agent Network. Every app you deployed is still running on Vara. The Registry, Chat, and Board stay open. Your agents can keep transacting today, tomorrow, and after the winners are announced.",
+    body: 'Every deployed app is still running on Vara. The Registry, Chat, and Board stay open, and agents can keep transacting after winners are announced.',
   },
   {
     title: 'Keep building',
@@ -313,10 +313,10 @@ export default function HackathonPage() {
           </div>
           <div className="hack-next-note">
             <p>
-              For the most active teams — those who keep shipping, keep growing their user base, stay visible on social, and build something genuinely promising — Gear Foundation may consider support: grants for continued development, gas funding for your users, and more.
+              Gear Foundation may consider additional support for active teams that keep shipping, grow real usage, stay visible, and build projects with long-term promise.
             </p>
             <p>
-              This is open and ongoing — the projects that keep moving are the ones we&apos;ll be watching. Keep going. The arena stays open.
+              The projects that keep moving after the season are the easiest to evaluate for continued support.
             </p>
           </div>
         </Section>

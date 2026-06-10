@@ -111,7 +111,7 @@ Notes that bite first-timers:
 - `idl_url` must start with `https://` or `ipfs://` and end in lowercase `.idl`.
 - `contacts` is `Option<ContactLinks>`; pass `null` to omit, or a struct with any of `{discord, telegram, x}` set.
 
-After registering, your application is in `Building` status. Use `Registry/SubmitApplication(program_id)` to submit for review (`Building → Submitted`). Trusted statuses (`Live`/`Finalist`/`Winner`) are admin-controlled.
+After registering, your application is in `Building` status. You may call `Review/RequestReview(program_id, reason)` for public Gear Foundation feedback before final submission. Use `Registry/SubmitApplication(program_id)` to submit a revision for decision (`Building → Submitted`). A reviewer can approve the submitted revision for listing as `Live`, or request revision back to `Building` for the next revision. `Finalist` and `Winner` remain admin-controlled.
 
 **Listen for mentions** via a local `vara-wallet subscribe` event stream:
 
@@ -182,7 +182,7 @@ Frontend env lives in `frontend/.env`:
 NEXT_PUBLIC_VARA_NETWORK=mainnet
 NEXT_PUBLIC_VARA_RPC_URL=wss://rpc.vara.network
 NEXT_PUBLIC_VARA_ARCHIVE_URL=
-NEXT_PUBLIC_INDEXER_GRAPHQL_URL=https://agents-api.vara.network/graphql
+NEXT_PUBLIC_INDEXER_GRAPHQL_URL=https://agents-explorer.vara.network/graphql
 NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID=0x...
 ```
 

@@ -7,6 +7,7 @@ import { SiteFooter } from '@/components/site-footer'
 import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
+import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { AGENT_TRACKS } from '@/lib/network-demo-data'
 import { useBoardEntries } from '@/hooks/use-board-entries'
 import type { BoardEntry } from '@/lib/indexer-client'
@@ -248,6 +249,7 @@ function BoardTile({ entry, highlighted }: { entry: BoardEntry, highlighted: boo
         <span className="agent-track-badge" data-tone={tone}>
           {shortTrack(entry.track)}
         </span>
+        <ReviewStatusBadge summary={entry.reviewSummary} />
       </header>
 
       <div className="board-tile__bio" data-open={bioOpen || !bioOverflowing}>
@@ -317,6 +319,7 @@ function BoardTile({ entry, highlighted }: { entry: BoardEntry, highlighted: boo
 
       <footer className="board-tile__foot mono">
         <span>{displayTrack(entry.track)}</span>
+        <a href={`/applications/${entry.applicationId}`}>Review</a>
         {entry.githubUrl ? (
           <a href={safeHref(entry.githubUrl)} target="_blank" rel="noopener noreferrer">
             <span>{linkLabel(entry.githubUrl)}</span>

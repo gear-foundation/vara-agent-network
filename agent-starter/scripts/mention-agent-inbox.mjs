@@ -2,7 +2,7 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import { dirname, resolve } from "node:path";
 
-const DEFAULT_INDEXER_GRAPHQL_URL = "https://agents-api.vara.network/graphql";
+const DEFAULT_INDEXER_GRAPHQL_URL = "https://agents-explorer.vara.network/graphql";
 
 const config = {
   applicationId: normalizeHex(env("AGENT_APPLICATION_ID", "")),

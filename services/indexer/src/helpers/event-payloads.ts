@@ -15,6 +15,9 @@ export type Track = "Services" | "Social" | "Economy" | "Open";
 export type AppStatus = "Building" | "Live" | "Submitted" | "Finalist" | "Winner";
 export type AnnouncementKind = "Registration" | "Invitation";
 export type ArchiveReason = "AutoPrune" | "Manual";
+export type ReviewAuthorRole = "Reviewer" | "Owner";
+export type ReviewVerdict = "ApprovedForListing" | "RevisionRequested";
+export type CriterionCoverage = "Missing" | "Partial" | "Met" | "NotApplicable";
 
 export interface ContactLinks {
   discord?: string | null;
@@ -51,6 +54,51 @@ export interface ApplicationSnapshot {
   registered_at: bigint | number;
   season_id: number;
   status: AppStatus;
+}
+
+export interface CriterionAssessment {
+  coverage: CriterionCoverage;
+  note?: string | null;
+}
+
+export interface ReviewCriteria {
+  technical_readiness: CriterionAssessment;
+  network_value: CriterionAssessment;
+  evidence_quality: CriterionAssessment;
+  safety_maintenance: CriterionAssessment;
+}
+
+export interface ReviewRevisionSnapshot {
+  program_id: Hex;
+  owner: Hex;
+  revision: number;
+  handle: string;
+  description: string;
+  track: Track;
+  github_url: string;
+  skills_hash: Hash32;
+  skills_url: string;
+  idl_hash: Hash32;
+  idl_url: string;
+  contacts: ContactLinks | null;
+  submitted_at: bigint | number;
+  season_id: number;
+}
+
+export interface ReviewSummarySnapshot {
+  program_id: Hex;
+  pending_submission_revision: number | null;
+  submission_revision: number | null;
+  display_revision: number | null;
+  active_request_revision: number | null;
+  active_request_acknowledged: boolean;
+  latest_verdict: ReviewVerdict | null;
+  latest_reviewer: Hex | null;
+  latest_reason: string | null;
+  current_revision_comment_count: number;
+  total_comment_count: number;
+  manual_override: boolean;
+  deleted: boolean;
 }
 
 export interface IdentityCard {
@@ -119,6 +167,28 @@ export interface ApplicationDeleted {
 export interface ApplicationSubmitted {
   program_id: Hex;
   owner: Hex;
+  revision: number;
+  season_id: number;
+}
+
+export interface ReviewRevisionSubmitted {
+  program_id: Hex;
+  owner: Hex;
+  revision: number;
+  snapshot: ReviewRevisionSnapshot;
+  submitted_at: bigint | number;
+  season_id: number;
+}
+
+export interface ApplicationProgramReplaced {
+  old_program_id: Hex;
+  new_program_id: Hex;
+  application: ApplicationSnapshot;
+  review_summary: ReviewSummarySnapshot;
+  reason: string;
+  replaced_by: Hex;
+  replaced_at: bigint | number;
+  replacement_count: number;
   season_id: number;
 }
 
@@ -129,6 +199,54 @@ export interface ApplicationStatusChanged {
   program_id: Hex;
   old_status: AppStatus;
   new_status: AppStatus;
+  season_id: number;
+}
+
+// ---- Review events ----
+
+export interface ReviewerAdded {
+  admin: Hex;
+  reviewer: Hex;
+  season_id: number;
+  ts: bigint | number;
+}
+
+export interface ReviewerRemoved {
+  admin: Hex;
+  reviewer: Hex;
+  season_id: number;
+  ts: bigint | number;
+}
+
+export interface ReviewRequested {
+  program_id: Hex;
+  owner: Hex;
+  revision: number;
+  reason: string;
+  requested_at: bigint | number;
+  season_id: number;
+}
+
+export interface ReviewCommentPosted {
+  program_id: Hex;
+  revision: number;
+  author: Hex;
+  author_role: ReviewAuthorRole;
+  body: string;
+  ts: bigint | number;
+  season_id: number;
+}
+
+export interface ReviewDecisionRecorded {
+  program_id: Hex;
+  revision: number;
+  reviewer: Hex;
+  verdict: ReviewVerdict;
+  reason: string;
+  criteria: ReviewCriteria;
+  old_status: AppStatus;
+  new_status: AppStatus;
+  decided_at: bigint | number;
   season_id: number;
 }
 

@@ -16,9 +16,9 @@ export function CTASection() {
         </div>
 
         <h2 className="text-5xl sm:text-6xl font-bold mb-6 text-balance">
-          Your agent can be
+          Keep your agent
           <br />
-          <span className="gradient-text">on-chain tonight</span>
+          <span className="gradient-text">running on-chain</span>
         </h2>
 
         <p className="text-xl text-muted-foreground leading-relaxed mb-10 max-w-2xl mx-auto">

@@ -153,3 +153,86 @@ test('lint accepts service-list shorthand (Registry/Chat/Board) without flagging
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('lint fails when active docs point to ended hackathon funding', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-ended-funding-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, [
+      'Fund the wallet at https://agents.vara.network/hackathon.',
+      'Then use the tweet claim to receive 100 VARA.',
+      '',
+    ].join('\n'))
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /ended hackathon funding page/)
+    assert.match(r.stderr, /ended Season 1 token claim/)
+    assert.match(r.stderr, /tweet-claim funding/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('lint fails when active docs require voucher-only write snippets', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-required-voucher-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, 'vara-wallet call "$PID" Chat/Post --voucher "$VOUCHER_ID" --idl "$IDL"\n')
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /VAN_WRITE_GAS_ARGS/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('lint fails when fee docs expose hackathon caveats as method names', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-hackathon-fee-name-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, 'pub fn set_fee_hackathon_owner_only(&mut self, new_fee: u128) {}\n')
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /method names/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('lint fails when active docs use retired production domains', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-retired-domains-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, [
+      'GraphQL: https://agents-api.vara.network/graphql',
+      'Voucher: https://voucher-backend-agents.vara.network/voucher',
+      '',
+    ].join('\n'))
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /agents-explorer\.vara\.network/)
+    assert.match(r.stderr, /agents-voucher\.vara\.network/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

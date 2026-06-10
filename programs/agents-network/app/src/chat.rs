@@ -6,7 +6,7 @@
 
 use crate::admin::AdminState;
 use crate::guards;
-use crate::registry::RegistryState;
+use crate::registry::{self, RegistryState};
 use crate::types::*;
 use sails_rs::cell::RefCell;
 use sails_rs::collections::BTreeMap;
@@ -27,6 +27,31 @@ pub struct ChatState {
     /// Rate limit keyed on `msg::source()` (wallet for participant posts,
     /// program ActorId for app self-calls — shared bucket).
     pub last_post_at: BTreeMap<ActorId, u64>,
+}
+
+impl ChatState {
+    pub fn replace_application_program(&mut self, old_app: ActorId, new_app: ActorId) {
+        let old_key = HandleRef::Application(old_app).encode();
+        let new_key = HandleRef::Application(new_app).encode();
+        if let Some(old_inbox) = self.mention_inboxes.remove(&old_key) {
+            if let Some(new_inbox) = self.mention_inboxes.get_mut(&new_key) {
+                if old_inbox.latest_seq > new_inbox.latest_seq {
+                    new_inbox.latest_seq = old_inbox.latest_seq;
+                }
+                if new_inbox.oldest_retained_seq == 0
+                    || (old_inbox.oldest_retained_seq != 0
+                        && old_inbox.oldest_retained_seq < new_inbox.oldest_retained_seq)
+                {
+                    new_inbox.oldest_retained_seq = old_inbox.oldest_retained_seq;
+                }
+                for header in old_inbox.ring {
+                    new_inbox.ring.push_back(header);
+                }
+            } else {
+                self.mention_inboxes.insert(new_key, old_inbox);
+            }
+        }
+    }
 }
 
 // ---------------------------------------------------------------------------
@@ -115,6 +140,7 @@ impl<'a> ChatService<'a> {
             }
             HandleRef::Application(a) => {
                 let reg = self.registry.borrow();
+                registry::ensure_current_program_id(&reg, *a)?;
                 let app = reg
                     .applications
                     .get(a)
@@ -142,14 +168,8 @@ impl<'a> ChatService<'a> {
 
         // Dedup mentions preserving order.
         let dedup_mentions = dedup_preserve_order(&mentions);
-
-        // Strip orphan mentions (HandleRefs not in the registry) before ring
-        // append. The MessagePosted event still carries the original mentions
-        // list for auditability; only inbox writes are filtered. This closes
-        // a DoS vector where attackers could create permanent junk inbox
-        // state for fabricated HandleRefs.
         let registered_mentions =
-            filter_registered_mentions(&dedup_mentions, &self.registry.borrow());
+            filter_registered_current_mentions(&dedup_mentions, &self.registry.borrow())?;
 
         // Allocate id. `checked_add` panics on overflow → whole message
         // reverts per Gear transaction boundary. Saturating would silently
@@ -267,16 +287,28 @@ fn dedup_preserve_order(items: &[HandleRef]) -> Vec<HandleRef> {
     out
 }
 
-/// Keep only HandleRefs that refer to a registered participant or application.
-/// Spec: "Orphan mention — strip silently before insert; event still carries
-/// original list for auditability."
-fn filter_registered_mentions(mentions: &[HandleRef], registry: &RegistryState) -> Vec<HandleRef> {
-    mentions
-        .iter()
-        .filter(|r| match r {
-            HandleRef::Participant(p) => registry.participants.contains_key(p),
-            HandleRef::Application(a) => registry.applications.contains_key(a),
-        })
-        .cloned()
-        .collect()
+/// Keep only registered mentions, while still rejecting stale application refs.
+/// Orphan mentions are stripped silently before insert; the event carries the
+/// original mention list for auditability.
+fn filter_registered_current_mentions(
+    mentions: &[HandleRef],
+    registry: &RegistryState,
+) -> Result<Vec<HandleRef>, ContractError> {
+    let mut registered = Vec::with_capacity(mentions.len());
+    for mention in mentions {
+        match mention {
+            HandleRef::Participant(p) => {
+                if registry.participants.contains_key(p) {
+                    registered.push(mention.clone());
+                }
+            }
+            HandleRef::Application(a) => {
+                registry::ensure_current_program_id(registry, *a)?;
+                if registry.applications.contains_key(a) {
+                    registered.push(mention.clone());
+                }
+            }
+        }
+    }
+    Ok(registered)
 }

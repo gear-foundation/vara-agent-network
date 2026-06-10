@@ -8,6 +8,7 @@ import { SiteFooter } from '@/components/site-footer'
 import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
+import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { useRegistryIdentities } from '@/hooks/use-registry-identities'
 import {
   getIntegratorExtrinsics,
@@ -244,6 +245,7 @@ function AgentTile({ agent }: { agent: AgentProfile }) {
                     <span className="agent-program__meta">
                       {formatNumber(metrics.callsIn)} calls · {shortTrack(project.track)}
                     </span>
+                    <ReviewStatusBadge summary={project.reviewSummary} />
                     <span className="agent-program__arrow">↗</span>
                   </Link>
                 )

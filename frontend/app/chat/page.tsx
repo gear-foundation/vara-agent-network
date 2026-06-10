@@ -9,7 +9,7 @@ import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
 import { ToastAction } from '@/components/ui/toast'
 import { toast } from '@/hooks/use-toast'
-import { useChatFeed } from '@/hooks/use-chat-feed'
+import { useChatFeed, type LiveChatMessage } from '@/hooks/use-chat-feed'
 import { useMentionTargets } from '@/hooks/use-mention-targets'
 import { useRegistryIdentities } from '@/hooks/use-registry-identities'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
@@ -94,20 +94,75 @@ function messageTime(ts: string) {
   })
 }
 
+type PendingChatMessage = {
+  id: string
+  authorHandle: string | null
+  authorRef: string
+  body: string
+  ts: string
+  status: 'signing' | 'submitted'
+}
+
+type DisplayChatMessage = LiveChatMessage | PendingChatMessage
+
+const PENDING_DUPLICATE_WINDOW_MS = 120_000
+
+function duplicateBucket(ts: number) {
+  return Math.floor(ts / PENDING_DUPLICATE_WINDOW_MS)
+}
+
+function duplicateKeys(message: Pick<DisplayChatMessage, 'authorHandle' | 'authorRef' | 'body'>, bucket: number) {
+  return [
+    JSON.stringify([bucket, 'handle', message.authorHandle, message.body]),
+    JSON.stringify([bucket, 'ref', message.authorRef, message.body]),
+  ]
+}
+
+function buildConfirmedMessageIndex(messages: LiveChatMessage[]) {
+  const index = new Map<string, LiveChatMessage[]>()
+
+  for (const message of messages) {
+    const ts = Number(message.ts)
+    if (!Number.isFinite(ts)) continue
+
+    for (const key of duplicateKeys(message, duplicateBucket(ts))) {
+      const bucket = index.get(key) ?? []
+      bucket.push(message)
+      index.set(key, bucket)
+    }
+  }
+
+  return index
+}
+
+function hasConfirmedDuplicate(pending: PendingChatMessage, confirmedIndex: Map<string, LiveChatMessage[]>) {
+  const pendingTs = Number(pending.ts)
+  if (!Number.isFinite(pendingTs)) return false
+
+  const bucket = duplicateBucket(pendingTs)
+  for (const candidateBucket of [bucket - 1, bucket, bucket + 1]) {
+    for (const key of duplicateKeys(pending, candidateBucket)) {
+      const candidates = confirmedIndex.get(key) ?? []
+      if (candidates.some((message) => (
+        message.body === pending.body
+        && (message.authorHandle === pending.authorHandle || message.authorRef === pending.authorRef)
+        && Math.abs(Number(message.ts) - pendingTs) < PENDING_DUPLICATE_WINDOW_MS
+      ))) {
+        return true
+      }
+    }
+  }
+
+  return false
+}
+
 export default function ChatPage() {
   const [input, setInput] = useState('')
   const [caretIndex, setCaretIndex] = useState(0)
   const [inputFocused, setInputFocused] = useState(false)
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [sending, setSending] = useState(false)
-  const [pendingMessages, setPendingMessages] = useState<Array<{
-    id: string
-    authorHandle: string | null
-    authorRef: string
-    body: string
-    ts: string
-    status: 'signing' | 'submitted'
-  }>>([])
+  const [pendingMessages, setPendingMessages] = useState<PendingChatMessage[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const feedRef = useRef<HTMLDivElement>(null)
   const inputRef = useRef<HTMLTextAreaElement>(null)
@@ -145,33 +200,35 @@ export default function ChatPage() {
     const target = targetByHandle.get(handle.replace(/^@/, '').toLowerCase())
     return handleTone(handle, target?.track, target?.ownerKind)
   }
-  const displayMessages = useMemo(() => ([
-    ...messages,
-    ...pendingMessages.filter((pending) => !messages.some((message) => (
-      message.body === pending.body
-      && (message.authorHandle === pending.authorHandle || message.authorRef === pending.authorRef)
-      && Math.abs(Number(message.ts) - Number(pending.ts)) < 120_000
-    ))),
-  ].sort((a, b) => Number(a.ts) - Number(b.ts))), [messages, pendingMessages])
-  const recentAuthors = Array.from(
-    displayMessages.reduce((map, message) => {
-      const key = authorLabel(message)
-      const item = map.get(key) ?? { handle: key, title: authorTitle(message), calls: 0 }
-      item.calls += 1
-      map.set(key, item)
-      return map
-    }, new Map<string, { handle: string; title: string; calls: number }>()),
-  )
-    .map(([, value]) => value)
-    .sort((a, b) => b.calls - a.calls)
-    .slice(0, 8)
+  const displayMessages = useMemo(() => {
+    const confirmedIndex = buildConfirmedMessageIndex(messages)
+    return [
+      ...messages,
+      ...pendingMessages.filter((pending) => !hasConfirmedDuplicate(pending, confirmedIndex)),
+    ].sort((a, b) => Number(a.ts) - Number(b.ts))
+  }, [messages, pendingMessages])
+  const fallbackChannelStats = useMemo(() => {
+    const recentAuthors = Array.from(
+      displayMessages.reduce((map, message) => {
+        const key = authorLabel(message)
+        const item = map.get(key) ?? { handle: key, title: authorTitle(message), calls: 0 }
+        item.calls += 1
+        map.set(key, item)
+        return map
+      }, new Map<string, { handle: string; title: string; calls: number }>()),
+    )
+      .map(([, value]) => value)
+      .sort((a, b) => b.calls - a.calls)
+      .slice(0, 8)
+    const mentionCount = displayMessages.reduce((sum, message) => sum + (message.body.match(/@\w[\w-]*/g)?.length ?? 0), 0)
+    const signedParticipants = new Set(displayMessages.map((message) => authorLabel(message))).size
 
-  const mentionCount = displayMessages.reduce((sum, message) => sum + (message.body.match(/@\w[\w-]*/g)?.length ?? 0), 0)
-  const signedParticipants = new Set(displayMessages.map((message) => authorLabel(message))).size
+    return { recentAuthors, mentionCount, signedParticipants }
+  }, [displayMessages])
   const loadedCount = displayMessages.length
-  const channelAuthors = stats?.topAuthors ?? recentAuthors
-  const channelAuthorCount = stats?.totalAuthors ?? signedParticipants
-  const channelMentionCount = stats?.totalMentions ?? mentionCount
+  const channelAuthors = stats?.topAuthors ?? fallbackChannelStats.recentAuthors
+  const channelAuthorCount = stats?.totalAuthors ?? fallbackChannelStats.signedParticipants
+  const channelMentionCount = stats?.totalMentions ?? fallbackChannelStats.mentionCount
   const channelMessageCount = stats?.totalMessages ?? (totalCount || loadedCount)
   const [programConfigured, setProgramConfigured] = useState(true)
   const mentionMatch = input.slice(0, caretIndex).match(/(^|\s)@([a-z0-9_-]*)$/i)

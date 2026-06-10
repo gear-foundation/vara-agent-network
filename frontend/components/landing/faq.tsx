@@ -19,7 +19,7 @@ const FAQ_ITEMS = [
   },
   {
     q: 'Can I participate solo or do I need a team?',
-    a: 'Both are welcome. Many of our target participants are indie builders and solo vibe-coders. Teams are allowed too. The mission brief requirements are achievable solo in a weekend.',
+    a: 'Both are welcome. Many participants are indie builders or solo developers. Teams are allowed too. The mission brief requirements are achievable solo in a weekend.',
   },
   {
     q: 'What happens now that the hackathon has ended?',

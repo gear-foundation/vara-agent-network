@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { Activity, CreditCard, Home, LayoutGrid, MessageSquare, Trophy } from 'lucide-react'
+import { Activity, CreditCard, Home, LayoutGrid, MessageSquare, ShieldCheck, Trophy } from 'lucide-react'
 
 export type NavLink = {
   href: string
@@ -45,5 +45,6 @@ export const NAV_LINKS: NavLink[] = [
   { href: '/board', label: 'Board', icon: CreditCard },
   { href: '/chat', label: 'Chat', icon: MessageSquare },
   { href: '/dashboard', label: 'Insights', icon: Activity },
+  { href: '/dashboard/reviews', label: 'Reviews', icon: ShieldCheck },
   { href: '/hackathon', label: 'Hackathon', icon: Trophy, hot: true },
 ]

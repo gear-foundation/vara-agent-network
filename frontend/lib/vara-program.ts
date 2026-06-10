@@ -28,6 +28,15 @@ export type PostChatParams = {
   replyTo?: string | number | null
 }
 
+export type ReviewCoverage = 'Missing' | 'Partial' | 'Met' | 'NotApplicable'
+
+export type ReviewCriteriaInput = {
+  technical_readiness: { coverage: ReviewCoverage; note?: string | null }
+  network_value: { coverage: ReviewCoverage; note?: string | null }
+  evidence_quality: { coverage: ReviewCoverage; note?: string | null }
+  safety_maintenance: { coverage: ReviewCoverage; note?: string | null }
+}
+
 const APP_NAME = 'Vara A2A Network'
 const IDL_PATH = '/idl/agents_network_client.idl'
 const GITHUB_URL_PREFIX = 'https://github.com/'
@@ -264,4 +273,127 @@ export async function postChatMessage({ account, body, replyTo }: PostChatParams
     })
     throw error
   }
+}
+
+async function sendTx(account: WalletAccount, label: string, tx: any) {
+  const signer = await getSigner(account)
+  tx.withAccount(account.address, { signer })
+  logInfo(label, 'calculating gas')
+  await tx.calculateGas()
+  logInfo(label, 'signing')
+  const result = await tx.signAndSend()
+  logInfo(label, 'waiting for response')
+  const response = await result.response()
+  logInfo(label, 'confirmed', response)
+  return result
+}
+
+export async function isReviewer(address: string) {
+  const actorId = await addressToActorId(address)
+  const sails = await getSailsClient()
+  return Boolean(await sails.services.Review.queries.IsReviewer(actorId).withAddress(address).call())
+}
+
+export async function listReviewers(address?: string) {
+  const sails = await getSailsClient()
+  const query = sails.services.Review.queries.ListReviewers()
+  const result = address ? await query.withAddress(address).call() : await query.call()
+  return (Array.isArray(result) ? result : []) as string[]
+}
+
+export async function addReviewer(account: WalletAccount, reviewer: string) {
+  const actorId = reviewer.startsWith('0x') ? reviewer : await addressToActorId(reviewer)
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.AddReviewer(actorId)
+  return sendTx(account, 'review.tx.AddReviewer', tx)
+}
+
+export async function removeReviewer(account: WalletAccount, reviewer: string) {
+  const actorId = reviewer.startsWith('0x') ? reviewer : await addressToActorId(reviewer)
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.RemoveReviewer(actorId)
+  return sendTx(account, 'review.tx.RemoveReviewer', tx)
+}
+
+export async function submitApplication(account: WalletAccount, programId: string) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Registry.functions.SubmitApplication(programId)
+  return sendTx(account, 'registry.tx.SubmitApplication', tx)
+}
+
+export async function assertProgramIsDeployed(programId: string) {
+  const normalized = programId.trim().toLowerCase()
+  if (!/^0x[0-9a-f]{64}$/.test(normalized)) {
+    throw new Error('Program id must be a 0x-prefixed 32-byte hex ActorId.')
+  }
+
+  const api = await getGearApi()
+  const storage = await api.query.gearProgram.programStorage(normalized)
+  const human = storage.toHuman()
+  const text = JSON.stringify(human)
+  if (!text || text === 'null' || !text.includes('Active') || !text.includes('Initialized')) {
+    throw new Error('New program id is not an active initialized Gear program.')
+  }
+
+  return normalized
+}
+
+export async function replaceApplicationProgram(
+  account: WalletAccount,
+  oldProgramId: string,
+  newProgramId: string,
+  reason: string,
+) {
+  const normalizedNewProgramId = await assertProgramIsDeployed(newProgramId)
+  const sails = await getSailsClient()
+  const tx = sails.services.Registry.functions.ReplaceApplicationProgram(
+    oldProgramId,
+    normalizedNewProgramId,
+    reason,
+  )
+  return sendTx(account, 'registry.tx.ReplaceApplicationProgram', tx)
+}
+
+export async function requestReview(account: WalletAccount, programId: string, reason: string) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.RequestReview(programId, reason)
+  return sendTx(account, 'review.tx.RequestReview', tx)
+}
+
+export async function postReviewerComment(
+  account: WalletAccount,
+  programId: string,
+  revision: number,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.PostReviewerComment(programId, revision, body)
+  return sendTx(account, 'review.tx.PostReviewerComment', tx)
+}
+
+export async function ownerReply(
+  account: WalletAccount,
+  programId: string,
+  revision: number,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.OwnerReply(programId, revision, body)
+  return sendTx(account, 'review.tx.OwnerReply', tx)
+}
+
+export async function decideReview(
+  account: WalletAccount,
+  programId: string,
+  revision: number,
+  verdict: 'ApprovedForListing' | 'RevisionRequested',
+  reason: string,
+  criteria: ReviewCriteriaInput,
+) {
+  const sails = await getSailsClient()
+  const fn = verdict === 'ApprovedForListing'
+    ? sails.services.Review.functions.ApproveForListing
+    : sails.services.Review.functions.RequestRevision
+  const tx = fn(programId, revision, reason, criteria)
+  return sendTx(account, `review.tx.${verdict}`, tx)
 }

@@ -3,7 +3,8 @@
 use crate::types::{
     Config, ContactLinks, ContractError, Hash32, MAX_ANNOUNCEMENT_BODY, MAX_ANNOUNCEMENT_TITLE,
     MAX_CONTACT_LINK, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN, MAX_IDENTITY_FIELD,
-    MAX_IDL_URL, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS, MIN_HANDLE_LEN, RegisterAppReq,
+    MAX_IDL_URL, MAX_REVIEW_CRITERION_NOTE, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS, MIN_HANDLE_LEN,
+    RegisterAppReq, ReviewCriteria,
 };
 use sails_rs::prelude::*;
 
@@ -31,6 +32,13 @@ pub fn ensure_chat_enabled(config: &Config) -> Result<(), ContractError> {
 pub fn ensure_board_enabled(config: &Config) -> Result<(), ContractError> {
     if !config.allow_board_updates {
         return Err(ContractError::BoardUpdatesDisabled);
+    }
+    Ok(())
+}
+
+pub fn ensure_review_enabled(config: &Config) -> Result<(), ContractError> {
+    if !config.allow_review {
+        return Err(ContractError::ReviewDisabled);
     }
     Ok(())
 }
@@ -203,11 +211,60 @@ fn check_tags(tags: &[String]) -> Result<(), ContractError> {
 }
 
 pub fn check_chat_body(body: &str, config: &Config) -> Result<(), ContractError> {
+    check_body_len(
+        body,
+        config.max_chat_body as usize,
+        ContractError::EmptyBody,
+        ContractError::FieldTooLarge,
+    )
+}
+
+pub fn check_review_body(body: &str, config: &Config) -> Result<(), ContractError> {
+    check_body_len(
+        body,
+        config.max_review_body_bytes as usize,
+        ContractError::EmptyBody,
+        ContractError::FieldTooLarge,
+    )
+}
+
+pub fn check_replacement_reason(reason: &str, config: &Config) -> Result<(), ContractError> {
+    check_body_len(
+        reason,
+        config.max_review_body_bytes as usize,
+        ContractError::ReplacementReasonRequired,
+        ContractError::ReplacementReasonTooLong,
+    )
+}
+
+fn check_body_len(
+    body: &str,
+    max_len: usize,
+    empty_error: ContractError,
+    too_long_error: ContractError,
+) -> Result<(), ContractError> {
     if body.is_empty() {
-        return Err(ContractError::EmptyBody);
+        return Err(empty_error);
     }
-    if body.len() > config.max_chat_body as usize {
-        return Err(ContractError::FieldTooLarge);
+    if body.len() > max_len {
+        return Err(too_long_error);
+    }
+    Ok(())
+}
+
+pub fn check_review_criteria(criteria: &ReviewCriteria) -> Result<(), ContractError> {
+    for note in [
+        &criteria.technical_readiness.note,
+        &criteria.network_value.note,
+        &criteria.evidence_quality.note,
+        &criteria.safety_maintenance.note,
+    ]
+    .into_iter()
+    .flatten()
+    {
+        if note.len() > MAX_REVIEW_CRITERION_NOTE {
+            return Err(ContractError::FieldTooLarge);
+        }
     }
     Ok(())
 }

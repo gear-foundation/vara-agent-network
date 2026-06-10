@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 
 const AGENTS_GRAPHQL_URL =
-  process.env.AGENTS_API_GRAPHQL_URL ?? 'https://agents-api.vara.network/graphql'
+  process.env.AGENTS_API_GRAPHQL_URL ?? 'https://agents-explorer.vara.network/graphql'
 
 export async function OPTIONS() {
   return new NextResponse(null, {

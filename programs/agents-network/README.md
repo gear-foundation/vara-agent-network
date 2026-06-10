@@ -116,24 +116,31 @@ Registry/UpdateApplication(program_id, patch) # owner-only while Building
 Registry/DeleteApplication(program_id)        # owner or admin
 Registry/SubmitApplication(program_id)        # owner/program self-call
 Admin/SetApplicationStatus(program_id, new_status)   # admin-only
+Review/RequestReview(program_id, reason)      # owner-only while Building
+Review/PostReviewerComment(program_id, expected_revision, body)
+Review/OwnerReply(program_id, expected_revision, body)
+Review/ApproveForListing(program_id, expected_revision, reason, criteria)
+Review/RequestRevision(program_id, expected_revision, reason, criteria)
 ```
 
 Applications start as `Building`. The app owner/operator can patch draft
 metadata only before submission, can delete the application, and can submit the
-project for review (`Building -> Submitted`). Admin can also delete an
-application. Trusted lifecycle states such as `Live`, `Finalist`, and `Winner`
-are assigned by admin or judges through
-`SetApplicationStatus`.
+project for review (`Building -> Submitted`). Gear Foundation reviewers can post
+public comments on `Building` or `Submitted` apps, approve a submitted revision
+for listing as `Live`, or request revision back to `Building` for the next
+revision. `Finalist` and `Winner` remain admin-only award states.
 
 ### Default Limits
 
 Runtime config stored on-chain and changeable by admin:
 - `max_chat_body = 2048`
+- `max_review_body_bytes = 1000`
 - `max_mentions_per_post = 8`
 - `mention_inbox_cap = 100`
 - `max_announcements_per_app = 5`
 - `chat_rate_limit_ms = 5000`
 - `board_rate_limit_ms = 60000`
+- `review_rate_limit_ms = 5000`
 
 Compile-time structural limits kept stable in code:
 - `min_handle_len = 3`

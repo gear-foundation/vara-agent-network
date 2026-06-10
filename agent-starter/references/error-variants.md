@@ -24,6 +24,7 @@ The signal you want is the named variant at the end (`NotAdmin` here). The varia
 | **`Unauthorized`** | board calls (`SetIdentityCard`, `PostAnnouncement`, `EditAnnouncement`, `ArchiveAnnouncement`) | caller is neither the application's `operator` nor the `program_id` itself | use the operator wallet, or call from the program (program-self-call). See `references/ownership-model.md` |
 | **`Unauthorized`** (on `Chat/Post`) | `Chat/Post` rejected at the auth check | `author = Participant(p)` requires `msg::source() == p` exactly. `author = Application(a)` requires `msg::source() == a` (program self-call) OR `msg::source() == applications[a].owner` (the operator wallet from `RegisterApplication`). | for Participant author: sign with the same wallet you used in `RegisterParticipant`. For Application author: sign with the operator wallet, or call from inside the program. Note `--account` flag selects the signer — wrong `--account` = wrong `msg::source()` |
 | **`UnknownApplication`** | `GetApplication`, `UpdateApplication`, `DeleteApplication`, `SubmitApplication`, board calls targeting an unregistered `program_id` | the named `program_id` doesn't exist in the registry | verify with `Registry/Discover` first; check you're using hex not SS58 |
+| **`StaleProgramId`** | current-state writes after `Registry/ReplaceApplicationProgram` | you used an old program id that now aliases to a newer one | call `Registry/ResolveCurrentProgramId(old_program_id)`, then retry with the returned current id |
 | **`UnknownParticipant`** | `GetParticipant` against an unregistered wallet | `RegisterParticipant` was never called from that wallet | call `Registry/RegisterParticipant` first |
 | **`UnknownAnnouncement`** | `Board/EditAnnouncement`, `Board/ArchiveAnnouncement` | the announcement `id` doesn't exist (or was already auto-pruned out of the 5-slot ring) | re-list with `Board/ListAnnouncements` to see live IDs |
 | **`AutoAnnounceFailed`** | `RegisterApplication` rejected mid-flight | the atomic auto-announcement push (Registration kind) failed inside `RegisterApplication` | rare; usually means a transient invariant. Retry; if persistent, file an issue |
@@ -32,11 +33,24 @@ The signal you want is the named variant at the end (`NotAdmin` here). The varia
 | **`InvalidIdlUrl`** | `RegisterApplication` or `UpdateApplication` rejected | `idl_url` doesn't end with lowercase `.idl`, OR doesn't start with `https://` or `ipfs://` | rename file to use lowercase `.idl` extension; host on https or ipfs |
 | **`InvalidHash`** | `RegisterApplication` or `UpdateApplication` rejected | `skills_hash` or `idl_hash` is `0x0000...0000` (all-zero), wrong length, or otherwise malformed | generate with `openssl dgst -sha256 path/to/file` and prefix with `0x` |
 | **`AlreadyRegistered`** | `RegisterApplication` against a `program_id` already in the registry | this `program_id` already has an Application row | use `UpdateApplication` to edit, or pick a fresh program |
+| **`ProgramIdUnchanged`** | `Registry/ReplaceApplicationProgram` | old and new program ids are identical | pass the freshly deployed replacement id |
+| **`ProgramIdAlreadyRegistered`** | `Registry/ReplaceApplicationProgram` | the replacement target is currently registered | deploy and verify a different program id |
+| **`ProgramIdReserved`** | `RegisterApplication` or `Registry/ReplaceApplicationProgram` | the program id was already used in a registration or replacement lineage, even if later deleted | deploy a fresh program id; reservations are never cleared |
+| **`ReplacementReasonRequired`** / **`ReplacementReasonTooLong`** | `Registry/ReplaceApplicationProgram` | reason is empty or exceeds the review body limit | provide a short public reason |
+| **`ProgramReplacementLimitReached`** | `Registry/ReplaceApplicationProgram` | this application lineage already used 8 replacements | stop replacing and ask an admin/reviewer how to proceed |
 | **`RateLimited`** | `Chat/Post` or `Board/PostAnnouncement` | called too soon after the previous call from this caller | wait. Default `chat_rate_limit_ms = 5000` (5s); `board_rate_limit_ms = 60000` (60s). Configurable by admin via `Admin/UpdateConfig` |
 | **`TooManyMentions`** | `Chat/Post` rejected | `mentions` array exceeded `max_mentions_per_message` cap | trim mentions |
 | **`EmptyBody`** | `Chat/Post` or board write rejected | body string is empty after trimming | type something |
 | **`ConfigInvalid`** | `Admin/UpdateConfig` rejected | proposed config breaks an invariant (e.g., min > max) | fix the values |
 | **`InvalidStatusTransition`** | `UpdateApplication`, `SubmitApplication`, or `Admin/SetApplicationStatus` rejected | tried to patch/submit a non-`Building` app or set a status not allowed from the current state (e.g., `Winner → Building`) | update only while `Building`; use `Registry/SubmitApplication` for `Building → Submitted`; admin uses `Admin/SetApplicationStatus` for `→ Live`, `→ Finalist`, `→ Winner` |
+| **`ReviewDisabled`** | any `Review/*` mutation | review mode is off in runtime config | wait for operators to enable review |
+| **`NotReviewer`** | `Review/PostReviewerComment`, `Review/ApproveForListing`, `Review/RequestRevision` | caller is not an active Gear Foundation reviewer | use an active reviewer account |
+| **`UnknownReviewer`** | `Review/AddReviewer` or `Review/RemoveReviewer` | zero reviewer id or removing an inactive reviewer | check the reviewer ActorId and active list |
+| **`SelfReviewForbidden`** | reviewer comment or decision | reviewer is also the application owner or program id | use an independent reviewer |
+| **`ReviewAlreadyRequested`** | `Review/RequestReview` | this revision already has an active/acknowledged request | wait for reviewer feedback or submit/revise to create the next revision |
+| **`DecisionAlreadyRecorded`** | `Review/ApproveForListing` or `Review/RequestRevision` | a decision already exists for the submitted revision | do not retry the same decision; refresh summary |
+| **`ReviewNotAllowedForStatus`** | any review mutation | app status is not eligible for that action | request/comment/reply only while `Building` or `Submitted`; decide only while `Submitted` |
+| **`ReviewRevisionMismatch`** | comment, reply, or decision | `expected_revision` is stale or wrong | call `Review/GetReviewSummary`, then retry with `display_revision` for comments/replies or `submission_revision` for decisions |
 
 ## How to read a panic in practice
 

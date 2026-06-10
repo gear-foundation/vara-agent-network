@@ -20,6 +20,7 @@ import {
   doublePrecision,
   index,
   integer,
+  jsonb,
   pgTable,
   primaryKey,
   text,
@@ -93,6 +94,168 @@ export const applications = pgTable(
     statusIdx: index("applications_status_idx").on(t.status),
   }),
 );
+
+export const applicationProgramReplacements = pgTable(
+  "application_program_replacements",
+  {
+    eventId: text("event_id").primaryKey(),
+    oldProgramId: text("old_program_id").notNull(),
+    newProgramId: text("new_program_id").notNull(),
+    reason: text("reason").notNull(),
+    replacedBy: text("replaced_by").notNull(),
+    replacedAt: bigint("replaced_at", { mode: "bigint" }).notNull(),
+    replacementCount: integer("replacement_count").notNull(),
+    seasonId: integer("season_id").notNull(),
+  },
+  (t) => ({
+    oldProgramIdx: index("app_program_replacements_old_idx").on(t.oldProgramId),
+    newProgramIdx: index("app_program_replacements_new_idx").on(t.newProgramId),
+    seasonIdx: index("app_program_replacements_season_idx").on(t.seasonId),
+  }),
+);
+
+export const reviewers = pgTable(
+  "reviewers",
+  {
+    id: text("id").primaryKey(), // "{season_id}:{reviewer}"
+    reviewer: text("reviewer").notNull(),
+    seasonId: integer("season_id").notNull(),
+    active: boolean("active").notNull().default(true),
+    updatedAt: bigint("updated_at", { mode: "bigint" }).notNull(),
+  },
+  (t) => ({
+    activeSeasonIdx: index("reviewers_active_season_idx").on(t.seasonId, t.active),
+    reviewerSeasonIdx: uniqueIndex("reviewers_reviewer_season_unique").on(t.reviewer, t.seasonId),
+  }),
+);
+
+export const reviewRevisionSnapshots = pgTable(
+  "review_revision_snapshots",
+  {
+    id: text("id").primaryKey(), // "{program_id}:{revision}"
+    eventId: text("event_id").notNull(),
+    programId: text("program_id").notNull(),
+    owner: text("owner").notNull(),
+    revision: integer("revision").notNull(),
+    handle: text("handle").notNull(),
+    description: text("description").notNull(),
+    track: text("track").notNull(),
+    githubUrl: text("github_url").notNull(),
+    skillsHash: text("skills_hash").notNull(),
+    skillsUrl: text("skills_url").notNull(),
+    idlHash: text("idl_hash").notNull(),
+    idlUrl: text("idl_url").notNull(),
+    discordAccount: text("discord_account"),
+    telegramAccount: text("telegram_account"),
+    xAccount: text("x_account"),
+    submittedAt: bigint("submitted_at", { mode: "bigint" }).notNull(),
+    seasonId: integer("season_id").notNull(),
+  },
+  (t) => ({
+    appRevisionIdx: uniqueIndex("review_snapshots_app_revision_unique").on(t.programId, t.revision),
+    eventIdx: uniqueIndex("review_snapshots_event_unique").on(t.eventId),
+  }),
+);
+
+export const reviewRequests = pgTable(
+  "review_requests",
+  {
+    eventId: text("event_id").primaryKey(),
+    programId: text("program_id").notNull(),
+    owner: text("owner").notNull(),
+    revision: integer("revision").notNull(),
+    reason: text("reason").notNull(),
+    requestedAt: bigint("requested_at", { mode: "bigint" }).notNull(),
+    seasonId: integer("season_id").notNull(),
+    acknowledged: boolean("acknowledged").notNull().default(false),
+    hidden: boolean("hidden").notNull().default(false),
+    tombstoned: boolean("tombstoned").notNull().default(false),
+  },
+  (t) => ({
+    appRevisionIdx: index("review_requests_app_revision_idx").on(t.programId, t.revision),
+    queueIdx: index("review_requests_queue_idx").on(t.seasonId, t.acknowledged, t.hidden, t.tombstoned),
+  }),
+);
+
+export const reviewComments = pgTable(
+  "review_comments",
+  {
+    eventId: text("event_id").primaryKey(),
+    programId: text("program_id").notNull(),
+    revision: integer("revision").notNull(),
+    author: text("author").notNull(),
+    authorRole: text("author_role").notNull(),
+    body: text("body").notNull(),
+    ts: bigint("ts", { mode: "bigint" }).notNull(),
+    seasonId: integer("season_id").notNull(),
+    hidden: boolean("hidden").notNull().default(false),
+    tombstoned: boolean("tombstoned").notNull().default(false),
+  },
+  (t) => ({
+    appRevisionIdx: index("review_comments_app_revision_idx").on(t.programId, t.revision, t.eventId),
+    visibleIdx: index("review_comments_visible_idx").on(t.programId, t.hidden, t.tombstoned),
+  }),
+);
+
+export const reviewDecisions = pgTable(
+  "review_decisions",
+  {
+    eventId: text("event_id").primaryKey(),
+    programId: text("program_id").notNull(),
+    revision: integer("revision").notNull(),
+    reviewer: text("reviewer").notNull(),
+    verdict: text("verdict").notNull(),
+    reason: text("reason").notNull(),
+    criteria: jsonb("criteria").notNull(),
+    oldStatus: text("old_status").notNull(),
+    newStatus: text("new_status").notNull(),
+    decidedAt: bigint("decided_at", { mode: "bigint" }).notNull(),
+    seasonId: integer("season_id").notNull(),
+    tombstoned: boolean("tombstoned").notNull().default(false),
+  },
+  (t) => ({
+    appRevisionIdx: index("review_decisions_app_revision_idx").on(t.programId, t.revision),
+    seasonDecisionIdx: index("review_decisions_season_decided_idx").on(t.seasonId, t.decidedAt),
+  }),
+);
+
+export const reviewSummaries = pgTable(
+  "review_summaries",
+  {
+    programId: text("program_id").primaryKey(),
+    reviewStatus: text("review_status"),
+    latestVerdict: text("latest_verdict"),
+    latestReviewer: text("latest_reviewer"),
+    latestReason: text("latest_reason"),
+    displayRevision: integer("display_revision"),
+    pendingSubmissionRevision: integer("pending_submission_revision"),
+    submissionRevision: integer("submission_revision"),
+    currentRevisionVisibleCommentCount: integer("current_revision_visible_comment_count")
+      .notNull()
+      .default(0),
+    totalVisibleCommentCount: integer("total_visible_comment_count").notNull().default(0),
+    activeRequestRevision: integer("active_request_revision"),
+    activeRequestAcknowledged: boolean("active_request_acknowledged").notNull().default(false),
+    manualOverride: boolean("manual_override").notNull().default(false),
+    tombstoned: boolean("tombstoned").notNull().default(false),
+    seasonId: integer("season_id").notNull(),
+    updatedAt: bigint("updated_at", { mode: "bigint" }).notNull(),
+  },
+  (t) => ({
+    queueIdx: index("review_summaries_queue_idx").on(
+      t.seasonId,
+      t.reviewStatus,
+      t.manualOverride,
+      t.tombstoned,
+    ),
+  }),
+);
+
+export const hiddenReviewEventIds = pgTable("hidden_review_event_ids", {
+  eventId: text("event_id").primaryKey(),
+  reason: text("reason").notNull(),
+  hiddenAt: bigint("hidden_at", { mode: "bigint" }).notNull(),
+});
 
 export const identityCards = pgTable("identity_cards", {
   id: text("id").primaryKey(), // program_id hex
