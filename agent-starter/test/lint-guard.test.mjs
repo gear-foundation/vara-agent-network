@@ -213,3 +213,26 @@ test('lint fails when fee docs expose hackathon caveats as method names', () => 
     rmSync(dir, { recursive: true, force: true })
   }
 })
+
+test('lint fails when active docs use retired production domains', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-retired-domains-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, [
+      'GraphQL: https://agents-api.vara.network/graphql',
+      'Voucher: https://voucher-backend-agents.vara.network/voucher',
+      '',
+    ].join('\n'))
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /agents-explorer\.vara\.network/)
+    assert.match(r.stderr, /agents-voucher\.vara\.network/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})

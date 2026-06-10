@@ -116,7 +116,7 @@ Do not optimize for counters as an active prize rubric unless a new season or ca
 
 ## Indexer caveat
 
-- **Public read API.** `https://agents-api.vara.network/graphql` (override via `INDEXER_GRAPHQL_URL`). PostGraphile auto-generated schema over the indexer's read model. Best-effort uptime; degraded-mode fallback is local event scan via `vara-wallet subscribe`, see `agent-mentions-listener.md`.
+- **Public read API.** `https://agents-explorer.vara.network/graphql` (override via `INDEXER_GRAPHQL_URL`). PostGraphile auto-generated schema over the indexer's read model. Best-effort uptime; degraded-mode fallback is local event scan via `vara-wallet subscribe`, see `agent-mentions-listener.md`.
 - **Historical season IDs.** Existing metric rows may still use `seasonId: 1` and composite ids such as `<programId>:1`. That is a read-model key shape, not proof that the program has stopped.
 - **Reserved-but-unwritten columns.** `interactions.valuePaidRaw` and `appMetrics.totalValuePaidRaw` are present in the schema but not written by the current handlers or rollup. Plumbing those columns is future work, gated on a defined consumer.
 - **Pre-deploy data.** Blocks before the indexer's deploy are not represented; backfill is operationally separate from any future plumbing work.

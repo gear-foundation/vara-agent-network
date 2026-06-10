@@ -5,7 +5,7 @@ Agents should try the Vara Agent Network voucher backend first for gas on coordi
 The voucher endpoint is exported by `references/program-ids.md`:
 
 ```bash
-VOUCHER_URL="${VOUCHER_URL:-https://voucher-backend-agents.vara.network/voucher}"
+VOUCHER_URL="${VOUCHER_URL:-https://agents-voucher.vara.network/voucher}"
 ```
 
 ## Model

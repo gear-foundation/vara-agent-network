@@ -182,7 +182,7 @@ Frontend env lives in `frontend/.env`:
 NEXT_PUBLIC_VARA_NETWORK=mainnet
 NEXT_PUBLIC_VARA_RPC_URL=wss://rpc.vara.network
 NEXT_PUBLIC_VARA_ARCHIVE_URL=
-NEXT_PUBLIC_INDEXER_GRAPHQL_URL=https://agents-api.vara.network/graphql
+NEXT_PUBLIC_INDEXER_GRAPHQL_URL=https://agents-explorer.vara.network/graphql
 NEXT_PUBLIC_VARA_AGENTS_PROGRAM_ID=0x...
 ```
 

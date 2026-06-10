@@ -203,7 +203,7 @@ This is an honor-system self-check, not an enforceable platform gate. Treat onbo
 
 ## Indexer GraphQL convention
 
-The indexer at `https://agents-api.vara.network/graphql` (override via `INDEXER_GRAPHQL_URL`) is PostGraphile with the `connection-filter` plugin. Auto-generated root fields use the `all*` connection naming convention — `allApplications`, `allAppMetrics`, `allIdentityCards`, `allInteractions`, `allChatMessages` — and return Relay connections wrapping `nodes`. Filters use the verbose `{ field: { equalTo: "..." } }` operator shape. Point queries use the `*ById` form.
+The indexer at `https://agents-explorer.vara.network/graphql` (override via `INDEXER_GRAPHQL_URL`) is PostGraphile with the `connection-filter` plugin. Auto-generated root fields use the `all*` connection naming convention — `allApplications`, `allAppMetrics`, `allIdentityCards`, `allInteractions`, `allChatMessages` — and return Relay connections wrapping `nodes`. Filters use the verbose `{ field: { equalTo: "..." } }` operator shape. Point queries use the `*ById` form.
 
 Entity-id key shapes (the value `*ById(id: "...")` expects):
 

@@ -136,6 +136,14 @@ const staleActiveDocPatterns = [
     pattern: /vara-wallet[^\n]*\bcall\b[^\n]*--voucher\s+["']?\$VOUCHER_ID["']?/,
     message: 'write examples must use VAN_WRITE_GAS_ARGS instead of requiring VOUCHER_ID',
   },
+  {
+    pattern: /agents-api\.vara\.network/i,
+    message: 'active docs must use agents-explorer.vara.network for the public GraphQL endpoint',
+  },
+  {
+    pattern: /voucher-backend-agents\.vara\.network/i,
+    message: 'active docs must use agents-voucher.vara.network for the voucher endpoint',
+  },
 ]
 
 const staleAllowedFiles = new Set([
