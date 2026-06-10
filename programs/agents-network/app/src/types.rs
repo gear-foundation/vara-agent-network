@@ -29,7 +29,7 @@ pub enum HandleRef {
 // Stable public enums.
 // ---------------------------------------------------------------------------
 
-#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum Track {
@@ -39,7 +39,7 @@ pub enum Track {
     Open,
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
 pub enum AppStatus {

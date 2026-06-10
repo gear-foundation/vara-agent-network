@@ -3,38 +3,17 @@
 mod common;
 
 use agents_network_client::{
-    AgentsNetworkClient, AppStatus, CriterionAssessment, CriterionCoverage, ReviewCriteria,
-    ReviewVerdict, admin::Admin, registry::Registry, review::Review,
+    AgentsNetworkClient, AppStatus, ReviewVerdict, admin::Admin, registry::Registry, review::Review,
 };
 use common::*;
 use sails_rs::client::*;
-
-fn criteria() -> ReviewCriteria {
-    let met = CriterionAssessment {
-        coverage: CriterionCoverage::Met,
-        note: Some("clear evidence".to_string()),
-    };
-    ReviewCriteria {
-        technical_readiness: met.clone(),
-        network_value: met.clone(),
-        evidence_quality: met.clone(),
-        safety_maintenance: met,
-    }
-}
 
 #[tokio::test]
 async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
-    let mut config = program.admin().get_config().await.unwrap();
-    config.review_rate_limit_ms = 0;
-    program
-        .admin()
-        .update_config(config)
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
+    disable_review_rate_limit(&program).await;
 
     program
         .review()
@@ -204,14 +183,7 @@ async fn review_guards_reject_self_review_and_stale_revision() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
-    let mut config = program.admin().get_config().await.unwrap();
-    config.review_rate_limit_ms = 0;
-    program
-        .admin()
-        .update_config(config)
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
+    disable_review_rate_limit(&program).await;
 
     program
         .review()
@@ -284,14 +256,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
-    let mut config = program.admin().get_config().await.unwrap();
-    config.review_rate_limit_ms = 0;
-    program
-        .admin()
-        .update_config(config)
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
+    disable_review_rate_limit(&program).await;
 
     program
         .review()
@@ -390,14 +355,7 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
-    let mut config = program.admin().get_config().await.unwrap();
-    config.review_rate_limit_ms = 0;
-    program
-        .admin()
-        .update_config(config)
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
+    disable_review_rate_limit(&program).await;
 
     program
         .review()

@@ -244,23 +244,12 @@ impl<'a> ReviewService<'a> {
         expected_revision: u32,
         body: String,
     ) -> Result<(), ContractError> {
-        let (author, ts, season_id) = self.post_comment(
+        self.post_comment_with_event(
             program_id,
             expected_revision,
-            &body,
-            ReviewAuthorRole::Reviewer,
-        )?;
-        self.emit_event(ReviewEvent::ReviewCommentPosted {
-            program_id,
-            revision: expected_revision,
-            author,
-            author_role: ReviewAuthorRole::Reviewer,
             body,
-            ts,
-            season_id,
-        })
-        .expect("emit ReviewCommentPosted failed");
-        Ok(())
+            ReviewAuthorRole::Reviewer,
+        )
     }
 
     #[export(unwrap_result)]
@@ -270,23 +259,7 @@ impl<'a> ReviewService<'a> {
         expected_revision: u32,
         body: String,
     ) -> Result<(), ContractError> {
-        let (author, ts, season_id) = self.post_comment(
-            program_id,
-            expected_revision,
-            &body,
-            ReviewAuthorRole::Owner,
-        )?;
-        self.emit_event(ReviewEvent::ReviewCommentPosted {
-            program_id,
-            revision: expected_revision,
-            author,
-            author_role: ReviewAuthorRole::Owner,
-            body,
-            ts,
-            season_id,
-        })
-        .expect("emit ReviewCommentPosted failed");
-        Ok(())
+        self.post_comment_with_event(program_id, expected_revision, body, ReviewAuthorRole::Owner)
     }
 
     #[export(unwrap_result)]
@@ -297,27 +270,13 @@ impl<'a> ReviewService<'a> {
         reason: String,
         criteria: ReviewCriteria,
     ) -> Result<(), ContractError> {
-        let (reviewer, old_status, new_status, decided_at, season_id) = self.decide(
+        self.decide_with_event(
             program_id,
             expected_revision,
-            ReviewVerdict::ApprovedForListing,
-            &reason,
-            &criteria,
-        )?;
-        self.emit_event(ReviewEvent::ReviewDecisionRecorded {
-            program_id,
-            revision: expected_revision,
-            reviewer,
-            verdict: ReviewVerdict::ApprovedForListing,
             reason,
             criteria,
-            old_status,
-            new_status,
-            decided_at,
-            season_id,
-        })
-        .expect("emit ReviewDecisionRecorded failed");
-        Ok(())
+            ReviewVerdict::ApprovedForListing,
+        )
     }
 
     #[export(unwrap_result)]
@@ -328,24 +287,56 @@ impl<'a> ReviewService<'a> {
         reason: String,
         criteria: ReviewCriteria,
     ) -> Result<(), ContractError> {
-        let (reviewer, old_status, new_status, decided_at, season_id) = self.decide(
+        self.decide_with_event(
             program_id,
             expected_revision,
+            reason,
+            criteria,
             ReviewVerdict::RevisionRequested,
-            &reason,
-            &criteria,
-        )?;
+        )
+    }
+
+    fn post_comment_with_event(
+        &mut self,
+        program_id: ActorId,
+        expected_revision: u32,
+        body: String,
+        role: ReviewAuthorRole,
+    ) -> Result<(), ContractError> {
+        let outcome = self.post_comment(program_id, expected_revision, &body, role)?;
+        self.emit_event(ReviewEvent::ReviewCommentPosted {
+            program_id,
+            revision: expected_revision,
+            author: outcome.author,
+            author_role: role,
+            body,
+            ts: outcome.ts,
+            season_id: outcome.season_id,
+        })
+        .expect("emit ReviewCommentPosted failed");
+        Ok(())
+    }
+
+    fn decide_with_event(
+        &mut self,
+        program_id: ActorId,
+        expected_revision: u32,
+        reason: String,
+        criteria: ReviewCriteria,
+        verdict: ReviewVerdict,
+    ) -> Result<(), ContractError> {
+        let outcome = self.decide(program_id, expected_revision, verdict, &reason, &criteria)?;
         self.emit_event(ReviewEvent::ReviewDecisionRecorded {
             program_id,
             revision: expected_revision,
-            reviewer,
-            verdict: ReviewVerdict::RevisionRequested,
+            reviewer: outcome.reviewer,
+            verdict,
             reason,
             criteria,
-            old_status,
-            new_status,
-            decided_at,
-            season_id,
+            old_status: outcome.old_status,
+            new_status: outcome.new_status,
+            decided_at: outcome.decided_at,
+            season_id: outcome.season_id,
         })
         .expect("emit ReviewDecisionRecorded failed");
         Ok(())
@@ -357,6 +348,20 @@ impl<'a> ReviewService<'a> {
     }
 }
 
+struct CommentOutcome {
+    author: ActorId,
+    ts: u64,
+    season_id: u32,
+}
+
+struct DecisionOutcome {
+    reviewer: ActorId,
+    old_status: AppStatus,
+    new_status: AppStatus,
+    decided_at: u64,
+    season_id: u32,
+}
+
 impl<'a> ReviewService<'a> {
     fn post_comment(
         &mut self,
@@ -364,7 +369,7 @@ impl<'a> ReviewService<'a> {
         expected_revision: u32,
         body: &str,
         role: ReviewAuthorRole,
-    ) -> Result<(ActorId, u64, u32), ContractError> {
+    ) -> Result<CommentOutcome, ContractError> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_user_mutations_allowed(&config)?;
         guards::ensure_review_enabled(&config)?;
@@ -417,7 +422,11 @@ impl<'a> ReviewService<'a> {
                 summary.current_revision_comment_count.saturating_add(1);
         }
 
-        Ok((caller, now, season_id))
+        Ok(CommentOutcome {
+            author: caller,
+            ts: now,
+            season_id,
+        })
     }
 
     fn decide(
@@ -427,7 +436,7 @@ impl<'a> ReviewService<'a> {
         verdict: ReviewVerdict,
         reason: &str,
         criteria: &ReviewCriteria,
-    ) -> Result<(ActorId, AppStatus, AppStatus, u64, u32), ContractError> {
+    ) -> Result<DecisionOutcome, ContractError> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_user_mutations_allowed(&config)?;
         guards::ensure_review_enabled(&config)?;
@@ -456,7 +465,13 @@ impl<'a> ReviewService<'a> {
             )?
         };
 
-        Ok((caller, old_status, new_status, now, season_id))
+        Ok(DecisionOutcome {
+            reviewer: caller,
+            old_status,
+            new_status,
+            decided_at: now,
+            season_id,
+        })
     }
 }
 
@@ -489,20 +504,15 @@ pub fn replace_application_program(
     summary.program_id = new_program_id;
     review.summaries.insert(new_program_id, summary.clone());
 
-    let decisions: Vec<((ActorId, u32), bool)> = review
-        .decisions
-        .iter()
-        .filter_map(|((program_id, revision), decided)| {
-            if *program_id == old_program_id {
-                Some(((new_program_id, *revision), *decided))
-            } else {
-                None
-            }
-        })
-        .collect();
-    review
-        .decisions
-        .retain(|(program_id, _), _| *program_id != old_program_id);
+    let mut decisions = Vec::new();
+    review.decisions.retain(|(program_id, revision), decided| {
+        if *program_id == old_program_id {
+            decisions.push(((new_program_id, *revision), *decided));
+            false
+        } else {
+            true
+        }
+    });
     for (key, value) in decisions {
         review.decisions.insert(key, value);
     }
@@ -636,11 +646,13 @@ fn decide_application(
     }
 
     let old_status = app.status;
+    let track = app.track;
     let new_status = match verdict {
         ReviewVerdict::ApprovedForListing => AppStatus::Live,
         ReviewVerdict::RevisionRequested => AppStatus::Building,
     };
     app.status = new_status;
+    registry::reindex_application_status(reg, program_id, track, old_status, new_status);
     review
         .decisions
         .insert((program_id, expected_revision), true);
@@ -684,13 +696,10 @@ fn is_active_reviewer(review: &ReviewState, season_id: u32, reviewer: ActorId) -
 }
 
 fn ensure_summary(review: &mut ReviewState, program_id: ActorId) -> &mut ReviewSummary {
-    if !review.summaries.contains_key(&program_id) {
-        init_application(review, program_id);
-    }
     review
         .summaries
-        .get_mut(&program_id)
-        .expect("summary just initialized")
+        .entry(program_id)
+        .or_insert_with(|| initial_summary(program_id))
 }
 
 fn ensure_not_self_review(reviewer: ActorId, app: &Application) -> Result<(), ContractError> {

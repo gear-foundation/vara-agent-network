@@ -23,8 +23,12 @@ use sails_rs::prelude::*;
 pub struct RegistryState {
     pub participants: BTreeMap<ActorId, Participant>,
     pub applications: BTreeMap<ActorId, Application>,
+    pub applications_by_track: BTreeMap<(Track, ActorId), bool>,
+    pub applications_by_status: BTreeMap<(AppStatus, ActorId), bool>,
+    pub applications_by_track_status: BTreeMap<(Track, AppStatus, ActorId), bool>,
     pub handles: BTreeMap<Handle, HandleRef>,
     pub program_replacements: BTreeMap<ActorId, ActorId>,
+    pub replacement_aliases_by_target: BTreeMap<ActorId, BTreeMap<ActorId, bool>>,
     pub reserved_program_ids: BTreeMap<ActorId, bool>,
     pub replacement_counts: BTreeMap<ActorId, u32>,
 }
@@ -246,25 +250,24 @@ impl<'a> RegistryService<'a> {
 
         // Write registry state first; then push the kind=Registration
         // announcement into BoardState. Any panic below rolls back everything.
-        reg.applications.insert(
+        let application = Application {
             program_id,
-            Application {
-                program_id,
-                owner: req.operator,
-                handle: req.handle.clone(),
-                description: req.description.clone(),
-                track: req.track,
-                github_url: req.github_url.clone(),
-                skills_hash: req.skills_hash,
-                skills_url: req.skills_url.clone(),
-                idl_hash: req.idl_hash,
-                idl_url: req.idl_url.clone(),
-                contacts: req.contacts.clone(),
-                registered_at: now,
-                season_id,
-                status: AppStatus::Building,
-            },
-        );
+            owner: req.operator,
+            handle: req.handle.clone(),
+            description: req.description.clone(),
+            track: req.track,
+            github_url: req.github_url.clone(),
+            skills_hash: req.skills_hash,
+            skills_url: req.skills_url.clone(),
+            idl_hash: req.idl_hash,
+            idl_url: req.idl_url.clone(),
+            contacts: req.contacts.clone(),
+            registered_at: now,
+            season_id,
+            status: AppStatus::Building,
+        };
+        reg.applications.insert(program_id, application.clone());
+        insert_application_indexes(&mut reg, &application);
         reg.handles
             .insert(req.handle.clone(), HandleRef::Application(program_id));
         reg.reserved_program_ids.insert(program_id, true);
@@ -340,12 +343,12 @@ impl<'a> RegistryService<'a> {
         let mut reg = self.registry.borrow_mut();
         ensure_current_program_id(&reg, program_id)?;
 
-        let (owner, current_handle, status) = {
+        let (owner, current_handle, track, status) = {
             let app = reg
                 .applications
                 .get(&program_id)
                 .ok_or(ContractError::UnknownApplication)?;
-            (app.owner, app.handle.clone(), app.status)
+            (app.owner, app.handle.clone(), app.track, app.status)
         };
 
         // Auth: only the registered owner/operator wallet may edit draft metadata.
@@ -419,6 +422,9 @@ impl<'a> RegistryService<'a> {
             reg.handles.remove(&current_handle);
             reg.handles.insert(h, HandleRef::Application(program_id));
         }
+        if application.track != track {
+            reindex_application_track(&mut reg, program_id, track, application.track, status);
+        }
         let season_id = self.current_season;
         drop(reg);
 
@@ -453,6 +459,7 @@ impl<'a> RegistryService<'a> {
         }
 
         reg.applications.remove(&program_id);
+        remove_application_indexes(&mut reg, program_id, app.track, app.status);
         review::delete_application(&mut self.review.borrow_mut(), program_id);
         if reg.handles.get(&app.handle) == Some(&HandleRef::Application(program_id)) {
             reg.handles.remove(&app.handle);
@@ -485,8 +492,21 @@ impl<'a> RegistryService<'a> {
         ensure_current_program_id(&reg, program_id)?;
         let mut review = self.review.borrow_mut();
         let submitted_at = exec::block_timestamp();
+        let old_status = reg
+            .applications
+            .get(&program_id)
+            .ok_or(ContractError::UnknownApplication)?
+            .status;
         let (owner, revision, snapshot) =
             review::submit_application(&mut reg, &mut review, program_id, caller, submitted_at)?;
+        let (track, new_status) = {
+            let app = reg
+                .applications
+                .get(&program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            (app.track, app.status)
+        };
+        reindex_application_status(&mut reg, program_id, track, old_status, new_status);
         let season_id = self.current_season;
         drop(reg);
         drop(review);
@@ -565,8 +585,10 @@ impl<'a> RegistryService<'a> {
             }
             let replacement_count = prior_count.saturating_add(1);
 
+            remove_application_indexes(&mut reg, old_program_id, app.track, app.status);
             app.program_id = new_program_id;
             reg.applications.insert(new_program_id, app.clone());
+            insert_application_indexes(&mut reg, &app);
             reg.reserved_program_ids.insert(new_program_id, true);
             reg.replacement_counts
                 .insert(new_program_id, replacement_count);
@@ -640,22 +662,7 @@ impl<'a> RegistryService<'a> {
 
         let mut items = Vec::with_capacity(limit);
         let mut next_cursor = None;
-        for (key, app) in reg.applications.iter() {
-            if cursor.map_or(false, |c| *key <= c) {
-                continue;
-            }
-            if filter.track.is_some_and(|t| app.track != t) {
-                continue;
-            }
-            if filter.status.is_some_and(|s| app.status != s) {
-                continue;
-            }
-            if items.len() == limit {
-                break;
-            }
-            next_cursor = Some(*key);
-            items.push(app.clone());
-        }
+        discover_from_index(&reg, filter, cursor, limit, &mut items, &mut next_cursor);
         ApplicationPage { items, next_cursor }
     }
 }
@@ -682,13 +689,197 @@ fn rewrite_replacement_aliases(
     old_program_id: ActorId,
     new_program_id: ActorId,
 ) {
-    for current in reg.program_replacements.values_mut() {
-        if *current == old_program_id {
-            *current = new_program_id;
+    if let Some(aliases) = reg.replacement_aliases_by_target.remove(&old_program_id) {
+        for alias in aliases.keys().copied().collect::<Vec<_>>() {
+            reg.program_replacements.insert(alias, new_program_id);
+            insert_replacement_alias(reg, new_program_id, alias);
         }
     }
     reg.program_replacements
         .insert(old_program_id, new_program_id);
+    insert_replacement_alias(reg, new_program_id, old_program_id);
+}
+
+fn insert_application_indexes(reg: &mut RegistryState, app: &Application) {
+    reg.applications_by_track
+        .insert((app.track, app.program_id), true);
+    reg.applications_by_status
+        .insert((app.status, app.program_id), true);
+    reg.applications_by_track_status
+        .insert((app.track, app.status, app.program_id), true);
+}
+
+fn remove_application_indexes(
+    reg: &mut RegistryState,
+    program_id: ActorId,
+    track: Track,
+    status: AppStatus,
+) {
+    reg.applications_by_track.remove(&(track, program_id));
+    reg.applications_by_status.remove(&(status, program_id));
+    reg.applications_by_track_status
+        .remove(&(track, status, program_id));
+}
+
+fn reindex_application_track(
+    reg: &mut RegistryState,
+    program_id: ActorId,
+    old_track: Track,
+    new_track: Track,
+    status: AppStatus,
+) {
+    if old_track == new_track {
+        return;
+    }
+    remove_application_indexes(reg, program_id, old_track, status);
+    reg.applications_by_track
+        .insert((new_track, program_id), true);
+    reg.applications_by_status
+        .insert((status, program_id), true);
+    reg.applications_by_track_status
+        .insert((new_track, status, program_id), true);
+}
+
+pub fn reindex_application_status(
+    reg: &mut RegistryState,
+    program_id: ActorId,
+    track: Track,
+    old_status: AppStatus,
+    new_status: AppStatus,
+) {
+    if old_status == new_status {
+        return;
+    }
+    remove_application_indexes(reg, program_id, track, old_status);
+    reg.applications_by_track.insert((track, program_id), true);
+    reg.applications_by_status
+        .insert((new_status, program_id), true);
+    reg.applications_by_track_status
+        .insert((track, new_status, program_id), true);
+}
+
+fn discover_from_index(
+    reg: &RegistryState,
+    filter: DiscoveryFilter,
+    cursor: Option<ActorId>,
+    limit: usize,
+    items: &mut Vec<Application>,
+    next_cursor: &mut Option<ActorId>,
+) {
+    match (filter.track, filter.status) {
+        (Some(track), Some(status)) => {
+            for ((indexed_track, indexed_status, program_id), _) in
+                reg.applications_by_track_status.iter()
+            {
+                if (*indexed_track, *indexed_status) < (track, status) {
+                    continue;
+                }
+                if (*indexed_track, *indexed_status) > (track, status) {
+                    break;
+                }
+                if push_discovered_application(
+                    reg,
+                    *program_id,
+                    &filter,
+                    cursor,
+                    limit,
+                    items,
+                    next_cursor,
+                ) {
+                    break;
+                }
+            }
+        }
+        (Some(track), None) => {
+            for ((indexed_track, program_id), _) in reg.applications_by_track.iter() {
+                if *indexed_track < track {
+                    continue;
+                }
+                if *indexed_track > track {
+                    break;
+                }
+                if push_discovered_application(
+                    reg,
+                    *program_id,
+                    &filter,
+                    cursor,
+                    limit,
+                    items,
+                    next_cursor,
+                ) {
+                    break;
+                }
+            }
+        }
+        (None, Some(status)) => {
+            for ((indexed_status, program_id), _) in reg.applications_by_status.iter() {
+                if *indexed_status < status {
+                    continue;
+                }
+                if *indexed_status > status {
+                    break;
+                }
+                if push_discovered_application(
+                    reg,
+                    *program_id,
+                    &filter,
+                    cursor,
+                    limit,
+                    items,
+                    next_cursor,
+                ) {
+                    break;
+                }
+            }
+        }
+        (None, None) => {
+            for (program_id, app) in reg.applications.iter() {
+                if cursor.map_or(false, |c| *program_id <= c) {
+                    continue;
+                }
+                if items.len() == limit {
+                    break;
+                }
+                *next_cursor = Some(*program_id);
+                items.push(app.clone());
+            }
+        }
+    }
+}
+
+fn push_discovered_application(
+    reg: &RegistryState,
+    program_id: ActorId,
+    filter: &DiscoveryFilter,
+    cursor: Option<ActorId>,
+    limit: usize,
+    items: &mut Vec<Application>,
+    next_cursor: &mut Option<ActorId>,
+) -> bool {
+    if cursor.map_or(false, |c| program_id <= c) {
+        return false;
+    }
+    let Some(app) = reg.applications.get(&program_id) else {
+        return false;
+    };
+    if filter.track.is_some_and(|track| app.track != track)
+        || filter.status.is_some_and(|status| app.status != status)
+    {
+        return false;
+    }
+    if items.len() == limit {
+        return true;
+    }
+    *next_cursor = Some(program_id);
+    items.push(app.clone());
+    items.len() == limit
+}
+
+fn insert_replacement_alias(reg: &mut RegistryState, current: ActorId, alias: ActorId) {
+    reg.replacement_aliases_by_target
+        .entry(current)
+        .or_default()
+        .insert(alias, true);
 }
 
 // ---------------------------------------------------------------------------

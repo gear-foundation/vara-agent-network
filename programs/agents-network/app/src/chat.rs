@@ -168,15 +168,8 @@ impl<'a> ChatService<'a> {
 
         // Dedup mentions preserving order.
         let dedup_mentions = dedup_preserve_order(&mentions);
-        ensure_current_application_refs(&dedup_mentions, &self.registry.borrow())?;
-
-        // Strip orphan mentions (HandleRefs not in the registry) before ring
-        // append. The MessagePosted event still carries the original mentions
-        // list for auditability; only inbox writes are filtered. This closes
-        // a DoS vector where attackers could create permanent junk inbox
-        // state for fabricated HandleRefs.
         let registered_mentions =
-            filter_registered_mentions(&dedup_mentions, &self.registry.borrow());
+            filter_registered_current_mentions(&dedup_mentions, &self.registry.borrow())?;
 
         // Allocate id. `checked_add` panics on overflow → whole message
         // reverts per Gear transaction boundary. Saturating would silently
@@ -294,28 +287,28 @@ fn dedup_preserve_order(items: &[HandleRef]) -> Vec<HandleRef> {
     out
 }
 
-/// Keep only HandleRefs that refer to a registered participant or application.
-/// Spec: "Orphan mention — strip silently before insert; event still carries
-/// original list for auditability."
-fn filter_registered_mentions(mentions: &[HandleRef], registry: &RegistryState) -> Vec<HandleRef> {
-    mentions
-        .iter()
-        .filter(|r| match r {
-            HandleRef::Participant(p) => registry.participants.contains_key(p),
-            HandleRef::Application(a) => registry.applications.contains_key(a),
-        })
-        .cloned()
-        .collect()
-}
-
-fn ensure_current_application_refs(
-    refs: &[HandleRef],
+/// Keep only registered mentions, while still rejecting stale application refs.
+/// Orphan mentions are stripped silently before insert; the event carries the
+/// original mention list for auditability.
+fn filter_registered_current_mentions(
+    mentions: &[HandleRef],
     registry: &RegistryState,
-) -> Result<(), ContractError> {
-    for r in refs {
-        if let HandleRef::Application(a) = r {
-            registry::ensure_current_program_id(registry, *a)?;
+) -> Result<Vec<HandleRef>, ContractError> {
+    let mut registered = Vec::with_capacity(mentions.len());
+    for mention in mentions {
+        match mention {
+            HandleRef::Participant(p) => {
+                if registry.participants.contains_key(p) {
+                    registered.push(mention.clone());
+                }
+            }
+            HandleRef::Application(a) => {
+                registry::ensure_current_program_id(registry, *a)?;
+                if registry.applications.contains_key(a) {
+                    registered.push(mention.clone());
+                }
+            }
         }
     }
-    Ok(())
+    Ok(registered)
 }

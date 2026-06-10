@@ -211,31 +211,43 @@ fn check_tags(tags: &[String]) -> Result<(), ContractError> {
 }
 
 pub fn check_chat_body(body: &str, config: &Config) -> Result<(), ContractError> {
-    if body.is_empty() {
-        return Err(ContractError::EmptyBody);
-    }
-    if body.len() > config.max_chat_body as usize {
-        return Err(ContractError::FieldTooLarge);
-    }
-    Ok(())
+    check_body_len(
+        body,
+        config.max_chat_body as usize,
+        ContractError::EmptyBody,
+        ContractError::FieldTooLarge,
+    )
 }
 
 pub fn check_review_body(body: &str, config: &Config) -> Result<(), ContractError> {
-    if body.is_empty() {
-        return Err(ContractError::EmptyBody);
-    }
-    if body.len() > config.max_review_body_bytes as usize {
-        return Err(ContractError::FieldTooLarge);
-    }
-    Ok(())
+    check_body_len(
+        body,
+        config.max_review_body_bytes as usize,
+        ContractError::EmptyBody,
+        ContractError::FieldTooLarge,
+    )
 }
 
 pub fn check_replacement_reason(reason: &str, config: &Config) -> Result<(), ContractError> {
-    if reason.is_empty() {
-        return Err(ContractError::ReplacementReasonRequired);
+    check_body_len(
+        reason,
+        config.max_review_body_bytes as usize,
+        ContractError::ReplacementReasonRequired,
+        ContractError::ReplacementReasonTooLong,
+    )
+}
+
+fn check_body_len(
+    body: &str,
+    max_len: usize,
+    empty_error: ContractError,
+    too_long_error: ContractError,
+) -> Result<(), ContractError> {
+    if body.is_empty() {
+        return Err(empty_error);
     }
-    if reason.len() > config.max_review_body_bytes as usize {
-        return Err(ContractError::ReplacementReasonTooLong);
+    if body.len() > max_len {
+        return Err(too_long_error);
     }
     Ok(())
 }

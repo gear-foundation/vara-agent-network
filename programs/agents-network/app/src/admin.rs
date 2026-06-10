@@ -178,12 +178,23 @@ impl<'a> AdminService<'a> {
             let mut registry = self.registry.borrow_mut();
             registry::ensure_current_program_id(&registry, program_id)?;
             let mut review_state = self.review.borrow_mut();
-            let app = registry
-                .applications
-                .get_mut(&program_id)
-                .ok_or(ContractError::UnknownApplication)?;
-            let old_status = app.status;
-            app.status = new_status;
+            let (old_status, track) = {
+                let app = registry
+                    .applications
+                    .get_mut(&program_id)
+                    .ok_or(ContractError::UnknownApplication)?;
+                let old_status = app.status;
+                let track = app.track;
+                app.status = new_status;
+                (old_status, track)
+            };
+            registry::reindex_application_status(
+                &mut registry,
+                program_id,
+                track,
+                old_status,
+                new_status,
+            );
             review::manual_status_override(&mut review_state, program_id, new_status);
             old_status
         };
