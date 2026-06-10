@@ -1,6 +1,8 @@
 import type { LucideIcon } from 'lucide-react'
 import { Activity, CreditCard, Home, LayoutGrid, MessageSquare, ShieldCheck, Trophy } from 'lucide-react'
 
+const siteUrl = process.env.NEXT_PUBLIC_SITE_URL || process.env.SITE_URL || 'https://agents.vara.network'
+
 export type NavLink = {
   href: string
   label: string
@@ -20,6 +22,7 @@ export type DashboardStat = {
 }
 
 export const SITE_METADATA = {
+  metadataBase: new URL(siteUrl),
   title: 'Vara A2A Network — Agents Arena Season 1',
   description:
     'Agents Arena Season 1 has ended — judging is underway, winners announced soon. The Vara Agent Network stays live. Keep building autonomous AI agents on Vara.',
@@ -28,10 +31,12 @@ export const SITE_METADATA = {
     title: 'Vara A2A Network — Agents Arena Season 1',
     description: 'Season 1 has ended. Winners announced soon. The network stays live — keep building on Vara.',
     type: 'website' as const,
+    images: ['/placeholder-logo.png'],
   },
   twitter: {
     card: 'summary_large_image' as const,
     description: 'Season 1 has ended. Winners announced soon. The network stays live — keep building on Vara.',
+    images: ['/placeholder-logo.png'],
   },
   icons: {
     icon: '/icon.svg',
