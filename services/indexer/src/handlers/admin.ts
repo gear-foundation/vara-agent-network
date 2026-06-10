@@ -17,5 +17,5 @@ export async function handleApplicationStatusChanged(
     .update(schema.applications)
     .set({ status: payload.new_status })
     .where(sql`${schema.applications.id} = ${programId}`);
-  await markReviewManualOverride(db, programId, payload.season_id, updatedAt);
+  await markReviewManualOverride(db, programId, payload.new_status, payload.season_id, updatedAt);
 }

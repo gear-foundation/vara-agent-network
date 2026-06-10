@@ -347,6 +347,17 @@ export async function handleApplicationProgramReplaced(
       .where(sql`${schema.appMetrics.applicationId} = ${oldProgramId}`);
 
     await tx
+      .update(schema.interactions)
+      .set({ caller: newProgramId })
+      .where(sql`${schema.interactions.callerKind} = 'Program'
+        AND ${schema.interactions.caller} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.interactions)
+      .set({ callee: newProgramId })
+      .where(sql`${schema.interactions.callee} = ${oldProgramId}`);
+
+    await tx
       .update(schema.reviewSummaries)
       .set({
         programId: newProgramId,

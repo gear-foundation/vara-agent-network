@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import {
   initialReviewSummaryValues,
+  manualOverrideRevisionUpdates,
   submittedCurrentRevisionVisibleCommentCount,
   summaryStatusAfterComment,
   summaryStatusFromDecision,
@@ -84,5 +85,47 @@ test("registration reset clears stale review summary state", () => {
       seasonId: 2,
       updatedAt: 123n,
     },
+  );
+});
+
+test("manual reopen advances pending and display revision from the indexed summary", () => {
+  assert.deepEqual(
+    manualOverrideRevisionUpdates(
+      {
+        displayRevision: 1,
+        pendingSubmissionRevision: null,
+        submissionRevision: 1,
+      },
+      "Building",
+    ),
+    {
+      displayRevision: 2,
+      pendingSubmissionRevision: 2,
+      currentRevisionVisibleCommentCount: 0,
+    },
+  );
+
+  assert.deepEqual(
+    manualOverrideRevisionUpdates(
+      {
+        displayRevision: 2,
+        pendingSubmissionRevision: 2,
+        submissionRevision: 1,
+      },
+      "Building",
+    ),
+    {},
+  );
+
+  assert.deepEqual(
+    manualOverrideRevisionUpdates(
+      {
+        displayRevision: 2,
+        pendingSubmissionRevision: null,
+        submissionRevision: 2,
+      },
+      "Live",
+    ),
+    {},
   );
 });

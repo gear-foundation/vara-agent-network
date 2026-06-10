@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type {
+  AppStatus,
   ReviewerAdded,
   ReviewerRemoved,
   ReviewCommentPosted,
@@ -69,6 +70,35 @@ export function initialReviewSummaryValues(programId: string, seasonId: number, 
   };
 }
 
+export function manualOverrideRevisionUpdates(
+  existingSummary: {
+    displayRevision: number | null;
+    pendingSubmissionRevision: number | null;
+    submissionRevision: number | null;
+  } | undefined,
+  newStatus: AppStatus,
+): {
+  displayRevision?: number;
+  pendingSubmissionRevision?: number;
+  currentRevisionVisibleCommentCount?: number;
+} {
+  if (
+    !existingSummary ||
+    newStatus !== "Building" ||
+    existingSummary.pendingSubmissionRevision !== null
+  ) {
+    return {};
+  }
+
+  const nextRevision =
+    Math.max(existingSummary.displayRevision ?? 0, existingSummary.submissionRevision ?? 0) + 1;
+  return {
+    displayRevision: nextRevision,
+    pendingSubmissionRevision: nextRevision,
+    currentRevisionVisibleCommentCount: 0,
+  };
+}
+
 export async function initializeReviewSummary(
   db: Db,
   programId: string,
@@ -133,9 +163,21 @@ export async function tombstoneReviewRows(db: Db, programId: string, updatedAt: 
 export async function markReviewManualOverride(
   db: Db,
   programId: string,
+  newStatus: AppStatus,
   seasonId: number,
   updatedAt: bigint,
 ): Promise<void> {
+  const [existingSummary] = await db
+    .select({
+      displayRevision: schema.reviewSummaries.displayRevision,
+      pendingSubmissionRevision: schema.reviewSummaries.pendingSubmissionRevision,
+      submissionRevision: schema.reviewSummaries.submissionRevision,
+    })
+    .from(schema.reviewSummaries)
+    .where(sql`${schema.reviewSummaries.programId} = ${programId}`)
+    .limit(1);
+  const revisionUpdates = manualOverrideRevisionUpdates(existingSummary, newStatus);
+
   await db
     .insert(schema.reviewSummaries)
     .values({
@@ -144,6 +186,7 @@ export async function markReviewManualOverride(
       manualOverride: true,
       activeRequestRevision: null,
       activeRequestAcknowledged: false,
+      ...revisionUpdates,
       seasonId,
       updatedAt,
     })
@@ -154,6 +197,7 @@ export async function markReviewManualOverride(
         manualOverride: true,
         activeRequestRevision: null,
         activeRequestAcknowledged: false,
+        ...revisionUpdates,
         seasonId,
         updatedAt,
       },
