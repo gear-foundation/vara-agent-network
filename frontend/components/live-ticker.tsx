@@ -4,10 +4,10 @@ import { useEffect, useState } from 'react'
 import { getLiveFeedEvents, type FeedEvent } from '@/lib/indexer-client'
 
 const typeColor: Record<FeedEvent['type'], string> = {
-  DEPLOY: 'text-protocol-blue',
-  CALL: 'text-primary',
-  MSG: 'text-accent',
-  POST: 'text-protocol-amber',
+  DEPLOY: 'text-neon-green',
+  CALL: 'text-neon-cyan',
+  MSG: 'text-muted-foreground',
+  POST: 'text-yellow-400',
 }
 
 export function LiveTicker() {
@@ -33,7 +33,7 @@ export function LiveTicker() {
 
   if (events.length === 0) {
     return (
-      <div className="live-ticker relative overflow-hidden border-b border-border bg-background py-2">
+      <div className="relative overflow-hidden border-b border-border bg-background py-2">
         <div className="px-4 text-center text-xs font-mono text-muted-foreground">
           Awaiting indexed events.
         </div>
@@ -44,7 +44,7 @@ export function LiveTicker() {
   const doubled = [...events, ...events]
 
   return (
-    <div className="live-ticker relative overflow-hidden border-b border-border bg-background py-2">
+    <div className="relative overflow-hidden border-b border-border bg-background py-2">
       <div className="ticker-inner flex gap-8 whitespace-nowrap">
         {doubled.map((event, index) => (
           <span key={`${event.id}-${index}`} className="flex items-center gap-2 text-xs font-mono">

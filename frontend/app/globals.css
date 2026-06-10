@@ -4,49 +4,43 @@
 @custom-variant dark (&:is(.dark *));
 
 :root {
-  --background: oklch(0.115 0.018 252);
-  --foreground: oklch(0.955 0.008 235);
-  --card: oklch(0.165 0.022 252);
-  --card-foreground: oklch(0.955 0.008 235);
-  --popover: oklch(0.185 0.024 252);
-  --popover-foreground: oklch(0.955 0.008 235);
-  --primary: oklch(0.78 0.18 158);
-  --primary-foreground: oklch(0.09 0.018 252);
-  --secondary: oklch(0.215 0.028 252);
-  --secondary-foreground: oklch(0.94 0.008 235);
-  --muted: oklch(0.205 0.023 252);
-  --muted-foreground: oklch(0.68 0.018 235);
-  --accent: oklch(0.76 0.13 205);
-  --accent-foreground: oklch(0.08 0.018 252);
-  --destructive: oklch(0.67 0.17 24);
-  --destructive-foreground: oklch(0.96 0.01 24);
-  --border: oklch(0.285 0.026 252);
-  --input: oklch(0.215 0.026 252);
-  --ring: oklch(0.78 0.18 158);
-  --radius: 0.5rem;
+  --background: oklch(0.145 0 0);
+  --foreground: oklch(0.985 0 0);
+  --card: oklch(0.165 0 0);
+  --card-foreground: oklch(0.985 0 0);
+  --popover: oklch(0.165 0 0);
+  --popover-foreground: oklch(0.985 0 0);
+  --primary: oklch(0.82 0.21 145);
+  --primary-foreground: oklch(0.18 0 0);
+  --secondary: oklch(0.19 0 0);
+  --secondary-foreground: oklch(0.985 0 0);
+  --muted: oklch(0.235 0 0);
+  --muted-foreground: oklch(0.708 0 0);
+  --accent: oklch(0.83 0.16 200);
+  --accent-foreground: oklch(0.18 0 0);
+  --destructive: oklch(0.577 0.245 27.325);
+  --destructive-foreground: oklch(0.97 0 0);
+  --border: oklch(0.245 0 0);
+  --input: oklch(0.19 0 0);
+  --ring: oklch(0.439 0 0);
+  --radius: 0.75rem;
 
   /* Brand colors */
-  --protocol-mint: var(--primary);
-  --protocol-cyan: var(--accent);
-  --protocol-amber: oklch(0.80 0.12 92);
-  --protocol-blue: oklch(0.68 0.16 252);
-  --protocol-rust: var(--destructive);
-  --protocol-steel: oklch(0.52 0.026 245);
-  --neon-green: var(--protocol-mint);
-  --neon-cyan: var(--protocol-cyan);
-  --neon-green-dim: oklch(0.78 0.18 158 / 0.12);
-  --neon-cyan-dim: oklch(0.76 0.13 205 / 0.12);
-  --grid-line: oklch(0.255 0.026 252 / 0.42);
+  --neon-green: oklch(0.82 0.23 145);
+  --neon-cyan: oklch(0.75 0.18 195);
+  --neon-green-dim: oklch(0.72 0.22 155 / 0.15);
+  --neon-cyan-dim: oklch(0.65 0.20 200 / 0.15);
+  --grid-line: oklch(1 0 0 / 0.04);
   --track-services: var(--primary);
   --track-social: var(--accent);
-  --track-markets: var(--protocol-amber);
-  --track-open: var(--protocol-blue);
+  --track-markets: oklch(0.76 0.18 175);
+  --track-open: oklch(0.72 0.18 200);
 
-  --chart-1: var(--protocol-mint);
-  --chart-2: var(--protocol-cyan);
-  --chart-3: var(--protocol-amber);
-  --chart-4: var(--protocol-blue);
-  --chart-5: var(--protocol-rust);
+  --chart-1: oklch(0.72 0.22 155);
+  --chart-2: oklch(0.65 0.20 200);
+  --chart-3: oklch(0.60 0.18 265);
+  --chart-4: oklch(0.76 0.18 175);
+  --chart-5: oklch(0.72 0.18 200);
 
   --sidebar: oklch(0.09 0.012 265);
   --sidebar-foreground: oklch(0.97 0.005 265);
@@ -59,9 +53,8 @@
 }
 
 @theme inline {
-  --font-sans: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
-  --font-mono: 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
-  --font-display: 'Space Grotesk', 'IBM Plex Sans', system-ui, sans-serif;
+  --font-sans: 'Geist', 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  --font-mono: 'Geist Mono', 'JetBrains Mono', 'SFMono-Regular', Menlo, monospace;
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -102,12 +95,6 @@
   --color-neon-cyan: var(--neon-cyan);
   --color-neon-green-dim: var(--neon-green-dim);
   --color-neon-cyan-dim: var(--neon-cyan-dim);
-  --color-protocol-mint: var(--protocol-mint);
-  --color-protocol-cyan: var(--protocol-cyan);
-  --color-protocol-amber: var(--protocol-amber);
-  --color-protocol-blue: var(--protocol-blue);
-  --color-protocol-rust: var(--protocol-rust);
-  --color-protocol-steel: var(--protocol-steel);
 }
 
 @layer base {
@@ -116,25 +103,10 @@
   }
   body {
     @apply bg-background text-foreground;
-    background-image:
-      radial-gradient(ellipse 86vw 54vh at 8% 0%, oklch(0.42 0.16 205 / 0.18) 0%, transparent 60%),
-      radial-gradient(ellipse 72vw 46vh at 96% 6%, oklch(0.40 0.16 158 / 0.14) 0%, transparent 64%),
-      radial-gradient(circle at 1px 1px, oklch(0.55 0.035 252 / 0.13) 1px, transparent 1.25px);
-    background-attachment: fixed;
-    background-size: 100% 100%, 100% 100%, 24px 24px;
   }
   html {
     font-size: 15px;
     scroll-behavior: smooth;
-  }
-  code,
-  kbd,
-  samp,
-  pre,
-  .font-mono,
-  .mono,
-  [class*='tabular'] {
-    font-variant-numeric: tabular-nums;
   }
 }
 
@@ -6220,390 +6192,5 @@
 
   .home-wizard__fields {
     grid-template-columns: 1fr;
-  }
-}
-
-/* Protocol console pass: restrained shell and core operational surfaces. */
-.skip-link {
-  position: fixed;
-  left: 16px;
-  top: 12px;
-  z-index: 120;
-  transform: translateY(-140%);
-  border: 1px solid var(--ring);
-  border-radius: 6px;
-  background: var(--background);
-  padding: 9px 12px;
-  color: var(--foreground);
-  font-family: var(--font-mono);
-  font-size: 12px;
-  transition: transform 0.16s ease;
-}
-
-.skip-link:focus {
-  transform: translateY(0);
-}
-
-:where(a, button, input, textarea, select, summary):focus-visible {
-  outline: 2px solid color-mix(in oklch, var(--ring) 72%, white 28%);
-  outline-offset: 3px;
-}
-
-.app-header {
-  background:
-    linear-gradient(180deg, oklch(0.145 0.02 252 / 0.96), oklch(0.115 0.018 252 / 0.92)),
-    var(--background);
-  box-shadow: 0 1px 0 oklch(0.92 0.01 235 / 0.04);
-}
-
-.brand-mark {
-  box-shadow: inset 0 1px 0 oklch(0.98 0.01 235 / 0.08);
-}
-
-.app-nav-link {
-  border: 1px solid transparent;
-}
-
-.app-nav-link__rail {
-  position: absolute;
-  inset: auto 10px -1px;
-  height: 2px;
-  background: var(--primary);
-}
-
-.network-pulse,
-.live-ticker {
-  background: color-mix(in oklch, var(--background) 88%, var(--card));
-}
-
-.live-ticker {
-  color: var(--muted-foreground);
-}
-
-.protocol-panel,
-.card,
-.home-card,
-.review-panel,
-.review-thread,
-.review-queue-section,
-.ann-strip,
-.board-tile,
-.agent-tile,
-.agent-list-card,
-.insights-metric-card,
-.insights-table-card,
-.insights-event-feed,
-.insights-score-card,
-.insights-info-card,
-.chat-main,
-.chat-side-card {
-  position: relative;
-  overflow: hidden;
-  border-color: color-mix(in oklch, var(--border) 88%, var(--protocol-blue));
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, oklch(0.215 0.026 252 / 0.62), oklch(0.145 0.018 252 / 0.88)),
-    var(--card);
-  box-shadow:
-    inset 0 1px 0 oklch(0.98 0.01 235 / 0.05),
-    0 22px 64px oklch(0.04 0.018 252 / 0.22);
-}
-
-.protocol-panel::after,
-.chat-main::after,
-.insights-table-card::after,
-.insights-event-feed::after,
-.review-thread::after {
-  content: "";
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  border-radius: inherit;
-  background: repeating-linear-gradient(
-    0deg,
-    transparent,
-    transparent 2px,
-    oklch(0 0 0 / 0.025) 2px,
-    oklch(0 0 0 / 0.025) 3px
-  );
-}
-
-.page-ambient {
-  opacity: 0.28;
-  mix-blend-mode: normal;
-}
-
-.page-ambient__glow {
-  opacity: 0.08;
-}
-
-.gradient-text {
-  background: none;
-  -webkit-text-fill-color: currentcolor;
-  color: var(--primary);
-}
-
-.neon-btn,
-.btn--primary,
-.home-action-btn,
-.chat-composer button[type="submit"],
-.chat-alert button {
-  border: 1px solid color-mix(in oklch, var(--primary) 60%, transparent);
-  border-radius: 6px;
-  background: var(--primary);
-  box-shadow: none;
-  color: var(--primary-foreground);
-  transition: border-color 0.18s ease, background 0.18s ease, color 0.18s ease, transform 0.18s ease;
-}
-
-.neon-btn:hover,
-.btn--primary:hover,
-.home-action-btn:hover,
-.chat-composer button[type="submit"]:hover,
-.chat-alert button:hover {
-  border-color: color-mix(in oklch, var(--primary) 80%, white 20%);
-  background: color-mix(in oklch, var(--primary) 90%, white 10%);
-  box-shadow: none;
-  transform: translateY(-1px);
-}
-
-.neon-btn:active,
-.btn:active,
-.home-action-btn:active,
-.chat-composer button[type="submit"]:active,
-.chat-alert button:active {
-  transform: translateY(0) scale(0.98);
-}
-
-.btn,
-.home-btn,
-.filter-row button,
-.search-box,
-.review-badge,
-.agent-track-badge,
-.chip,
-.live-pill,
-.status-chip,
-.board-tile__pid button,
-.chat-msg__status {
-  border-radius: 6px;
-}
-
-.home-btn,
-.btn,
-.filter-row button,
-.search-box,
-.chat-feed__loading,
-.chat-feed__empty,
-.chat-feed__older,
-.lazy-sentinel,
-.empty,
-.home-empty,
-.review-empty,
-.review-warning,
-.review-error {
-  background: color-mix(in oklch, var(--background) 62%, var(--card));
-}
-
-.section__title,
-.home-section__title,
-.home-hero__title,
-.insights-score-card h3,
-.hack-panel-card h2,
-.hack-panel-card h3,
-.hack-cta h2 {
-  font-family: var(--font-display);
-  font-weight: 600;
-  letter-spacing: 0;
-  text-wrap: balance;
-}
-
-.section__kicker,
-.home-section__kicker,
-.home-hero__eyebrow,
-.home-hero-meta__lbl,
-.insights-table th,
-.insights-load-row,
-.insights-feed-more,
-.mention-picker__hdr,
-.mention-picker__group,
-.review-panel__kicker,
-.review-queue-count,
-.live-pill,
-.status-chip {
-  letter-spacing: 0;
-}
-
-.section__sub,
-.home-section__sub,
-.home-hero__sub,
-.review-dossier p,
-.review-actions p {
-  max-width: 66ch;
-  text-wrap: pretty;
-}
-
-.page {
-  padding-top: 72px;
-}
-
-.agent-tile,
-.board-tile {
-  min-height: 0;
-  box-shadow: none;
-}
-
-.agent-tile::before,
-.board-tile__band {
-  width: 3px;
-  height: auto;
-  inset: 0 auto 0 0;
-  background: var(--tone);
-}
-
-.agent-tile:hover,
-.board-tile:hover,
-.board-tile[data-highlighted="true"] {
-  border-color: color-mix(in oklch, var(--tone) 54%, var(--border));
-  transform: translateY(-1px);
-}
-
-.agent-avatar,
-.agent-row__avatar,
-.chat-avatar,
-.insights-agent__icon,
-.review-queue-row__icon,
-.home-agent-row__avatar {
-  border-radius: 6px;
-  box-shadow: inset 0 1px 0 oklch(0.98 0.01 235 / 0.07);
-}
-
-.agent-tile__stats > div,
-.board-tile__stats > div,
-.insights-metric-card {
-  background: color-mix(in oklch, var(--background) 58%, var(--card));
-}
-
-.agent-tile__num,
-.insights-metric-card strong,
-.home-hero-meta__num,
-.review-dossier__facts dd {
-  font-variant-numeric: tabular-nums;
-}
-
-.ann-strip__row,
-.insights-event-feed__row,
-.review-receipt,
-.chat-msg {
-  border-left: 2px solid color-mix(in oklch, var(--primary) 70%, transparent);
-}
-
-.ann-strip__row:hover,
-.insights-table tbody tr:hover,
-.insights-event-feed__row:hover,
-.chat-msg:hover,
-.review-queue-row:hover {
-  background: color-mix(in oklch, var(--primary) 7%, transparent);
-}
-
-.chat-shell {
-  grid-template-columns: minmax(0, 1fr) minmax(260px, 300px);
-}
-
-.chat-main {
-  height: min(740px, calc(100dvh - 210px));
-}
-
-.chat-header,
-.chat-composer,
-.review-thread__header,
-.ann-strip__hdr,
-.review-queue-section header {
-  background: color-mix(in oklch, var(--background) 74%, var(--card));
-}
-
-.chat-feed__loading,
-.chat-feed__empty,
-.chat-feed__older,
-.lazy-sentinel,
-.empty,
-.home-empty,
-.review-empty {
-  width: fit-content;
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 10px 12px;
-  color: var(--muted-foreground);
-  font-family: var(--font-mono);
-  font-size: 12px;
-}
-
-.mention-picker {
-  border-radius: 8px;
-  background: color-mix(in oklch, var(--background) 96%, var(--card));
-  box-shadow: 0 22px 70px oklch(0.04 0.018 252 / 0.42);
-}
-
-.review-workbench {
-  grid-template-columns: minmax(230px, 0.78fr) minmax(360px, 1.55fr) minmax(260px, 0.82fr);
-}
-
-.review-queue-row {
-  border-left: 2px solid var(--primary);
-}
-
-.not-found-page {
-  min-height: 54dvh;
-  display: grid;
-  place-items: center;
-}
-
-.not-found-panel {
-  width: min(100%, 760px);
-  border: 1px solid color-mix(in oklch, var(--border) 88%, var(--protocol-blue));
-  border-radius: 8px;
-  background:
-    linear-gradient(180deg, oklch(0.215 0.026 252 / 0.62), oklch(0.145 0.018 252 / 0.88)),
-    var(--card);
-  padding: clamp(28px, 5vw, 56px);
-  box-shadow:
-    inset 0 1px 0 oklch(0.98 0.01 235 / 0.05),
-    0 22px 64px oklch(0.04 0.018 252 / 0.22);
-}
-
-.not-found-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-top: 24px;
-}
-
-.site-footer,
-footer {
-  background: color-mix(in oklch, var(--background) 94%, var(--card));
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .ticker-inner,
-  .live-dot,
-  .float,
-  .pulse-ring {
-    animation: none;
-  }
-}
-
-@media (max-width: 760px) {
-  .chat-shell {
-    grid-template-columns: 1fr;
-  }
-
-  .chat-main,
-  .chat-side {
-    max-height: none;
-    height: auto;
-  }
-
-  .chat-feed {
-    min-height: 420px;
   }
 }

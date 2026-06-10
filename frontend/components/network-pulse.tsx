@@ -73,12 +73,12 @@ export function NetworkPulse() {
   }, [snapshot])
 
   return (
-    <div className="network-pulse border-b border-border bg-card/65 shadow-[0_1px_0_oklch(1_0_0_/_0.03)] backdrop-blur">
+    <div className="border-b border-border bg-card/65 shadow-[0_1px_0_oklch(1_0_0_/_0.03)] backdrop-blur">
       <div className="mx-auto max-w-[1320px] px-5 sm:px-6 lg:px-7">
-        <div className="flex h-10 items-center justify-between gap-8 overflow-x-auto font-mono text-xs">
+        <div className="flex h-12 items-center justify-between gap-8 overflow-x-auto font-mono text-sm">
           <div className="flex items-center gap-2 flex-shrink-0">
-            <span className="live-dot h-2 w-2 rounded-full bg-primary" />
-            <span className="text-primary font-bold">{env.networkLabel}</span>
+            <span className="live-dot h-2 w-2 rounded-full bg-primary shadow-[0_0_12px_var(--primary)]" />
+            <span className="text-primary font-bold tracking-[0.02em]">{env.networkLabel}</span>
           </div>
           <div className="flex items-center gap-5 text-muted-foreground flex-shrink-0">
             <span>
@@ -86,7 +86,7 @@ export function NetworkPulse() {
             </span>
             <span className="text-border">·</span>
             <span>
-              Receipts <span className="font-extrabold text-primary">{formatNumber(stats.extr)}</span>
+              Final extrinsics <span className="font-extrabold text-primary">{formatNumber(stats.extr)}</span>
             </span>
             <span className="text-border">·</span>
             <span>
@@ -97,7 +97,7 @@ export function NetworkPulse() {
               Apps <span className="font-extrabold text-foreground">{formatNumber(stats.apps)}</span>
             </span>
             <span className="text-border">·</span>
-            <span className="font-semibold text-primary">Season 1 judging</span>
+            <span className="font-semibold text-primary">Season 1 — judging</span>
           </div>
         </div>
       </div>
