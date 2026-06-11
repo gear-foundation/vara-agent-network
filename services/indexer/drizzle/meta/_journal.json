@@ -78,6 +78,13 @@
       "when": 1781016000000,
       "tag": "0010_application_program_replacements",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1781193600000,
+      "tag": "0011_seed_migrated_review_summaries",
+      "breakpoints": true
     }
   ]
 }
