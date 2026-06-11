@@ -159,6 +159,15 @@ pub enum ContractError {
     ReplacementReasonRequired,
     ReplacementReasonTooLong,
     ProgramReplacementLimitReached,
+    MigrationNotStarted,
+    MigrationAlreadyStarted,
+    MigrationFinished,
+    MigrationBatchTooLarge,
+    MigrationBatchChecksumConflict,
+    MigrationEntityConflict,
+    MigrationManifestMismatch,
+    MigrationCountMismatch,
+    MigrationHashMismatch,
 }
 
 // ---------------------------------------------------------------------------
@@ -168,6 +177,108 @@ pub enum ContractError {
 pub type ChatMsgId = u64;
 pub type PostId = u64;
 pub type Hash32 = [u8; 32];
+
+// ---------------------------------------------------------------------------
+// Migration DTOs
+// ---------------------------------------------------------------------------
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum MigrationDomain {
+    ConfigAndReviewSeed,
+    Participants,
+    Applications,
+    ProgramReplacements,
+    BoardState,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq, Default)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationCounts {
+    pub participants: u32,
+    pub applications: u32,
+    pub program_replacements: u32,
+    pub identity_cards: u32,
+    pub announcements: u32,
+    pub reviewers: u32,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationManifest {
+    pub source_program_id: ActorId,
+    pub snapshot_block: u64,
+    pub snapshot_hash: Hash32,
+    pub manifest_hash: Hash32,
+    pub schema_version: u32,
+    pub old_indexer_cursor: String,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationBatchRecord {
+    pub domain: MigrationDomain,
+    pub batch_id: String,
+    pub checksum: Hash32,
+    pub count: u32,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationStatus {
+    pub started: bool,
+    pub finished: bool,
+    pub locked: bool,
+    pub manifest: Option<MigrationManifest>,
+    pub counts: MigrationCounts,
+    pub checksum_accumulator: Hash32,
+    pub applied_batches: Vec<MigrationBatchRecord>,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ParticipantMigrationEntry {
+    pub wallet: ActorId,
+    pub participant: Participant,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ApplicationMigrationEntry {
+    pub application: Application,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProgramReplacementMigrationEntry {
+    pub old_program_id: ActorId,
+    pub new_program_id: ActorId,
+    pub replacement_count: u32,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct IdentityCardMigrationEntry {
+    pub app: ActorId,
+    pub card: IdentityCard,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct AnnouncementMigrationEntry {
+    pub app: ActorId,
+    pub announcement: Announcement,
+}
 
 // ---------------------------------------------------------------------------
 // Chat domain

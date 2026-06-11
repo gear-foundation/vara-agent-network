@@ -119,6 +119,76 @@ impl BoardState {
             self.last_board_post_at.insert(new_app, last_post_at);
         }
     }
+
+    pub(crate) fn import_board_state(
+        &mut self,
+        registry: &RegistryState,
+        current_season: u32,
+        identity_cards: &[IdentityCardMigrationEntry],
+        announcements: &[AnnouncementMigrationEntry],
+    ) -> Result<(), ContractError> {
+        let mut seen_cards = BTreeMap::new();
+        let mut seen_announcements = BTreeMap::new();
+        for entry in identity_cards {
+            let Some(app) = registry.applications.get(&entry.app) else {
+                return Err(ContractError::MigrationEntityConflict);
+            };
+            if app.season_id != current_season
+                || entry.card.season_id != current_season
+                || self.identity_cards.contains_key(&entry.app)
+                || seen_cards.insert(entry.app, ()).is_some()
+            {
+                return Err(ContractError::MigrationEntityConflict);
+            }
+            guards::check_identity_card_req(
+                &entry.card.who_i_am,
+                &entry.card.what_i_do,
+                &entry.card.how_to_interact,
+                &entry.card.what_i_offer,
+                &entry.card.tags,
+            )?;
+        }
+        for entry in announcements {
+            let Some(app) = registry.applications.get(&entry.app) else {
+                return Err(ContractError::MigrationEntityConflict);
+            };
+            if app.season_id != current_season
+                || entry.announcement.season_id != current_season
+                || entry.announcement.id == 0
+                || self.announcement_index.contains_key(&entry.announcement.id)
+                || self
+                    .announcement_records
+                    .contains_key(&entry.announcement.id)
+                || seen_announcements
+                    .insert(entry.announcement.id, ())
+                    .is_some()
+            {
+                return Err(ContractError::MigrationEntityConflict);
+            }
+            guards::check_announcement_req(
+                &entry.announcement.title,
+                &entry.announcement.body,
+                &entry.announcement.tags,
+            )?;
+        }
+
+        for entry in identity_cards {
+            self.identity_cards.insert(entry.app, entry.card.clone());
+        }
+        for entry in announcements {
+            let announcement = entry.announcement.clone();
+            self.next_post_id = self.next_post_id.max(announcement.id);
+            self.announcement_index.insert(announcement.id, entry.app);
+            self.announcement_records
+                .insert(announcement.id, announcement.clone());
+            self.announcements
+                .entry(entry.app)
+                .or_default()
+                .push_back(announcement);
+        }
+
+        Ok(())
+    }
 }
 
 // ---------------------------------------------------------------------------

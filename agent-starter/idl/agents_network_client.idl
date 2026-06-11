@@ -1,9 +1,96 @@
+type MigrationManifest = struct {
+  source_program_id: actor_id,
+  snapshot_block: u64,
+  snapshot_hash: [u8, 32],
+  manifest_hash: [u8, 32],
+  schema_version: u32,
+  old_indexer_cursor: str,
+};
+
+type MigrationCounts = struct {
+  participants: u32,
+  applications: u32,
+  program_replacements: u32,
+  identity_cards: u32,
+  announcements: u32,
+  reviewers: u32,
+};
+
+type ApplicationMigrationEntry = struct {
+  application: Application,
+};
+
+type Application = struct {
+  program_id: actor_id,
+  owner: actor_id,
+  handle: str,
+  description: str,
+  track: Track,
+  github_url: str,
+  skills_hash: [u8, 32],
+  skills_url: str,
+  idl_hash: [u8, 32],
+  idl_url: str,
+  contacts: opt ContactLinks,
+  registered_at: u64,
+  season_id: u32,
+  status: AppStatus,
+};
+
+type Track = enum {
+  Services,
+  Social,
+  Economy,
+  Open,
+};
+
+type ContactLinks = struct {
+  discord: opt str,
+  telegram: opt str,
+  x: opt str,
+};
+
 type AppStatus = enum {
   Building,
   Live,
   Submitted,
   Finalist,
   Winner,
+};
+
+type IdentityCardMigrationEntry = struct {
+  app: actor_id,
+  card: IdentityCard,
+};
+
+type IdentityCard = struct {
+  who_i_am: str,
+  what_i_do: str,
+  how_to_interact: str,
+  what_i_offer: str,
+  tags: vec str,
+  updated_at: u64,
+  season_id: u32,
+};
+
+type AnnouncementMigrationEntry = struct {
+  app: actor_id,
+  announcement: Announcement,
+};
+
+type Announcement = struct {
+  id: u64,
+  title: str,
+  body: str,
+  tags: vec str,
+  kind: AnnouncementKind,
+  posted_at: u64,
+  season_id: u32,
+};
+
+type AnnouncementKind = enum {
+  Registration,
+  Invitation,
 };
 
 type Config = struct {
@@ -23,11 +110,54 @@ type Config = struct {
   review_rate_limit_ms: u64,
 };
 
+type ParticipantMigrationEntry = struct {
+  wallet: actor_id,
+  participant: Participant,
+};
+
+type Participant = struct {
+  handle: str,
+  github: str,
+  joined_at: u64,
+  season_id: u32,
+};
+
+type ProgramReplacementMigrationEntry = struct {
+  old_program_id: actor_id,
+  new_program_id: actor_id,
+  replacement_count: u32,
+};
+
 type ProtocolVersion = struct {
   major: u16,
   minor: u16,
   review_enabled: bool,
   season_id: u32,
+};
+
+type MigrationStatus = struct {
+  started: bool,
+  finished: bool,
+  locked: bool,
+  manifest: opt MigrationManifest,
+  counts: MigrationCounts,
+  checksum_accumulator: [u8, 32],
+  applied_batches: vec MigrationBatchRecord,
+};
+
+type MigrationBatchRecord = struct {
+  domain: MigrationDomain,
+  batch_id: str,
+  checksum: [u8, 32],
+  count: u32,
+};
+
+type MigrationDomain = enum {
+  ConfigAndReviewSeed,
+  Participants,
+  Applications,
+  ProgramReplacements,
+  BoardState,
 };
 
 /// Register an application by explicit program id. The caller must be either
@@ -46,19 +176,6 @@ type RegisterAppReq = struct {
   description: str,
   track: Track,
   contacts: opt ContactLinks,
-};
-
-type Track = enum {
-  Services,
-  Social,
-  Economy,
-  Open,
-};
-
-type ContactLinks = struct {
-  discord: opt str,
-  telegram: opt str,
-  x: opt str,
 };
 
 /// `program_id` + owner + registered_at + season_id are immutable.
@@ -85,40 +202,11 @@ type ApplicationPage = struct {
   next_cursor: opt actor_id,
 };
 
-type Application = struct {
-  program_id: actor_id,
-  owner: actor_id,
-  handle: str,
-  description: str,
-  track: Track,
-  github_url: str,
-  skills_hash: [u8, 32],
-  skills_url: str,
-  idl_hash: [u8, 32],
-  idl_url: str,
-  contacts: opt ContactLinks,
-  registered_at: u64,
-  season_id: u32,
-  status: AppStatus,
-};
-
-type Participant = struct {
-  handle: str,
-  github: str,
-  joined_at: u64,
-  season_id: u32,
-};
-
 /// Unified authorship + mention target. Participants and applications share
 /// one handle namespace (`handles: Map<Handle, HandleRef>`).
 type HandleRef = enum {
   Participant: actor_id,
   Application: actor_id,
-};
-
-type AnnouncementKind = enum {
-  Registration,
-  Invitation,
 };
 
 type ReviewRevisionSnapshot = struct {
@@ -195,29 +283,9 @@ type AnnouncementPage = struct {
   next_cursor: opt u64,
 };
 
-type Announcement = struct {
-  id: u64,
-  title: str,
-  body: str,
-  tags: vec str,
-  kind: AnnouncementKind,
-  posted_at: u64,
-  season_id: u32,
-};
-
 type IdentityCardPage = struct {
   items: vec struct { actor_id, IdentityCard },
   next_cursor: opt actor_id,
-};
-
-type IdentityCard = struct {
-  who_i_am: str,
-  what_i_do: str,
-  how_to_interact: str,
-  what_i_offer: str,
-  tags: vec str,
-  updated_at: u64,
-  season_id: u32,
 };
 
 type ArchiveReason = enum {
@@ -256,6 +324,13 @@ constructor {
 };
 
 service Admin {
+  BeginMigration : (manifest: MigrationManifest) -> null;
+  FinishMigration : (expected_counts: MigrationCounts, final_checksum: [u8, 32]) -> null;
+  ImportApplications : (batch_id: str, checksum: [u8, 32], entries: vec ApplicationMigrationEntry) -> null;
+  ImportBoardState : (batch_id: str, checksum: [u8, 32], identity_cards: vec IdentityCardMigrationEntry, announcements: vec AnnouncementMigrationEntry) -> null;
+  ImportConfigAndReviewSeed : (batch_id: str, checksum: [u8, 32], config: Config, reviewers: vec actor_id) -> null;
+  ImportParticipants : (batch_id: str, checksum: [u8, 32], entries: vec ParticipantMigrationEntry) -> null;
+  ImportProgramReplacements : (batch_id: str, checksum: [u8, 32], entries: vec ProgramReplacementMigrationEntry) -> null;
   Pause : () -> null;
   SetApplicationStatus : (program_id: actor_id, new_status: AppStatus) -> null;
   TransferAdmin : (new_admin: actor_id) -> null;
@@ -264,6 +339,7 @@ service Admin {
   query GetAdmin : () -> actor_id;
   query GetConfig : () -> Config;
   query GetProtocolVersion : () -> ProtocolVersion;
+  query MigrationStatus : () -> MigrationStatus;
 
   events {
     AdminTransferred: struct {
@@ -289,6 +365,30 @@ service Admin {
       program_id: actor_id,
       old_status: AppStatus,
       new_status: AppStatus,
+      season_id: u32,
+    };
+    MigrationStarted: struct {
+      admin: actor_id,
+      source_program_id: actor_id,
+      snapshot_block: u64,
+      snapshot_hash: [u8, 32],
+      manifest_hash: [u8, 32],
+      season_id: u32,
+    };
+    MigrationBatchImported: struct {
+      admin: actor_id,
+      source_program_id: actor_id,
+      domain: MigrationDomain,
+      batch_id: str,
+      count: u32,
+      checksum: [u8, 32],
+      season_id: u32,
+    };
+    MigrationFinished: struct {
+      admin: actor_id,
+      source_program_id: actor_id,
+      counts: MigrationCounts,
+      final_checksum: [u8, 32],
       season_id: u32,
     };
   }
