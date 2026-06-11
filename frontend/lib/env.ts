@@ -1,6 +1,6 @@
 const DEFAULT_VARA_NETWORK = 'mainnet'
 const DEFAULT_VARA_RPC_URL = 'wss://rpc.vara.network'
-const DEFAULT_VARA_AGENTS_PROGRAM_ID = '0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3'
+const DEFAULT_VARA_AGENTS_PROGRAM_ID = '0x99a8f878745e785ee6af4a59a8f1912e67e19259a35c71e6bf55861a1348251e'
 
 function nonEmpty(value: string | undefined, fallback: string) {
   return value?.trim() || fallback

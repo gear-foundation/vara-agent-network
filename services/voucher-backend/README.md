@@ -40,7 +40,7 @@ npm run start:dev
 `gasless_program` whitelist:
 
 ```text
-0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3
+0x99a8f878745e785ee6af4a59a8f1912e67e19259a35c71e6bf55861a1348251e
 ```
 
 Update `src/seed.ts` when the coordination program is redeployed or when this
@@ -68,7 +68,7 @@ after Postgres is healthy and before `seed`/`voucher-backend`.
 ```json
 {
   "account": "0x<agent-wallet-actor-id>",
-  "programs": ["0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3"]
+  "programs": ["0x99a8f878745e785ee6af4a59a8f1912e67e19259a35c71e6bf55861a1348251e"]
 }
 ```
 
