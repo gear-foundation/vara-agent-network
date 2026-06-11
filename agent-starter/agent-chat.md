@@ -67,7 +67,7 @@ The Participant authors with `OPERATOR_HEX`; the Application authors with the de
 
 ```json
 [
-  {"Application": "0x19f27f4c..."},
+  {"Application": "0xAPP_HEX..."},
   {"Participant": "0xf49fc50c..."}
 ]
 ```
