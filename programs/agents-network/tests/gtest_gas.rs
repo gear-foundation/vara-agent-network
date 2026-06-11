@@ -24,7 +24,10 @@
 mod common;
 
 use agents_network_client::{
-    AgentsNetworkClient, ContactLinks, HandleRef, Track, board::Board, chat::Chat,
+    AgentsNetworkClient, Announcement, AnnouncementKind, AnnouncementMigrationEntry, AppStatus,
+    Application, ApplicationMigrationEntry, Config, ContactLinks, HandleRef, IdentityCard,
+    IdentityCardMigrationEntry, MigrationManifest, Participant, ParticipantMigrationEntry,
+    ProgramReplacementMigrationEntry, Track, admin::Admin, board::Board, chat::Chat,
     registry::Registry,
 };
 use common::*;
@@ -34,6 +37,59 @@ use sails_rs::prelude::*;
 /// 10%-of-block-allowance gate. Current worst-case paths use 2-4B (well
 /// under 1% of a block); 100B flags a ~30x regression before it lands.
 const GAS_BUDGET: u64 = 100_000_000_000;
+
+fn checksum(byte: u8) -> [u8; 32] {
+    [byte; 32]
+}
+
+fn migration_manifest() -> MigrationManifest {
+    MigrationManifest {
+        source_program_id: ActorId::from(9_000u64),
+        snapshot_block: 12_345,
+        snapshot_hash: checksum(9),
+        manifest_hash: checksum(10),
+        schema_version: 1,
+        old_indexer_cursor: "block:12345:event:99".to_string(),
+    }
+}
+
+fn migrated_application(program_id: u64, handle: String) -> Application {
+    Application {
+        program_id: program_id.into(),
+        owner: ALICE.into(),
+        handle: handle.clone(),
+        description: "x".repeat(280),
+        track: Track::Services,
+        github_url: format!("https://github.com/{handle}"),
+        skills_hash: checksum(1),
+        skills_url: "x".repeat(256),
+        idl_hash: checksum(2),
+        idl_url: format!("https://example.com/{handle}.idl"),
+        contacts: None,
+        registered_at: 200,
+        season_id: 1,
+        status: AppStatus::Building,
+    }
+}
+
+fn paused_config() -> Config {
+    Config {
+        paused: true,
+        allow_participant_registration: true,
+        allow_application_registration: true,
+        allow_chat: true,
+        allow_board_updates: true,
+        allow_review: true,
+        max_chat_body: 2048,
+        max_review_body_bytes: 1_000,
+        max_mentions_per_post: 8,
+        mention_inbox_cap: 100,
+        max_announcements_per_app: 5,
+        chat_rate_limit_ms: 5_000,
+        board_rate_limit_ms: 60_000,
+        review_rate_limit_ms: 5_000,
+    }
+}
 
 async fn setup_manual() -> (
     GtestEnv,
@@ -62,6 +118,134 @@ fn burn(env: &GtestEnv, msg_id: sails_rs::prelude::MessageId) -> u64 {
         .gas_burned
         .get(&msg_id)
         .expect("gas_burned missing for msg_id")
+}
+
+#[tokio::test]
+#[ignore = "gas-measurement gate: run with --ignored"]
+async fn gas_gate_migration_batches_worst_case_per_domain() {
+    let (env, program) = setup_manual().await;
+
+    let mut pending = program.admin().begin_migration(migration_manifest());
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(begin_migration) = {gas}");
+    assert!(gas < GAS_BUDGET, "begin_migration burned {gas} gas");
+
+    let reviewers = (20_000u64..20_050).map(ActorId::from).collect::<Vec<_>>();
+    let mut pending = program.admin().import_config_and_review_seed(
+        "gas-seed".to_string(),
+        checksum(21),
+        paused_config(),
+        reviewers,
+    );
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(import_config_and_review_seed, 50 reviewers) = {gas}");
+    assert!(
+        gas < GAS_BUDGET,
+        "import_config_and_review_seed burned {gas} gas"
+    );
+
+    let participants = (0..50u64)
+        .map(|i| ParticipantMigrationEntry {
+            wallet: (30_000 + i).into(),
+            participant: Participant {
+                handle: format!("migrated-participant-{i:02}"),
+                github: format!("https://github.com/migrated-participant-{i:02}"),
+                joined_at: 100 + i,
+                season_id: 1,
+            },
+        })
+        .collect::<Vec<_>>();
+    let mut pending = program.admin().import_participants(
+        "gas-participants".to_string(),
+        checksum(22),
+        participants,
+    );
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(import_participants, 50 rows) = {gas}");
+    assert!(gas < GAS_BUDGET, "import_participants burned {gas} gas");
+
+    let applications = (0..50u64)
+        .map(|i| ApplicationMigrationEntry {
+            application: migrated_application(40_000 + i, format!("migrated-app-{i:02}")),
+        })
+        .collect::<Vec<_>>();
+    let mut pending = program.admin().import_applications(
+        "gas-applications".to_string(),
+        checksum(23),
+        applications,
+    );
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(import_applications, 50 rows) = {gas}");
+    assert!(gas < GAS_BUDGET, "import_applications burned {gas} gas");
+
+    let replacements = (0..50u64)
+        .map(|i| ProgramReplacementMigrationEntry {
+            old_program_id: (50_000 + i).into(),
+            new_program_id: (40_000 + i).into(),
+            replacement_count: 1,
+        })
+        .collect::<Vec<_>>();
+    let mut pending = program.admin().import_program_replacements(
+        "gas-replacements".to_string(),
+        checksum(24),
+        replacements,
+    );
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(import_program_replacements, 50 rows) = {gas}");
+    assert!(
+        gas < GAS_BUDGET,
+        "import_program_replacements burned {gas} gas"
+    );
+
+    let identity_cards = (0..25u64)
+        .map(|i| IdentityCardMigrationEntry {
+            app: (40_000 + i).into(),
+            card: IdentityCard {
+                who_i_am: "x".repeat(280),
+                what_i_do: "x".repeat(280),
+                how_to_interact: "x".repeat(280),
+                what_i_offer: "x".repeat(280),
+                tags: vec!["migration".to_string()],
+                updated_at: 300 + i,
+                season_id: 1,
+            },
+        })
+        .collect::<Vec<_>>();
+    let announcements = (0..25u64)
+        .map(|i| AnnouncementMigrationEntry {
+            app: (40_000 + i).into(),
+            announcement: Announcement {
+                id: i + 1,
+                title: "x".repeat(80),
+                body: "x".repeat(1024),
+                tags: vec!["migration".to_string()],
+                kind: AnnouncementKind::Invitation,
+                posted_at: 400 + i,
+                season_id: 1,
+            },
+        })
+        .collect::<Vec<_>>();
+    let mut pending = program.admin().import_board_state(
+        "gas-board".to_string(),
+        checksum(25),
+        identity_cards,
+        announcements,
+    );
+    pending = pending.with_actor_id(DEPLOYER.into());
+    let msg_id = pending.send_one_way().unwrap();
+    let gas = burn(&env, msg_id);
+    eprintln!("gas(import_board_state, 25 cards + 25 announcements) = {gas}");
+    assert!(gas < GAS_BUDGET, "import_board_state burned {gas} gas");
 }
 
 #[tokio::test]

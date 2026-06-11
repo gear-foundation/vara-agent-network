@@ -758,6 +758,134 @@ pub fn reindex_application_status(
         .insert((track, new_status, program_id), true);
 }
 
+pub(crate) fn import_participants(
+    reg: &mut RegistryState,
+    current_season: u32,
+    entries: &[ParticipantMigrationEntry],
+) -> Result<(), ContractError> {
+    let mut seen_wallets = BTreeMap::new();
+    let mut seen_handles = BTreeMap::new();
+    for entry in entries {
+        guards::validate_handle(&entry.participant.handle)?;
+        if entry.participant.season_id != current_season
+            || entry.wallet == ActorId::zero()
+            || reg.participants.contains_key(&entry.wallet)
+            || reg.handles.contains_key(&entry.participant.handle)
+            || seen_wallets.insert(entry.wallet, ()).is_some()
+            || seen_handles
+                .insert(entry.participant.handle.clone(), ())
+                .is_some()
+        {
+            return Err(ContractError::MigrationEntityConflict);
+        }
+    }
+
+    for entry in entries {
+        reg.participants
+            .insert(entry.wallet, entry.participant.clone());
+        reg.handles.insert(
+            entry.participant.handle.clone(),
+            HandleRef::Participant(entry.wallet),
+        );
+    }
+
+    Ok(())
+}
+
+pub(crate) fn import_applications(
+    reg: &mut RegistryState,
+    review: &mut ReviewState,
+    current_season: u32,
+    entries: &[ApplicationMigrationEntry],
+) -> Result<(), ContractError> {
+    let mut seen_program_ids = BTreeMap::new();
+    let mut seen_handles = BTreeMap::new();
+    for entry in entries {
+        let app = &entry.application;
+        validate_migrated_application(app)?;
+        if app.season_id != current_season
+            || reg.applications.contains_key(&app.program_id)
+            || reg.handles.contains_key(&app.handle)
+            || reg.reserved_program_ids.contains_key(&app.program_id)
+            || seen_program_ids.insert(app.program_id, ()).is_some()
+            || seen_handles.insert(app.handle.clone(), ()).is_some()
+        {
+            return Err(ContractError::MigrationEntityConflict);
+        }
+    }
+
+    for entry in entries {
+        let app = entry.application.clone();
+        reg.handles
+            .insert(app.handle.clone(), HandleRef::Application(app.program_id));
+        reg.reserved_program_ids.insert(app.program_id, true);
+        insert_application_indexes(reg, &app);
+        review::init_application(review, app.program_id);
+        reg.applications.insert(app.program_id, app);
+    }
+
+    Ok(())
+}
+
+pub(crate) fn import_program_replacements(
+    reg: &mut RegistryState,
+    entries: &[ProgramReplacementMigrationEntry],
+) -> Result<(), ContractError> {
+    let mut seen_old_program_ids = BTreeMap::new();
+    for entry in entries {
+        if entry.old_program_id == ActorId::zero()
+            || entry.new_program_id == ActorId::zero()
+            || entry.old_program_id == entry.new_program_id
+            || entry.replacement_count == 0
+            || reg.applications.contains_key(&entry.old_program_id)
+            || !reg.applications.contains_key(&entry.new_program_id)
+            || reg.program_replacements.contains_key(&entry.old_program_id)
+            || seen_old_program_ids
+                .insert(entry.old_program_id, ())
+                .is_some()
+        {
+            return Err(ContractError::MigrationEntityConflict);
+        }
+    }
+
+    for entry in entries {
+        reg.program_replacements
+            .insert(entry.old_program_id, entry.new_program_id);
+        insert_replacement_alias(reg, entry.new_program_id, entry.old_program_id);
+        reg.reserved_program_ids.insert(entry.old_program_id, true);
+        reg.reserved_program_ids.insert(entry.new_program_id, true);
+        let replacement_count = reg
+            .replacement_counts
+            .get(&entry.new_program_id)
+            .copied()
+            .unwrap_or(0)
+            .max(entry.replacement_count);
+        reg.replacement_counts
+            .insert(entry.new_program_id, replacement_count);
+    }
+
+    Ok(())
+}
+
+fn validate_migrated_application(app: &Application) -> Result<(), ContractError> {
+    if app.program_id == ActorId::zero() || app.owner == ActorId::zero() {
+        return Err(ContractError::MigrationEntityConflict);
+    }
+    guards::validate_handle(&app.handle)?;
+    guards::validate_hash(&app.skills_hash)?;
+    guards::validate_hash(&app.idl_hash)?;
+    if app.github_url.len() > MAX_GITHUB_URL
+        || app.skills_url.len() > MAX_SKILLS_URL
+        || app.idl_url.len() > MAX_IDL_URL
+        || app.description.len() > MAX_DESCRIPTION
+    {
+        return Err(ContractError::FieldTooLarge);
+    }
+    guards::validate_github_url(&app.github_url)?;
+    guards::validate_idl_url(&app.idl_url)?;
+    Ok(())
+}
+
 fn discover_from_index(
     reg: &RegistryState,
     filter: DiscoveryFilter,

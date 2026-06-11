@@ -520,6 +520,26 @@ pub fn replace_application_program(
     summary
 }
 
+pub(crate) fn import_reviewers(
+    review: &mut ReviewState,
+    season_id: u32,
+    reviewers: &[ActorId],
+) -> Result<(), ContractError> {
+    let mut seen = BTreeMap::new();
+    for reviewer in reviewers {
+        if *reviewer == ActorId::zero()
+            || is_active_reviewer(review, season_id, *reviewer)
+            || seen.insert(*reviewer, ()).is_some()
+        {
+            return Err(ContractError::MigrationEntityConflict);
+        }
+    }
+    for reviewer in reviewers {
+        review.reviewers.insert((season_id, *reviewer), true);
+    }
+    Ok(())
+}
+
 fn initial_summary(program_id: ActorId) -> ReviewSummary {
     ReviewSummary {
         program_id,

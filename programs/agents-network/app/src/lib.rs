@@ -41,6 +41,7 @@ impl Program {
             admin: RefCell::new(AdminState {
                 admin,
                 config: Default::default(),
+                migration: Default::default(),
             }),
             registry: RefCell::new(RegistryState::default()),
             review: RefCell::new(ReviewState::default()),
@@ -55,6 +56,7 @@ impl Program {
             &self.admin,
             &self.registry,
             &self.review,
+            &self.board,
             self.current_season,
         )
     }

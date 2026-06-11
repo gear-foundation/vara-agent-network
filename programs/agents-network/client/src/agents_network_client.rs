@@ -65,6 +65,47 @@ pub mod admin {
     use super::*;
     pub trait Admin {
         type Env: sails_rs::client::GearEnv;
+        fn begin_migration(
+            &mut self,
+            manifest: MigrationManifest,
+        ) -> sails_rs::client::PendingCall<io::BeginMigration, Self::Env>;
+        fn finish_migration(
+            &mut self,
+            expected_counts: MigrationCounts,
+            final_checksum: [u8; 32],
+        ) -> sails_rs::client::PendingCall<io::FinishMigration, Self::Env>;
+        fn import_applications(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            entries: Vec<ApplicationMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportApplications, Self::Env>;
+        fn import_board_state(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            identity_cards: Vec<IdentityCardMigrationEntry>,
+            announcements: Vec<AnnouncementMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportBoardState, Self::Env>;
+        fn import_config_and_review_seed(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            config: Config,
+            reviewers: Vec<ActorId>,
+        ) -> sails_rs::client::PendingCall<io::ImportConfigAndReviewSeed, Self::Env>;
+        fn import_participants(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            entries: Vec<ParticipantMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportParticipants, Self::Env>;
+        fn import_program_replacements(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            entries: Vec<ProgramReplacementMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportProgramReplacements, Self::Env>;
         fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env>;
         fn set_application_status(
             &mut self,
@@ -85,10 +126,67 @@ pub mod admin {
         fn get_protocol_version(
             &self,
         ) -> sails_rs::client::PendingCall<io::GetProtocolVersion, Self::Env>;
+        fn migration_status(&self)
+        -> sails_rs::client::PendingCall<io::MigrationStatus, Self::Env>;
     }
     pub struct AdminImpl;
     impl<E: sails_rs::client::GearEnv> Admin for sails_rs::client::Service<AdminImpl, E> {
         type Env = E;
+        fn begin_migration(
+            &mut self,
+            manifest: MigrationManifest,
+        ) -> sails_rs::client::PendingCall<io::BeginMigration, Self::Env> {
+            self.pending_call((manifest,))
+        }
+        fn finish_migration(
+            &mut self,
+            expected_counts: MigrationCounts,
+            final_checksum: [u8; 32],
+        ) -> sails_rs::client::PendingCall<io::FinishMigration, Self::Env> {
+            self.pending_call((expected_counts, final_checksum))
+        }
+        fn import_applications(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            entries: Vec<ApplicationMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportApplications, Self::Env> {
+            self.pending_call((batch_id, checksum, entries))
+        }
+        fn import_board_state(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            identity_cards: Vec<IdentityCardMigrationEntry>,
+            announcements: Vec<AnnouncementMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportBoardState, Self::Env> {
+            self.pending_call((batch_id, checksum, identity_cards, announcements))
+        }
+        fn import_config_and_review_seed(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            config: Config,
+            reviewers: Vec<ActorId>,
+        ) -> sails_rs::client::PendingCall<io::ImportConfigAndReviewSeed, Self::Env> {
+            self.pending_call((batch_id, checksum, config, reviewers))
+        }
+        fn import_participants(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            entries: Vec<ParticipantMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportParticipants, Self::Env> {
+            self.pending_call((batch_id, checksum, entries))
+        }
+        fn import_program_replacements(
+            &mut self,
+            batch_id: String,
+            checksum: [u8; 32],
+            entries: Vec<ProgramReplacementMigrationEntry>,
+        ) -> sails_rs::client::PendingCall<io::ImportProgramReplacements, Self::Env> {
+            self.pending_call((batch_id, checksum, entries))
+        }
         fn pause(&mut self) -> sails_rs::client::PendingCall<io::Pause, Self::Env> {
             self.pending_call(())
         }
@@ -125,10 +223,22 @@ pub mod admin {
         ) -> sails_rs::client::PendingCall<io::GetProtocolVersion, Self::Env> {
             self.pending_call(())
         }
+        fn migration_status(
+            &self,
+        ) -> sails_rs::client::PendingCall<io::MigrationStatus, Self::Env> {
+            self.pending_call(())
+        }
     }
 
     pub mod io {
         use super::*;
+        sails_rs::io_struct_impl!(BeginMigration (manifest: super::MigrationManifest) -> ());
+        sails_rs::io_struct_impl!(FinishMigration (expected_counts: super::MigrationCounts, final_checksum: [u8; 32]) -> ());
+        sails_rs::io_struct_impl!(ImportApplications (batch_id: String, checksum: [u8; 32], entries: Vec<super::ApplicationMigrationEntry>) -> ());
+        sails_rs::io_struct_impl!(ImportBoardState (batch_id: String, checksum: [u8; 32], identity_cards: Vec<super::IdentityCardMigrationEntry>, announcements: Vec<super::AnnouncementMigrationEntry>) -> ());
+        sails_rs::io_struct_impl!(ImportConfigAndReviewSeed (batch_id: String, checksum: [u8; 32], config: super::Config, reviewers: Vec<ActorId>) -> ());
+        sails_rs::io_struct_impl!(ImportParticipants (batch_id: String, checksum: [u8; 32], entries: Vec<super::ParticipantMigrationEntry>) -> ());
+        sails_rs::io_struct_impl!(ImportProgramReplacements (batch_id: String, checksum: [u8; 32], entries: Vec<super::ProgramReplacementMigrationEntry>) -> ());
         sails_rs::io_struct_impl!(Pause () -> ());
         sails_rs::io_struct_impl!(SetApplicationStatus (program_id: ActorId, new_status: super::AppStatus) -> ());
         sails_rs::io_struct_impl!(TransferAdmin (new_admin: ActorId) -> ());
@@ -137,6 +247,7 @@ pub mod admin {
         sails_rs::io_struct_impl!(GetAdmin () -> ActorId);
         sails_rs::io_struct_impl!(GetConfig () -> super::Config);
         sails_rs::io_struct_impl!(GetProtocolVersion () -> super::ProtocolVersion);
+        sails_rs::io_struct_impl!(MigrationStatus () -> super::MigrationStatus);
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -170,6 +281,30 @@ pub mod admin {
                 new_status: AppStatus,
                 season_id: u32,
             },
+            MigrationStarted {
+                admin: ActorId,
+                source_program_id: ActorId,
+                snapshot_block: u64,
+                snapshot_hash: [u8; 32],
+                manifest_hash: [u8; 32],
+                season_id: u32,
+            },
+            MigrationBatchImported {
+                admin: ActorId,
+                source_program_id: ActorId,
+                domain: MigrationDomain,
+                batch_id: String,
+                count: u32,
+                checksum: [u8; 32],
+                season_id: u32,
+            },
+            MigrationFinished {
+                admin: ActorId,
+                source_program_id: ActorId,
+                counts: MigrationCounts,
+                final_checksum: [u8; 32],
+                season_id: u32,
+            },
         }
         impl sails_rs::client::Event for AdminEvents {
             const EVENT_NAMES: &'static [Route] = &[
@@ -178,6 +313,9 @@ pub mod admin {
                 "Paused",
                 "Unpaused",
                 "ApplicationStatusChanged",
+                "MigrationStarted",
+                "MigrationBatchImported",
+                "MigrationFinished",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for AdminImpl {
@@ -885,12 +1023,121 @@ pub mod review {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationManifest {
+    pub source_program_id: ActorId,
+    pub snapshot_block: u64,
+    pub snapshot_hash: [u8; 32],
+    pub manifest_hash: [u8; 32],
+    pub schema_version: u32,
+    pub old_indexer_cursor: String,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationCounts {
+    pub participants: u32,
+    pub applications: u32,
+    pub program_replacements: u32,
+    pub identity_cards: u32,
+    pub announcements: u32,
+    pub reviewers: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ApplicationMigrationEntry {
+    pub application: Application,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct Application {
+    pub program_id: ActorId,
+    pub owner: ActorId,
+    pub handle: String,
+    pub description: String,
+    pub track: Track,
+    pub github_url: String,
+    pub skills_hash: [u8; 32],
+    pub skills_url: String,
+    pub idl_hash: [u8; 32],
+    pub idl_url: String,
+    pub contacts: Option<ContactLinks>,
+    pub registered_at: u64,
+    pub season_id: u32,
+    pub status: AppStatus,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum Track {
+    Services,
+    Social,
+    Economy,
+    Open,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ContactLinks {
+    pub discord: Option<String>,
+    pub telegram: Option<String>,
+    pub x: Option<String>,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub enum AppStatus {
     Building,
     Live,
     Submitted,
     Finalist,
     Winner,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct IdentityCardMigrationEntry {
+    pub app: ActorId,
+    pub card: IdentityCard,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct IdentityCard {
+    pub who_i_am: String,
+    pub what_i_do: String,
+    pub how_to_interact: String,
+    pub what_i_offer: String,
+    pub tags: Vec<String>,
+    pub updated_at: u64,
+    pub season_id: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct AnnouncementMigrationEntry {
+    pub app: ActorId,
+    pub announcement: Announcement,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct Announcement {
+    pub id: u64,
+    pub title: String,
+    pub body: String,
+    pub tags: Vec<String>,
+    pub kind: AnnouncementKind,
+    pub posted_at: u64,
+    pub season_id: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum AnnouncementKind {
+    Registration,
+    Invitation,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -914,11 +1161,66 @@ pub struct Config {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub struct ParticipantMigrationEntry {
+    pub wallet: ActorId,
+    pub participant: Participant,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct Participant {
+    pub handle: String,
+    pub github: String,
+    pub joined_at: u64,
+    pub season_id: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProgramReplacementMigrationEntry {
+    pub old_program_id: ActorId,
+    pub new_program_id: ActorId,
+    pub replacement_count: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub struct ProtocolVersion {
     pub major: u16,
     pub minor: u16,
     pub review_enabled: bool,
     pub season_id: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationStatus {
+    pub started: bool,
+    pub finished: bool,
+    pub locked: bool,
+    pub manifest: Option<MigrationManifest>,
+    pub counts: MigrationCounts,
+    pub checksum_accumulator: [u8; 32],
+    pub applied_batches: Vec<MigrationBatchRecord>,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct MigrationBatchRecord {
+    pub domain: MigrationDomain,
+    pub batch_id: String,
+    pub checksum: [u8; 32],
+    pub count: u32,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum MigrationDomain {
+    ConfigAndReviewSeed,
+    Participants,
+    Applications,
+    ProgramReplacements,
+    BoardState,
 }
 /// Register an application by explicit program id. The caller must be either
 /// the attested operator wallet or the program itself.
@@ -939,23 +1241,6 @@ pub struct RegisterAppReq {
     pub description: String,
     pub track: Track,
     pub contacts: Option<ContactLinks>,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum Track {
-    Services,
-    Social,
-    Economy,
-    Open,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct ContactLinks {
-    pub discord: Option<String>,
-    pub telegram: Option<String>,
-    pub x: Option<String>,
 }
 /// `program_id` + owner + registered_at + season_id are immutable.
 /// All patchable fields are editable only while the application is Building.
@@ -987,34 +1272,6 @@ pub struct ApplicationPage {
     pub items: Vec<Application>,
     pub next_cursor: Option<ActorId>,
 }
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct Application {
-    pub program_id: ActorId,
-    pub owner: ActorId,
-    pub handle: String,
-    pub description: String,
-    pub track: Track,
-    pub github_url: String,
-    pub skills_hash: [u8; 32],
-    pub skills_url: String,
-    pub idl_hash: [u8; 32],
-    pub idl_url: String,
-    pub contacts: Option<ContactLinks>,
-    pub registered_at: u64,
-    pub season_id: u32,
-    pub status: AppStatus,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct Participant {
-    pub handle: String,
-    pub github: String,
-    pub joined_at: u64,
-    pub season_id: u32,
-}
 /// Unified authorship + mention target. Participants and applications share
 /// one handle namespace (`handles: Map<Handle, HandleRef>`).
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
@@ -1023,13 +1280,6 @@ pub struct Participant {
 pub enum HandleRef {
     Participant(ActorId),
     Application(ActorId),
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub enum AnnouncementKind {
-    Registration,
-    Invitation,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
@@ -1124,33 +1374,9 @@ pub struct AnnouncementPage {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub struct Announcement {
-    pub id: u64,
-    pub title: String,
-    pub body: String,
-    pub tags: Vec<String>,
-    pub kind: AnnouncementKind,
-    pub posted_at: u64,
-    pub season_id: u32,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
 pub struct IdentityCardPage {
     pub items: Vec<(ActorId, IdentityCard)>,
     pub next_cursor: Option<ActorId>,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct IdentityCard {
-    pub who_i_am: String,
-    pub what_i_do: String,
-    pub how_to_interact: String,
-    pub what_i_offer: String,
-    pub tags: Vec<String>,
-    pub updated_at: u64,
-    pub season_id: u32,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
