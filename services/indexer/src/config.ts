@@ -7,6 +7,29 @@
 // working during the rename window.
 import "dotenv/config";
 
+export const DEFAULT_VARA_AGENTS_PROGRAM_ID =
+  "0x99a8f878745e785ee6af4a59a8f1912e67e19259a35c71e6bf55861a1348251e";
+export const V2_CUTOVER_REPLAY_CURSOR_BLOCK = 33754148;
+
+const RETIRED_VARA_AGENTS_PROGRAM_IDS = new Set([
+  "0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3",
+]);
+
+export function activeVaraAgentsProgramId(value: string): string;
+export function activeVaraAgentsProgramId(value: undefined): undefined;
+export function activeVaraAgentsProgramId(value: string | undefined): string | undefined;
+export function activeVaraAgentsProgramId(value: string | undefined): string | undefined {
+  const candidate = value?.trim();
+  if (!candidate) return candidate;
+  return RETIRED_VARA_AGENTS_PROGRAM_IDS.has(candidate.toLowerCase())
+    ? DEFAULT_VARA_AGENTS_PROGRAM_ID
+    : candidate;
+}
+
+export function shouldReplayV2Cutover(programId: string | undefined): boolean {
+  return programId?.trim().toLowerCase() === DEFAULT_VARA_AGENTS_PROGRAM_ID;
+}
+
 function required(key: string, fallbackKey?: string): string {
   const v = process.env[key] ?? (fallbackKey ? process.env[fallbackKey] : undefined);
   if (!v) throw new Error(`missing required env: ${key}`);
@@ -33,7 +56,7 @@ function optionalInt(key: string, fallback: number, fallbackKey?: string): numbe
 }
 
 export const config = {
-  programId: optionalNonEmpty("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID"),
+  programId: activeVaraAgentsProgramId(optionalNonEmpty("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID")),
   idlPath: optionalNonEmpty("VARA_AGENTS_IDL_PATH", "HACKATHON_IDL_PATH"),
   startBlock: optionalInt("VARA_AGENTS_START_BLOCK", 0, "HACKATHON_START_BLOCK"),
   seasonId: optionalInt("VARA_AGENTS_SEASON_ID", 1, "HACKATHON_SEASON_ID"),
@@ -55,9 +78,16 @@ export const config = {
 export type Config = typeof config;
 
 export function requireProcessorConfig() {
+  const programId = activeVaraAgentsProgramId(
+    required("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID"),
+  );
+
   return {
     ...config,
-    programId: required("VARA_AGENTS_PROGRAM_ID", "HACKATHON_PROGRAM_ID"),
+    programId,
+    v2CutoverReplayCursorBlock: shouldReplayV2Cutover(programId)
+      ? V2_CUTOVER_REPLAY_CURSOR_BLOCK
+      : null,
     idlPath: required("VARA_AGENTS_IDL_PATH", "HACKATHON_IDL_PATH"),
     varaRpcUrl: required("VARA_RPC_URL"),
   } as const;

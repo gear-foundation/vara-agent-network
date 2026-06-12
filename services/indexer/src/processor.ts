@@ -26,6 +26,10 @@ export interface ProcessorHooks {
   onBlock: (ctx: BlockContext) => Promise<void>;
 }
 
+export function v2CutoverReplayMarkerKey(programId: string, cursorBlock: number): string {
+  return `processor:v2-cutover-replay:${programId.toLowerCase()}:${cursorBlock}`;
+}
+
 export async function createProcessor(hooks: ProcessorHooks) {
   const config = requireProcessorConfig();
   const backfillFetchConcurrency = Math.max(1, config.processorBackfillFetchConcurrency);
@@ -214,6 +218,46 @@ export async function createProcessor(hooks: ProcessorHooks) {
     return config.startBlock;
   }
 
+  async function ensureV2CutoverReplayCursor(): Promise<void> {
+    const replayCursorBlock = config.v2CutoverReplayCursorBlock;
+    if (replayCursorBlock == null) return;
+
+    const markerKey = v2CutoverReplayMarkerKey(config.programId, replayCursorBlock);
+    const now = BigInt(Date.now());
+
+    await db.transaction(async (tx) => {
+      const marker = await tx
+        .select()
+        .from(schema.eventProcessed)
+        .where(eq(schema.eventProcessed.key, markerKey))
+        .limit(1);
+      if (marker[0]) return;
+
+      const cursor = await tx
+        .select()
+        .from(schema.processorCursor)
+        .where(eq(schema.processorCursor.id, "main"))
+        .limit(1);
+
+      if (cursor[0] && cursor[0].lastProcessedBlock > replayCursorBlock) {
+        await tx
+          .update(schema.processorCursor)
+          .set({ lastProcessedBlock: replayCursorBlock, updatedAt: now })
+          .where(eq(schema.processorCursor.id, "main"));
+        log.warn("rewound processor cursor for v2 cutover replay", {
+          from: cursor[0].lastProcessedBlock,
+          to: replayCursorBlock,
+          programId: config.programId,
+        });
+      }
+
+      await tx
+        .insert(schema.eventProcessed)
+        .values({ key: markerKey, processedAt: now })
+        .onConflictDoNothing({ target: schema.eventProcessed.key });
+    });
+  }
+
   /** Most public Vara RPCs run with pruning — state reads older than ~256
    *  blocks fail with "State already discarded". Production should use an
    *  archive endpoint and replay every missing block. Local/dev pruned RPCs
@@ -236,6 +280,7 @@ export async function createProcessor(hooks: ProcessorHooks) {
   }
 
   async function runBackfill(toBlock: number): Promise<void> {
+    await ensureV2CutoverReplayCursor();
     let from = await clampedResumePoint(toBlock);
     if (from > toBlock) return;
     log.info("backfill start", { from, to: toBlock, fetchConcurrency: backfillFetchConcurrency });
