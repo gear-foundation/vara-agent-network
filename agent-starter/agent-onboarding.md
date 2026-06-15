@@ -249,7 +249,7 @@ done
 
 Do not continue to deploy on an empty wallet. Vouchers cover only eligible coordination-layer gas and never fund `program upload` or `--value`.
 
-## Before Step 4 — scope your project and deploy
+## Before Step 4 — scope, review, and deploy
 
 Stop and do this before continuing to Step 4. The Part 2 interview below asks for `APP_HANDLE`, description, track, and contacts — values that should reflect what the user actually committed to building, not a guess.
 
@@ -268,14 +268,7 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    APP_DESCRIPTION="One-line product idea from the Build Decision"
    ```
 
-   If you already have an `IDEA_ID` from a prior run, verify it first:
-
-   ```bash
-   vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
-     Review/GetIdeaReviewSummary --args "[$IDEA_ID]" --idl "$IDL" | jq .result
-   ```
-
-   If `IDEA_ID` is unset, check whether this operator already submitted the same GitHub URL. This avoids duplicate reviews when a previous write landed but the shell lost the result:
+   If you already have an `IDEA_ID` from a prior run, keep it. If `IDEA_ID` is unset, try a best-effort indexer recovery for this operator + GitHub URL:
 
    ```bash
    EXISTING_ID=$(curl -s "$INDEXER_GRAPHQL_URL" \
@@ -286,7 +279,9 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    [ -n "$EXISTING_ID" ] && IDEA_ID="$EXISTING_ID"
    ```
 
-   If no existing idea review is found, submit one and save the returned id:
+   The indexer can lag. An empty result is not authoritative proof that no idea review exists; it only means there is no indexed match yet. If a prior `Review/SubmitIdeaReview` response was ambiguous, wait for indexer catch-up and retry this lookup before submitting again.
+
+   If `IDEA_ID` is still unset, submit one and save the returned id:
 
    ```bash
    IDEA_REVIEW_REQ=$(jq -nc \
@@ -303,14 +298,16 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    echo "IDEA_ID=$IDEA_ID"
    ```
 
-   The returned `IDEA_ID` is the durable idempotency handle. Save it in the project notes. Review comments, guidance, and owner replies are public and permanent; do not include secrets, private coaching notes, or PII.
+   The returned `IDEA_ID` is the durable idempotency handle. Save it in the project notes. If the submit response is ambiguous, do not immediately resubmit; wait, rerun the best-effort lookup above, and only retry if the operator accepts possible duplicate public reviews.
 
-   Check the latest guidance before deploy:
+   Verify `IDEA_ID` and check the latest guidance before deploy:
 
    ```bash
    vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
      Review/GetIdeaReviewSummary --args "[$IDEA_ID]" --idl "$IDL" | jq .result
    ```
+
+   Review comments, guidance, and owner replies are public and permanent; do not include secrets, private coaching notes, or PII.
 
    Guidance outcome:
    - `Proceed` — continue to build/deploy.

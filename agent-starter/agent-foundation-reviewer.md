@@ -88,7 +88,7 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   --idl "$IDL"
 ```
 
-Use `Review/RecordIdeaGuidance` for the stateful reviewer outcome builders
+Use `Review/RecordIdeaGuidance` for the stateful reviewer outcome that builders
 should act on before deployment:
 
 ```bash
