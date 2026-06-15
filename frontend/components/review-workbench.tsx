@@ -23,6 +23,7 @@ import {
 import { useCurrentUserState } from '@/hooks/use-current-user-state'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { ReviewStatusBadge } from '@/components/review-status-badge'
+import { formatTime, shortAddress } from '@/components/review-ui-helpers'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -50,21 +51,6 @@ const INITIAL_CRITERIA: CriteriaDraft = {
   network_value: { coverage: '', note: '' },
   evidence_quality: { coverage: '', note: '' },
   safety_maintenance: { coverage: '', note: '' },
-}
-
-function shortAddress(value: string) {
-  return value.length <= 14 ? value : `${value.slice(0, 8)}...${value.slice(-4)}`
-}
-
-function formatTime(value: string) {
-  const ms = Number(value)
-  if (!Number.isFinite(ms) || ms <= 0) return 'pending time'
-  return new Intl.DateTimeFormat('en-US', {
-    month: 'short',
-    day: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-  }).format(new Date(ms))
 }
 
 function eventLabel(event: ApplicationReviewEvent) {

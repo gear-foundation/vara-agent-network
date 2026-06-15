@@ -14,6 +14,7 @@ fresh `$IDL`, `allow_review=true` from `Admin/GetConfig`, and
 
 Foundation reviewers gate public listing. They can:
 
+- guide pre-deploy ideas before any application is registered
 - post public review comments on `Building` or `Submitted` applications
 - approve a submitted revision for listing as `Live`
 - request revision, returning a submitted application to `Building`
@@ -47,6 +48,40 @@ vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
 vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/RemoveReviewer --args "[\"$REVIEWER_HEX\"]" "${VAN_WRITE_GAS_ARGS[@]}" --idl "$IDL"
 ```
+
+## Pre-deploy idea queue
+
+Prefer the dashboard `/dashboard/idea-reviews`. For command line work, query the
+indexer-backed queue:
+
+```bash
+curl -s "$INDEXER_GRAPHQL_URL" \
+  -H 'content-type: application/json' \
+  --data '{"query":"query { allIdeaReviewSummaries(condition:{hidden:false,tombstoned:false}, orderBy:UPDATED_AT_DESC, first:50) { nodes { ideaId owner githubUrl idea status linkedProgramId commentCount latestGuidanceOutcome updatedAt } } }"}' \
+  | jq '.data.allIdeaReviewSummaries.nodes[]'
+```
+
+Reviewer comments and guidance are public and permanent. Do not include private
+coaching notes, secrets, or off-chain personal data.
+
+```bash
+IDEA_ID=1
+
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Review/PostIdeaReviewerComment \
+  --args "[$IDEA_ID,\"The idea is strongest if it names a real consuming app and a callable method.\"]" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
+  --idl "$IDL"
+
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Review/RecordIdeaGuidance \
+  --args "[$IDEA_ID,{\"Proceed\":null},\"Proceed if the builder proves demand with one integration partner.\"]" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
+  --idl "$IDL"
+```
+
+Self-review is forbidden for idea reviews too. If your reviewer account owns the
+idea, use a different reviewer.
 
 ## Queue triage
 

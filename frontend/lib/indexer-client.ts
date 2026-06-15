@@ -119,6 +119,55 @@ type ReviewDecisionRow = {
   tombstoned: boolean
 }
 
+type IdeaReviewSummaryRow = {
+  ideaId: string
+  owner: string
+  githubUrl: string
+  idea: string
+  status: string
+  linkedProgramId: string | null
+  commentCount: number
+  latestGuidanceOutcome: string | null
+  latestGuidance: string | null
+  latestReviewer: string | null
+  seasonId: number
+  createdAt: string
+  updatedAt: string
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type IdeaReviewCommentRow = {
+  eventId: string
+  ideaId: string
+  author: string
+  authorRole: string
+  body: string
+  ts: string
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type IdeaReviewGuidanceRow = {
+  eventId: string
+  ideaId: string
+  reviewer: string
+  outcome: string
+  body: string
+  ts: string
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type IdeaReviewLinkRow = {
+  eventId: string
+  ideaId: string
+  owner: string
+  programId: string
+  linkedAt: string
+  seasonId: number
+}
+
 type HandleClaimRow = {
   handle: string
   ownerKind: 'Participant' | 'Application' | string
@@ -359,6 +408,52 @@ export type ApplicationReviewDetail = {
   currentProgramId: string
 }
 
+export type IdeaReviewSummary = {
+  ideaId: string
+  owner: string
+  githubUrl: string
+  idea: string
+  status: string
+  linkedProgramId: string | null
+  commentCount: number
+  latestGuidanceOutcome: string | null
+  latestGuidance: string | null
+  latestReviewer: string | null
+  seasonId: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type IdeaReviewEvent =
+  | {
+      id: string
+      kind: 'comment'
+      author: string
+      authorRole: string
+      body: string
+      at: string
+    }
+  | {
+      id: string
+      kind: 'guidance'
+      author: string
+      outcome: string
+      body: string
+      at: string
+    }
+  | {
+      id: string
+      kind: 'link'
+      author: string
+      programId: string
+      at: string
+    }
+
+export type IdeaReviewDetail = {
+  summary: IdeaReviewSummary | null
+  events: IdeaReviewEvent[]
+}
+
 export type MentionTarget = {
   handle: string
   ownerKind: string
@@ -404,6 +499,84 @@ const REVIEW_SUMMARY_FIELDS = `
         tombstoned
         seasonId
         updatedAt
+`
+
+const IDEA_REVIEW_SUMMARY_FIELDS = `
+        ideaId
+        owner
+        githubUrl
+        idea
+        status
+        linkedProgramId
+        commentCount
+        latestGuidanceOutcome
+        latestGuidance
+        latestReviewer
+        seasonId
+        createdAt
+        updatedAt
+        hidden
+        tombstoned
+`
+
+const IDEA_REVIEW_QUEUE_QUERY = `
+  query IdeaReviewQueue($first: Int!, $offset: Int!) {
+    ideaReviewSummaries: allIdeaReviewSummaries(
+      first: $first
+      offset: $offset
+      orderBy: UPDATED_AT_DESC
+      condition: { hidden: false, tombstoned: false }
+    ) {
+      totalCount
+      nodes {
+${IDEA_REVIEW_SUMMARY_FIELDS}
+      }
+    }
+  }
+`
+
+const IDEA_REVIEW_DETAIL_QUERY = `
+  query IdeaReviewDetail($ideaId: String!) {
+    ideaReviewSummaries: allIdeaReviewSummaries(first: 1, condition: { ideaId: $ideaId, hidden: false, tombstoned: false }) {
+      nodes {
+${IDEA_REVIEW_SUMMARY_FIELDS}
+      }
+    }
+    ideaReviewComments: allIdeaReviewComments(first: 250, orderBy: TS_ASC, condition: { ideaId: $ideaId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        ideaId
+        author
+        authorRole
+        body
+        ts
+        hidden
+        tombstoned
+      }
+    }
+    ideaReviewGuidance: allIdeaReviewGuidances(first: 100, orderBy: TS_ASC, condition: { ideaId: $ideaId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        ideaId
+        reviewer
+        outcome
+        body
+        ts
+        hidden
+        tombstoned
+      }
+    }
+    ideaReviewLinks: allIdeaReviewLinks(first: 20, orderBy: LINKED_AT_ASC, condition: { ideaId: $ideaId }) {
+      nodes {
+        eventId
+        ideaId
+        owner
+        programId
+        linkedAt
+        seasonId
+      }
+    }
+  }
 `
 
 const DASHBOARD_QUERY = `
@@ -1011,6 +1184,17 @@ type ApplicationReviewHistoryQueryResult = Pick<
   'reviewRequests' | 'reviewComments' | 'reviewDecisions'
 >
 
+type IdeaReviewQueueQueryResult = {
+  ideaReviewSummaries: Connection<IdeaReviewSummaryRow>
+}
+
+type IdeaReviewDetailQueryResult = {
+  ideaReviewSummaries: Connection<IdeaReviewSummaryRow>
+  ideaReviewComments: Connection<IdeaReviewCommentRow>
+  ideaReviewGuidance: Connection<IdeaReviewGuidanceRow>
+  ideaReviewLinks: Connection<IdeaReviewLinkRow>
+}
+
 const MAX_APPLICATION_REPLACEMENT_DEPTH = 8
 
 function titleizeHandle(handle: string) {
@@ -1083,6 +1267,57 @@ function toReviewSummary(row: ReviewSummaryRow | null | undefined): ReviewSummar
 
 function reviewSummaryMap(rows: ReviewSummaryRow[] | undefined) {
   return new Map((rows ?? []).map((row) => [row.programId.toLowerCase(), toReviewSummary(row)]))
+}
+
+function toIdeaReviewSummary(row: IdeaReviewSummaryRow | null | undefined): IdeaReviewSummary | null {
+  if (!row || row.hidden || row.tombstoned) return null
+  return {
+    ideaId: row.ideaId,
+    owner: row.owner,
+    githubUrl: row.githubUrl,
+    idea: row.idea,
+    status: row.status,
+    linkedProgramId: row.linkedProgramId,
+    commentCount: row.commentCount,
+    latestGuidanceOutcome: row.latestGuidanceOutcome,
+    latestGuidance: row.latestGuidance,
+    latestReviewer: row.latestReviewer,
+    seasonId: row.seasonId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function ideaReviewEventsFromData(data: IdeaReviewDetailQueryResult): IdeaReviewEvent[] {
+  return [
+    ...data.ideaReviewComments.nodes
+      .filter((item) => !item.hidden && !item.tombstoned)
+      .map((item) => ({
+        id: item.eventId,
+        kind: 'comment' as const,
+        author: item.author,
+        authorRole: item.authorRole,
+        body: item.body,
+        at: item.ts,
+      })),
+    ...data.ideaReviewGuidance.nodes
+      .filter((item) => !item.hidden && !item.tombstoned)
+      .map((item) => ({
+        id: item.eventId,
+        kind: 'guidance' as const,
+        author: item.reviewer,
+        outcome: item.outcome,
+        body: item.body,
+        at: item.ts,
+      })),
+    ...data.ideaReviewLinks.nodes.map((item) => ({
+      id: item.eventId,
+      kind: 'link' as const,
+      author: item.owner,
+      programId: item.programId,
+      at: item.linkedAt,
+    })),
+  ].sort((a, b) => Number(a.at) - Number(b.at))
 }
 
 function utcDateKey(ms: number) {
@@ -1810,4 +2045,27 @@ export async function getReviewQueue(): Promise<RegistryAgent[]> {
       return status !== 'Legacy' && !agent.reviewSummary?.tombstoned
     })
     .sort((a, b) => Number(b.reviewSummary?.updatedAt ?? 0) - Number(a.reviewSummary?.updatedAt ?? 0))
+}
+
+export async function getIdeaReviewQueue(first = 100, offset = 0): Promise<IdeaReviewSummary[]> {
+  const data = await fetchIndexerGraphql<IdeaReviewQueueQueryResult>(
+    IDEA_REVIEW_QUEUE_QUERY,
+    { first, offset },
+  )
+  if (!data) return []
+  return data.ideaReviewSummaries.nodes
+    .map(toIdeaReviewSummary)
+    .filter((item): item is IdeaReviewSummary => Boolean(item))
+}
+
+export async function getIdeaReviewDetail(ideaId: string): Promise<IdeaReviewDetail> {
+  const data = await fetchIndexerGraphql<IdeaReviewDetailQueryResult>(
+    IDEA_REVIEW_DETAIL_QUERY,
+    { ideaId },
+  )
+  if (!data) return { summary: null, events: [] }
+  return {
+    summary: toIdeaReviewSummary(data.ideaReviewSummaries.nodes[0]),
+    events: ideaReviewEventsFromData(data),
+  }
 }

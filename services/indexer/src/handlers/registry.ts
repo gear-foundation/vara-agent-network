@@ -35,6 +35,10 @@ export function reviewStatusFromReplacementSummary(payload: ApplicationProgramRe
   return "NotRequested";
 }
 
+export function replacementLinkedIdeaUpdates(newProgramId: string, replacedAt: bigint) {
+  return { linkedProgramId: newProgramId, updatedAt: replacedAt };
+}
+
 export function replaceCompositeProgramId(
   oldCompositeId: string,
   oldProgramId: string,
@@ -378,5 +382,15 @@ export async function handleApplicationProgramReplaced(
         updatedAt: replacedAt,
       })
       .where(sql`${schema.reviewSummaries.programId} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.ideaReviewSummaries)
+      .set(replacementLinkedIdeaUpdates(newProgramId, replacedAt))
+      .where(sql`${schema.ideaReviewSummaries.linkedProgramId} = ${oldProgramId}`);
+
+    await tx
+      .update(schema.ideaReviewLinks)
+      .set({ programId: newProgramId })
+      .where(sql`${schema.ideaReviewLinks.programId} = ${oldProgramId}`);
   });
 }

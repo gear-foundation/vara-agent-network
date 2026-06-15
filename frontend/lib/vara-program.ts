@@ -29,6 +29,7 @@ export type PostChatParams = {
 }
 
 export type ReviewCoverage = 'Missing' | 'Partial' | 'Met' | 'NotApplicable'
+export type IdeaGuidanceOutcome = 'Proceed' | 'Refine' | 'NeedsEvidence' | 'NotRecommended'
 
 export type ReviewCriteriaInput = {
   technical_readiness: { coverage: ReviewCoverage; note?: string | null }
@@ -396,4 +397,62 @@ export async function decideReview(
     : sails.services.Review.functions.RequestRevision
   const tx = fn(programId, revision, reason, criteria)
   return sendTx(account, `review.tx.${verdict}`, tx)
+}
+
+export async function submitIdeaReview(
+  account: WalletAccount,
+  githubUrl: string,
+  idea: string,
+) {
+  const normalizedGithub = githubUrl.trim()
+  if (!isGithubUrl(normalizedGithub)) {
+    throw new Error(`GitHub URL must start with ${GITHUB_URL_PREFIX}`)
+  }
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.SubmitIdeaReview({
+    github_url: normalizedGithub,
+    idea: idea.trim(),
+  })
+  return sendTx(account, 'review.tx.SubmitIdeaReview', tx)
+}
+
+export async function postIdeaReviewerComment(
+  account: WalletAccount,
+  ideaId: string | number,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.PostIdeaReviewerComment(BigInt(ideaId), body)
+  return sendTx(account, 'review.tx.PostIdeaReviewerComment', tx)
+}
+
+export async function ownerIdeaReply(
+  account: WalletAccount,
+  ideaId: string | number,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.OwnerIdeaReply(BigInt(ideaId), body)
+  return sendTx(account, 'review.tx.OwnerIdeaReply', tx)
+}
+
+export async function recordIdeaGuidance(
+  account: WalletAccount,
+  ideaId: string | number,
+  outcome: IdeaGuidanceOutcome,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.RecordIdeaGuidance(BigInt(ideaId), outcome, body)
+  return sendTx(account, 'review.tx.RecordIdeaGuidance', tx)
+}
+
+export async function linkIdeaReviewToApplication(
+  account: WalletAccount,
+  ideaId: string | number,
+  programId: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.LinkIdeaReviewToApplication(BigInt(ideaId), programId.trim())
+  return sendTx(account, 'review.tx.LinkIdeaReviewToApplication', tx)
 }

@@ -833,18 +833,39 @@ pub mod review {
             reason: String,
             criteria: ReviewCriteria,
         ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env>;
+        fn link_idea_review_to_application(
+            &mut self,
+            idea_id: u64,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::LinkIdeaReviewToApplication, Self::Env>;
+        fn owner_idea_reply(
+            &mut self,
+            idea_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::OwnerIdeaReply, Self::Env>;
         fn owner_reply(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             body: String,
         ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env>;
+        fn post_idea_reviewer_comment(
+            &mut self,
+            idea_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::PostIdeaReviewerComment, Self::Env>;
         fn post_reviewer_comment(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             body: String,
         ) -> sails_rs::client::PendingCall<io::PostReviewerComment, Self::Env>;
+        fn record_idea_guidance(
+            &mut self,
+            idea_id: u64,
+            outcome: IdeaGuidanceOutcome,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::RecordIdeaGuidance, Self::Env>;
         fn remove_reviewer(
             &mut self,
             reviewer: ActorId,
@@ -861,6 +882,14 @@ pub mod review {
             reason: String,
             criteria: ReviewCriteria,
         ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env>;
+        fn submit_idea_review(
+            &mut self,
+            req: SubmitIdeaReviewReq,
+        ) -> sails_rs::client::PendingCall<io::SubmitIdeaReview, Self::Env>;
+        fn get_idea_review_summary(
+            &self,
+            idea_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetIdeaReviewSummary, Self::Env>;
         fn get_review_summary(
             &self,
             program_id: ActorId,
@@ -869,6 +898,11 @@ pub mod review {
             &self,
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env>;
+        fn list_idea_review_summaries(
+            &self,
+            cursor: Option<u64>,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::ListIdeaReviewSummaries, Self::Env>;
         fn list_reviewers(&self) -> sails_rs::client::PendingCall<io::ListReviewers, Self::Env>;
     }
     pub struct ReviewImpl;
@@ -889,6 +923,20 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env> {
             self.pending_call((program_id, expected_revision, reason, criteria))
         }
+        fn link_idea_review_to_application(
+            &mut self,
+            idea_id: u64,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::LinkIdeaReviewToApplication, Self::Env> {
+            self.pending_call((idea_id, program_id))
+        }
+        fn owner_idea_reply(
+            &mut self,
+            idea_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::OwnerIdeaReply, Self::Env> {
+            self.pending_call((idea_id, body))
+        }
         fn owner_reply(
             &mut self,
             program_id: ActorId,
@@ -897,6 +945,13 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env> {
             self.pending_call((program_id, expected_revision, body))
         }
+        fn post_idea_reviewer_comment(
+            &mut self,
+            idea_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::PostIdeaReviewerComment, Self::Env> {
+            self.pending_call((idea_id, body))
+        }
         fn post_reviewer_comment(
             &mut self,
             program_id: ActorId,
@@ -904,6 +959,14 @@ pub mod review {
             body: String,
         ) -> sails_rs::client::PendingCall<io::PostReviewerComment, Self::Env> {
             self.pending_call((program_id, expected_revision, body))
+        }
+        fn record_idea_guidance(
+            &mut self,
+            idea_id: u64,
+            outcome: IdeaGuidanceOutcome,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::RecordIdeaGuidance, Self::Env> {
+            self.pending_call((idea_id, outcome, body))
         }
         fn remove_reviewer(
             &mut self,
@@ -927,6 +990,18 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env> {
             self.pending_call((program_id, expected_revision, reason, criteria))
         }
+        fn submit_idea_review(
+            &mut self,
+            req: SubmitIdeaReviewReq,
+        ) -> sails_rs::client::PendingCall<io::SubmitIdeaReview, Self::Env> {
+            self.pending_call((req,))
+        }
+        fn get_idea_review_summary(
+            &self,
+            idea_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetIdeaReviewSummary, Self::Env> {
+            self.pending_call((idea_id,))
+        }
         fn get_review_summary(
             &self,
             program_id: ActorId,
@@ -939,6 +1014,13 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env> {
             self.pending_call((reviewer,))
         }
+        fn list_idea_review_summaries(
+            &self,
+            cursor: Option<u64>,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::ListIdeaReviewSummaries, Self::Env> {
+            self.pending_call((cursor, limit))
+        }
         fn list_reviewers(&self) -> sails_rs::client::PendingCall<io::ListReviewers, Self::Env> {
             self.pending_call(())
         }
@@ -948,13 +1030,20 @@ pub mod review {
         use super::*;
         sails_rs::io_struct_impl!(AddReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(ApproveForListing (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(LinkIdeaReviewToApplication (idea_id: u64, program_id: ActorId) -> ());
+        sails_rs::io_struct_impl!(OwnerIdeaReply (idea_id: u64, body: String) -> ());
         sails_rs::io_struct_impl!(OwnerReply (program_id: ActorId, expected_revision: u32, body: String) -> ());
+        sails_rs::io_struct_impl!(PostIdeaReviewerComment (idea_id: u64, body: String) -> ());
         sails_rs::io_struct_impl!(PostReviewerComment (program_id: ActorId, expected_revision: u32, body: String) -> ());
+        sails_rs::io_struct_impl!(RecordIdeaGuidance (idea_id: u64, outcome: super::IdeaGuidanceOutcome, body: String) -> ());
         sails_rs::io_struct_impl!(RemoveReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(RequestReview (program_id: ActorId, reason: String) -> ());
         sails_rs::io_struct_impl!(RequestRevision (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(SubmitIdeaReview (req: super::SubmitIdeaReviewReq) -> u64);
+        sails_rs::io_struct_impl!(GetIdeaReviewSummary (idea_id: u64) -> Option<super::IdeaReviewSummary>);
         sails_rs::io_struct_impl!(GetReviewSummary (program_id: ActorId) -> Option<super::ReviewSummary>);
         sails_rs::io_struct_impl!(IsReviewer (reviewer: ActorId) -> bool);
+        sails_rs::io_struct_impl!(ListIdeaReviewSummaries (cursor: Option<u64>, limit: u32) -> super::IdeaReviewPage);
         sails_rs::io_struct_impl!(ListReviewers () -> Vec<ActorId>);
     }
 
@@ -1005,6 +1094,37 @@ pub mod review {
                 decided_at: u64,
                 season_id: u32,
             },
+            IdeaReviewSubmitted {
+                idea_id: u64,
+                owner: ActorId,
+                github_url: String,
+                idea: String,
+                submitted_at: u64,
+                season_id: u32,
+            },
+            IdeaReviewCommentPosted {
+                idea_id: u64,
+                author: ActorId,
+                author_role: ReviewAuthorRole,
+                body: String,
+                ts: u64,
+                season_id: u32,
+            },
+            IdeaReviewGuidanceRecorded {
+                idea_id: u64,
+                reviewer: ActorId,
+                outcome: IdeaGuidanceOutcome,
+                body: String,
+                ts: u64,
+                season_id: u32,
+            },
+            IdeaReviewLinked {
+                idea_id: u64,
+                owner: ActorId,
+                program_id: ActorId,
+                linked_at: u64,
+                season_id: u32,
+            },
         }
         impl sails_rs::client::Event for ReviewEvents {
             const EVENT_NAMES: &'static [Route] = &[
@@ -1013,6 +1133,10 @@ pub mod review {
                 "ReviewRequested",
                 "ReviewCommentPosted",
                 "ReviewDecisionRecorded",
+                "IdeaReviewSubmitted",
+                "IdeaReviewCommentPosted",
+                "IdeaReviewGuidanceRecorded",
+                "IdeaReviewLinked",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for ReviewImpl {
@@ -1409,6 +1533,57 @@ pub enum CriterionCoverage {
     Partial,
     Met,
     NotApplicable,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum IdeaGuidanceOutcome {
+    Proceed,
+    Refine,
+    NeedsEvidence,
+    NotRecommended,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct SubmitIdeaReviewReq {
+    pub github_url: String,
+    pub idea: String,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct IdeaReviewSummary {
+    pub idea_id: u64,
+    pub owner: ActorId,
+    pub github_url: String,
+    pub idea: String,
+    pub status: IdeaReviewStatus,
+    pub linked_program_id: Option<ActorId>,
+    pub comment_count: u32,
+    pub latest_guidance_outcome: Option<IdeaGuidanceOutcome>,
+    pub latest_guidance: Option<String>,
+    pub latest_reviewer: Option<ActorId>,
+    pub season_id: u32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum IdeaReviewStatus {
+    Submitted,
+    Commented,
+    GuidanceRecorded,
+    Linked,
+    Closed,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct IdeaReviewPage {
+    pub items: Vec<IdeaReviewSummary>,
+    pub next_cursor: Option<u64>,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]

@@ -3,7 +3,8 @@
 mod common;
 
 use agents_network_client::{
-    AgentsNetworkClient, AppStatus, ReviewVerdict, admin::Admin, registry::Registry, review::Review,
+    AgentsNetworkClient, AppStatus, IdeaGuidanceOutcome, IdeaReviewStatus, ReviewVerdict,
+    SubmitIdeaReviewReq, admin::Admin, registry::Registry, review::Review,
 };
 use common::*;
 use sails_rs::client::*;
@@ -443,4 +444,191 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
         Some(ReviewVerdict::RevisionRequested)
     );
     assert_eq!(summary.pending_submission_revision, Some(2));
+}
+
+#[tokio::test]
+async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_thread() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    disable_review_rate_limit(&program).await;
+
+    program
+        .review()
+        .add_reviewer(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .add_reviewer(ALICE.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    let idea_id = program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/idea-agent".to_string(),
+            idea: "agent that helps builders find valuable integrations".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .post_idea_reviewer_comment(idea_id, "focus on integration demand".to_string())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    program
+        .review()
+        .post_idea_reviewer_comment(idea_id, "focus on integration demand".to_string())
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .owner_idea_reply(idea_id, "will target app-to-app matching".to_string())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .record_idea_guidance(
+            idea_id,
+            IdeaGuidanceOutcome::Proceed,
+            "valuable if it proves demand with one consuming app".to_string(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+
+    let idea = program
+        .review()
+        .get_idea_review_summary(idea_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(idea.status, IdeaReviewStatus::GuidanceRecorded);
+    assert_eq!(idea.comment_count, 2);
+    assert_eq!(
+        idea.latest_guidance_outcome,
+        Some(IdeaGuidanceOutcome::Proceed)
+    );
+
+    program
+        .registry()
+        .register_application(mk_register_req("idea-agent", BOB, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .link_idea_review_to_application(idea_id, STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    program
+        .registry()
+        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(BOB.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .register_application(mk_register_req("idea-agent", ALICE, STUB_PROGRAM_BETA))
+        .with_actor_id(STUB_PROGRAM_BETA.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .link_idea_review_to_application(idea_id, STUB_PROGRAM_BETA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let linked = program
+        .review()
+        .get_idea_review_summary(idea_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(linked.status, IdeaReviewStatus::Linked);
+    assert_eq!(linked.linked_program_id, Some(STUB_PROGRAM_BETA.into()));
+
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_BETA.into(),
+            STUB_PROGRAM_GAMMA.into(),
+            "new deployment after review guidance".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    let replaced = program
+        .review()
+        .get_idea_review_summary(idea_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(replaced.linked_program_id, Some(STUB_PROGRAM_GAMMA.into()));
+}
+
+#[tokio::test]
+async fn idea_review_pagination_cursor_resumes_after_last_returned_idea() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    disable_review_rate_limit(&program).await;
+
+    for idx in 1..=3 {
+        program
+            .review()
+            .submit_idea_review(SubmitIdeaReviewReq {
+                github_url: format!("https://github.com/alice/idea-agent-{idx}"),
+                idea: format!("valuable integration idea {idx}"),
+            })
+            .with_actor_id(ALICE.into())
+            .await
+            .unwrap();
+    }
+
+    let first_page = program
+        .review()
+        .list_idea_review_summaries(None, 2)
+        .await
+        .unwrap();
+    assert_eq!(
+        first_page
+            .items
+            .iter()
+            .map(|idea| idea.idea_id)
+            .collect::<Vec<_>>(),
+        vec![1, 2]
+    );
+    assert_eq!(first_page.next_cursor, Some(2));
+
+    let second_page = program
+        .review()
+        .list_idea_review_summaries(first_page.next_cursor, 2)
+        .await
+        .unwrap();
+    assert_eq!(
+        second_page
+            .items
+            .iter()
+            .map(|idea| idea.idea_id)
+            .collect::<Vec<_>>(),
+        vec![3]
+    );
+    assert_eq!(second_page.next_cursor, None);
 }

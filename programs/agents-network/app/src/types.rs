@@ -152,6 +152,8 @@ pub enum ContractError {
     DecisionAlreadyRecorded,
     ReviewNotAllowedForStatus,
     ReviewRevisionMismatch,
+    UnknownIdeaReview,
+    IdeaAlreadyLinked,
     StaleProgramId,
     ProgramIdUnchanged,
     ProgramIdAlreadyRegistered,
@@ -177,6 +179,7 @@ pub enum ContractError {
 pub type ChatMsgId = u64;
 pub type PostId = u64;
 pub type Hash32 = [u8; 32];
+pub type IdeaReviewId = u64;
 
 // ---------------------------------------------------------------------------
 // Migration DTOs
@@ -440,6 +443,27 @@ pub enum ReviewVerdict {
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub enum IdeaReviewStatus {
+    Submitted,
+    Commented,
+    GuidanceRecorded,
+    Linked,
+    Closed,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum IdeaGuidanceOutcome {
+    Proceed,
+    Refine,
+    NeedsEvidence,
+    NotRecommended,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub enum CriterionCoverage {
     Missing,
     Partial,
@@ -482,6 +506,41 @@ pub struct ReviewSummary {
     pub total_comment_count: u32,
     pub manual_override: bool,
     pub deleted: bool,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct SubmitIdeaReviewReq {
+    pub github_url: String,
+    pub idea: String,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct IdeaReviewSummary {
+    pub idea_id: IdeaReviewId,
+    pub owner: ActorId,
+    pub github_url: String,
+    pub idea: String,
+    pub status: IdeaReviewStatus,
+    pub linked_program_id: Option<ActorId>,
+    pub comment_count: u32,
+    pub latest_guidance_outcome: Option<IdeaGuidanceOutcome>,
+    pub latest_guidance: Option<String>,
+    pub latest_reviewer: Option<ActorId>,
+    pub season_id: u32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct IdeaReviewPage {
+    pub items: Vec<IdeaReviewSummary>,
+    pub next_cursor: Option<IdeaReviewId>,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]

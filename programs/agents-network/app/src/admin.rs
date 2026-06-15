@@ -165,7 +165,6 @@ impl<'a> AdminService<'a> {
             .map(|manifest| manifest.source_program_id)
             .ok_or(ContractError::MigrationNotStarted)
     }
-
 }
 
 #[sails_rs::service(events = AdminEvent)]
@@ -401,7 +400,12 @@ impl<'a> AdminService<'a> {
         {
             let mut registry = self.registry.borrow_mut();
             let mut review = self.review.borrow_mut();
-            registry::import_applications(&mut registry, &mut review, self.current_season, &entries)?;
+            registry::import_applications(
+                &mut registry,
+                &mut review,
+                self.current_season,
+                &entries,
+            )?;
         }
         self.record_and_emit_batch(
             MigrationDomain::Applications,

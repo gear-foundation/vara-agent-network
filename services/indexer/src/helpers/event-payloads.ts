@@ -18,6 +18,8 @@ export type ArchiveReason = "AutoPrune" | "Manual";
 export type ReviewAuthorRole = "Reviewer" | "Owner";
 export type ReviewVerdict = "ApprovedForListing" | "RevisionRequested";
 export type CriterionCoverage = "Missing" | "Partial" | "Met" | "NotApplicable";
+export type IdeaReviewStatus = "Submitted" | "Commented" | "GuidanceRecorded" | "Linked" | "Closed";
+export type IdeaGuidanceOutcome = "Proceed" | "Refine" | "NeedsEvidence" | "NotRecommended";
 
 export interface ContactLinks {
   discord?: string | null;
@@ -247,6 +249,41 @@ export interface ReviewDecisionRecorded {
   old_status: AppStatus;
   new_status: AppStatus;
   decided_at: bigint | number;
+  season_id: number;
+}
+
+export interface IdeaReviewSubmitted {
+  idea_id: bigint | number;
+  owner: Hex;
+  github_url: string;
+  idea: string;
+  submitted_at: bigint | number;
+  season_id: number;
+}
+
+export interface IdeaReviewCommentPosted {
+  idea_id: bigint | number;
+  author: Hex;
+  author_role: ReviewAuthorRole;
+  body: string;
+  ts: bigint | number;
+  season_id: number;
+}
+
+export interface IdeaReviewGuidanceRecorded {
+  idea_id: bigint | number;
+  reviewer: Hex;
+  outcome: IdeaGuidanceOutcome;
+  body: string;
+  ts: bigint | number;
+  season_id: number;
+}
+
+export interface IdeaReviewLinked {
+  idea_id: bigint | number;
+  owner: Hex;
+  program_id: Hex;
+  linked_at: bigint | number;
   season_id: number;
 }
 

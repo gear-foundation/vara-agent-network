@@ -19,6 +19,8 @@ pub struct ReviewState {
     pub summaries: BTreeMap<ActorId, ReviewSummary>,
     pub decisions: BTreeMap<(ActorId, u32), bool>,
     pub last_review_at: BTreeMap<ActorId, u64>,
+    pub next_idea_id: IdeaReviewId,
+    pub idea_summaries: BTreeMap<IdeaReviewId, IdeaReviewSummary>,
 }
 
 #[sails_rs::event]
@@ -65,6 +67,37 @@ pub enum ReviewEvent {
         old_status: AppStatus,
         new_status: AppStatus,
         decided_at: u64,
+        season_id: u32,
+    },
+    IdeaReviewSubmitted {
+        idea_id: IdeaReviewId,
+        owner: ActorId,
+        github_url: String,
+        idea: String,
+        submitted_at: u64,
+        season_id: u32,
+    },
+    IdeaReviewCommentPosted {
+        idea_id: IdeaReviewId,
+        author: ActorId,
+        author_role: ReviewAuthorRole,
+        body: String,
+        ts: u64,
+        season_id: u32,
+    },
+    IdeaReviewGuidanceRecorded {
+        idea_id: IdeaReviewId,
+        reviewer: ActorId,
+        outcome: IdeaGuidanceOutcome,
+        body: String,
+        ts: u64,
+        season_id: u32,
+    },
+    IdeaReviewLinked {
+        idea_id: IdeaReviewId,
+        owner: ActorId,
+        program_id: ActorId,
+        linked_at: u64,
         season_id: u32,
     },
 }
@@ -342,9 +375,199 @@ impl<'a> ReviewService<'a> {
         Ok(())
     }
 
+    #[export(unwrap_result)]
+    pub fn submit_idea_review(
+        &mut self,
+        req: SubmitIdeaReviewReq,
+    ) -> Result<IdeaReviewId, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_idea_review_req(&req, &config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let idea_id = {
+            let mut review = self.review.borrow_mut();
+            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+            review.next_idea_id = review.next_idea_id.saturating_add(1);
+            let idea_id = review.next_idea_id;
+            review.idea_summaries.insert(
+                idea_id,
+                IdeaReviewSummary {
+                    idea_id,
+                    owner: caller,
+                    github_url: req.github_url.clone(),
+                    idea: req.idea.clone(),
+                    status: IdeaReviewStatus::Submitted,
+                    linked_program_id: None,
+                    comment_count: 0,
+                    latest_guidance_outcome: None,
+                    latest_guidance: None,
+                    latest_reviewer: None,
+                    season_id,
+                    created_at: now,
+                    updated_at: now,
+                },
+            );
+            idea_id
+        };
+
+        self.emit_event(ReviewEvent::IdeaReviewSubmitted {
+            idea_id,
+            owner: caller,
+            github_url: req.github_url,
+            idea: req.idea,
+            submitted_at: now,
+            season_id,
+        })
+        .expect("emit IdeaReviewSubmitted failed");
+
+        Ok(idea_id)
+    }
+
+    #[export(unwrap_result)]
+    pub fn post_idea_reviewer_comment(
+        &mut self,
+        idea_id: IdeaReviewId,
+        body: String,
+    ) -> Result<(), ContractError> {
+        self.post_idea_comment_with_event(idea_id, body, ReviewAuthorRole::Reviewer)
+    }
+
+    #[export(unwrap_result)]
+    pub fn owner_idea_reply(
+        &mut self,
+        idea_id: IdeaReviewId,
+        body: String,
+    ) -> Result<(), ContractError> {
+        self.post_idea_comment_with_event(idea_id, body, ReviewAuthorRole::Owner)
+    }
+
+    #[export(unwrap_result)]
+    pub fn record_idea_guidance(
+        &mut self,
+        idea_id: IdeaReviewId,
+        outcome: IdeaGuidanceOutcome,
+        body: String,
+    ) -> Result<(), ContractError> {
+        let result = self.record_idea_guidance_state(idea_id, outcome, &body)?;
+        self.emit_event(ReviewEvent::IdeaReviewGuidanceRecorded {
+            idea_id,
+            reviewer: result.author,
+            outcome,
+            body,
+            ts: result.ts,
+            season_id: result.season_id,
+        })
+        .expect("emit IdeaReviewGuidanceRecorded failed");
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn link_idea_review_to_application(
+        &mut self,
+        idea_id: IdeaReviewId,
+        program_id: ActorId,
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        {
+            let reg = self.registry.borrow();
+            registry::ensure_current_program_id(&reg, program_id)?;
+            let app = reg
+                .applications
+                .get(&program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            if caller != app.owner {
+                return Err(ContractError::NotOwner);
+            }
+        }
+        {
+            let mut review = self.review.borrow_mut();
+            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+            let summary = review
+                .idea_summaries
+                .get_mut(&idea_id)
+                .ok_or(ContractError::UnknownIdeaReview)?;
+            if summary.owner != caller {
+                return Err(ContractError::NotOwner);
+            }
+            if summary.linked_program_id.is_some() {
+                return Err(ContractError::IdeaAlreadyLinked);
+            }
+            summary.linked_program_id = Some(program_id);
+            summary.status = IdeaReviewStatus::Linked;
+            summary.updated_at = now;
+        }
+
+        self.emit_event(ReviewEvent::IdeaReviewLinked {
+            idea_id,
+            owner: caller,
+            program_id,
+            linked_at: now,
+            season_id,
+        })
+        .expect("emit IdeaReviewLinked failed");
+        Ok(())
+    }
+
     #[export]
     pub fn get_review_summary(&self, program_id: ActorId) -> Option<ReviewSummary> {
         self.review.borrow().summaries.get(&program_id).cloned()
+    }
+
+    #[export]
+    pub fn get_idea_review_summary(&self, idea_id: IdeaReviewId) -> Option<IdeaReviewSummary> {
+        self.review.borrow().idea_summaries.get(&idea_id).cloned()
+    }
+
+    #[export]
+    pub fn list_idea_review_summaries(
+        &self,
+        cursor: Option<IdeaReviewId>,
+        limit: u32,
+    ) -> IdeaReviewPage {
+        let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST) as usize;
+        let start_after = cursor.unwrap_or(0);
+        let mut items = Vec::new();
+        let mut next_cursor = None;
+        for (idea_id, summary) in self.review.borrow().idea_summaries.iter() {
+            if *idea_id <= start_after {
+                continue;
+            }
+            items.push(summary.clone());
+            if items.len() == limit {
+                next_cursor = Some(*idea_id);
+                break;
+            }
+        }
+        IdeaReviewPage { items, next_cursor }
+    }
+
+    fn post_idea_comment_with_event(
+        &mut self,
+        idea_id: IdeaReviewId,
+        body: String,
+        role: ReviewAuthorRole,
+    ) -> Result<(), ContractError> {
+        let result = self.post_idea_comment(idea_id, &body, role)?;
+        self.emit_event(ReviewEvent::IdeaReviewCommentPosted {
+            idea_id,
+            author: result.author,
+            author_role: role,
+            body,
+            ts: result.ts,
+            season_id: result.season_id,
+        })
+        .expect("emit IdeaReviewCommentPosted failed");
+        Ok(())
     }
 }
 
@@ -473,6 +696,97 @@ impl<'a> ReviewService<'a> {
             season_id,
         })
     }
+
+    fn post_idea_comment(
+        &mut self,
+        idea_id: IdeaReviewId,
+        body: &str,
+        role: ReviewAuthorRole,
+    ) -> Result<CommentOutcome, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_review_body(body, &config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let mut review = self.review.borrow_mut();
+        ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+        match role {
+            ReviewAuthorRole::Reviewer => {
+                if !is_active_reviewer(&review, season_id, caller) {
+                    return Err(ContractError::NotReviewer);
+                }
+                ensure_not_idea_self_review(&review, idea_id, caller)?;
+            }
+            ReviewAuthorRole::Owner => {
+                let summary = review
+                    .idea_summaries
+                    .get(&idea_id)
+                    .ok_or(ContractError::UnknownIdeaReview)?;
+                if summary.owner != caller {
+                    return Err(ContractError::NotOwner);
+                }
+            }
+        }
+
+        let summary = review
+            .idea_summaries
+            .get_mut(&idea_id)
+            .ok_or(ContractError::UnknownIdeaReview)?;
+        summary.comment_count = summary.comment_count.saturating_add(1);
+        if summary.status == IdeaReviewStatus::Submitted {
+            summary.status = IdeaReviewStatus::Commented;
+        }
+        summary.updated_at = now;
+
+        Ok(CommentOutcome {
+            author: caller,
+            ts: now,
+            season_id,
+        })
+    }
+
+    fn record_idea_guidance_state(
+        &mut self,
+        idea_id: IdeaReviewId,
+        outcome: IdeaGuidanceOutcome,
+        body: &str,
+    ) -> Result<CommentOutcome, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_review_body(body, &config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let mut review = self.review.borrow_mut();
+        ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+        if !is_active_reviewer(&review, season_id, caller) {
+            return Err(ContractError::NotReviewer);
+        }
+        ensure_not_idea_self_review(&review, idea_id, caller)?;
+
+        let summary = review
+            .idea_summaries
+            .get_mut(&idea_id)
+            .ok_or(ContractError::UnknownIdeaReview)?;
+        if summary.linked_program_id.is_none() {
+            summary.status = IdeaReviewStatus::GuidanceRecorded;
+        }
+        summary.latest_guidance_outcome = Some(outcome);
+        summary.latest_guidance = Some(body.to_string());
+        summary.latest_reviewer = Some(caller);
+        summary.updated_at = now;
+
+        Ok(CommentOutcome {
+            author: caller,
+            ts: now,
+            season_id,
+        })
+    }
 }
 
 pub fn init_application(review: &mut ReviewState, program_id: ActorId) {
@@ -515,6 +829,11 @@ pub fn replace_application_program(
     });
     for (key, value) in decisions {
         review.decisions.insert(key, value);
+    }
+    for idea in review.idea_summaries.values_mut() {
+        if idea.linked_program_id == Some(old_program_id) {
+            idea.linked_program_id = Some(new_program_id);
+        }
     }
 
     summary
@@ -724,6 +1043,21 @@ fn ensure_summary(review: &mut ReviewState, program_id: ActorId) -> &mut ReviewS
 
 fn ensure_not_self_review(reviewer: ActorId, app: &Application) -> Result<(), ContractError> {
     if reviewer == app.owner || reviewer == app.program_id {
+        return Err(ContractError::SelfReviewForbidden);
+    }
+    Ok(())
+}
+
+fn ensure_not_idea_self_review(
+    review: &ReviewState,
+    idea_id: IdeaReviewId,
+    reviewer: ActorId,
+) -> Result<(), ContractError> {
+    let summary = review
+        .idea_summaries
+        .get(&idea_id)
+        .ok_or(ContractError::UnknownIdeaReview)?;
+    if summary.owner == reviewer {
         return Err(ContractError::SelfReviewForbidden);
     }
     Ok(())

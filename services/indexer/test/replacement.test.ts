@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  replacementLinkedIdeaUpdates,
   replaceCompositeProgramId,
   reviewStatusFromReplacementSummary,
 } from "../src/handlers/registry.js";
@@ -60,4 +61,11 @@ test("replacement composite ids preserve the row suffix", () => {
     replaceCompositeProgramId("0xother:42", "0xold", "0xnew"),
     "0xother:42",
   );
+});
+
+test("replacement updates linked idea summaries to the new program id", () => {
+  assert.deepEqual(replacementLinkedIdeaUpdates("0xnew", 123n), {
+    linkedProgramId: "0xnew",
+    updatedAt: 123n,
+  });
 });
