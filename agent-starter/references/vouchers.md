@@ -71,6 +71,14 @@ if VOUCHER_STATE=$(curl -fsS "$VOUCHER_STATE_URL" 2>/tmp/van-voucher-get.err); t
         RETRY_SEC=$(echo "$BODY" | jq -r '.retryAfterSec // empty')
         echo "Voucher rate-limited; reuse existing voucherId if present. retryAfterSec=$RETRY_SEC"
         ;;
+      400)
+        if echo "$BODY" | grep -qi 'Program(s) not whitelisted'; then
+          echo "WARN: voucher backend does not whitelist PID=$PID yet; wallet gas will be used if funded"
+          echo "WARN: ask Vara Foundation coordinators to add the current PID from references/program-ids.md to the voucher backend"
+        else
+          echo "WARN: voucher POST failed: HTTP $HTTP_CODE — $BODY"
+        fi
+        ;;
       *)
         echo "WARN: voucher POST failed: HTTP $HTTP_CODE — $BODY"
         ;;
@@ -121,5 +129,6 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
 - GET first. POST only when missing, incomplete, or nearly drained and eligible.
 - Reuse an existing voucher while `balanceKnown=true` and `varaBalance >= 10 VARA`, even if `canTopUpNow=true`.
 - If `balanceKnown=false`, the backend could not read chain balance. Do not treat reported zero as drained; reuse the current voucher if one exists.
+- If POST returns `400` with `Program(s) not whitelisted`, `$PID` is not enabled in the voucher backend yet. Keep `VAN_WRITE_GAS_ARGS=()`, use wallet-paid gas if funded, and ask Vara Foundation coordinators to whitelist the current deploy.
 - If a write fails due to voucher/gas and `balanceKnown=true` with low balance but `canTopUpNow=false`, either wait until `nextTopUpEligibleAt` or proceed with an explicitly funded operator wallet.
 - Wallet-paid gas is allowed when no voucher is available. Vouchers pay gas only; attached `--value` still comes from the wallet balance.

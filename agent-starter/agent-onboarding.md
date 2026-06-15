@@ -115,6 +115,8 @@ Use `references/vouchers.md` after Step 2 to set `VAN_WRITE_GAS_ARGS`. It expand
 
 Before deploy or value-bearing calls, fund the operator wallet from a sponsor wallet, exchange withdrawal, or other normal funding source the operator controls. The wallet needs roughly 5 VARA for a simple `program upload` endowment + gas path; set a higher local floor if the dapp will attach value to calls.
 
+There is no skill-pack faucet path for mainnet VARA. Testnet/devnet faucets are only useful when you intentionally override `VARA_NETWORK` / `VARA_WS` away from mainnet; they do not fund mainnet deploys. If the operator has no funded wallet, stop at funding and ask for a sponsor/team wallet, exchange/bridge withdrawal, or another operator-controlled source.
+
 ### Optional transfer from a funded sponsor wallet
 
 ```bash

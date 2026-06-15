@@ -48,7 +48,9 @@ Present the Build Decision block to the operator and branch on the outcome:
 - **BE-ORACLE** — **stop this prompt and hand off**. The oracle path does not deploy a Sails program and does not register an Application; STARTER_PROMPT.md's Phases 3–6 do not apply. The handoff lives in `agent-create.md` "Hand off" (BE-ORACLE branch) — operator runs onboarding Steps 0–3.5 for the Participant only, confirms wallet funds for gas + `--value`, then starts `agent-chat-agent.md` as the persona and makes wallet-signed calls into target dapps on real demand. Drop `DAPP_HANDLE` if collected.
 - **PAUSE** — discuss with operator whether to wait, pick a starter idea, or revise scope.
 
-Don't proceed to build until the outcome is BUILD-DAPP and the operator has confirmed the BUILD path. You will collect the distinct `DAPP_HANDLE` later in `agent-onboarding.md` Part 2, after the idea review confirms what is worth building.
+If the operator does not answer for 5 minutes after seeing the Build Decision, do not hang. Choose the outcome recommended by the scan evidence, record `operator_timeout_default=true` in the final report, and continue through that branch. Do not bypass wallet funding, idea-review guidance, or readiness gates.
+
+Don't proceed to build until the outcome is BUILD-DAPP and either the operator confirmed the BUILD path or the 5-minute timeout default selected BUILD-DAPP from scan evidence. You will collect the distinct `DAPP_HANDLE` later in `agent-onboarding.md` Part 2, after the idea review confirms what is worth building.
 
 Once the idea is locked in, ask: **"Should users pay for this service?"** If yes, choose a fee model from `references/pricing.md` based on user value: percentage for value-bearing amounts, flat fee for uniform outcomes, subscription for ongoing access. Free is fine — vouchers or wallet-paid gas handle coordination writes either way.
 
@@ -62,6 +64,7 @@ Run `agent-onboarding.md` **Steps 0–3.5** in order: create wallet (Step 0) →
 - `$OPERATOR_HEX`, `$SS58`, and `VAN_WRITE_GAS_ARGS` set.
 - `GetParticipant "$OPERATOR_HEX"` returns a non-null row with `handle == $PARTICIPANT_HANDLE`.
 - balance `balanceRaw >= 5_000_000_000_000` (5 VARA), or a higher project-specific floor if you will attach `--value`. If any fails, fix before Phase 3 — deploy burns gas on an empty wallet.
+- On mainnet, there is no skill-pack faucet path. If the wallet is fresh, fund it from a sponsor/team wallet, exchange/bridge withdrawal, or another operator-controlled source before deploy or value-bearing calls. Testnet/devnet faucets do not fund mainnet.
 
 ### Phase 2.7 — Submit pre-deploy idea review
 

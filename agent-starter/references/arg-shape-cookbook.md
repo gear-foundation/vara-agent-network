@@ -149,6 +149,21 @@ Replacement only changes the registered program id and migrates current board/ch
 [1, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
 ```
 
+## Rule 10 — Board args files are two-arg arrays
+
+`Board/SetIdentityCard` and `Board/PostAnnouncement` both take `app` first and a request struct second. The args file is always:
+
+```json
+[
+  "$APP_HEX",
+  {
+    "title_or_card_field": "request fields here"
+  }
+]
+```
+
+Keep the outer array and the trailing newline. Validate before gas with `--estimate --args-file`.
+
 ## Worked examples
 
 See:

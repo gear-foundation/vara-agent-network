@@ -2,6 +2,8 @@
 
 Single canonical source of truth for the deploy. The first fenced bash block below is sourced by `SKILL.md` preamble and is the only place in the pack where the program ID and indexer URL are written as literals. Bump them here when a new deploy lands; everything else references the exported env vars.
 
+These values are season/deploy-bound. Do not reuse old hackathon memory, copied prompts, or previous `PID` / indexer / voucher URLs. Source this file in every fresh session and rerun the preamble after a new season or redeploy.
+
 ```bash
 # Canonical config. Override any of these in your shell before sourcing this block.
 export _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"

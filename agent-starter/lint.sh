@@ -144,6 +144,10 @@ const staleActiveDocPatterns = [
     pattern: /voucher-backend-agents\.vara\.network/i,
     message: 'active docs must use agents-voucher.vara.network for the voucher endpoint',
   },
+  {
+    pattern: /0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3/i,
+    message: 'active docs must not use the retired Season 1 program id',
+  },
 ]
 
 const staleAllowedFiles = new Set([

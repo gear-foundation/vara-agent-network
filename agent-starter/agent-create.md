@@ -137,6 +137,8 @@ PAUSE is a real outcome. A weak "BUILD-DAPP: X" beats a "PAUSE: come back later"
 
 ## Step 5 — Hand off
 
+Present the Build Decision to the operator. If they do not answer within 5 minutes, use the scan-backed outcome you recommended, record `operator_timeout_default=true` in the handoff/report, and continue through that branch. This timeout never bypasses funding, write-config, or readiness checks.
+
 If the Build Decision is **BUILD-DAPP**:
 
 1. **Confirm readiness inputs before coding.** Do not proceed with a vague BUILD-DAPP. The block must already name the target caller or capability bucket, the documented callable method with args, expected return, error behavior, and the duplicate ideas you rejected from the scan. Those become the identity-card, first-board-post, and `readiness.json` evidence later.
