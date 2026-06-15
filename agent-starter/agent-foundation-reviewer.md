@@ -52,7 +52,8 @@ vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
 ## Pre-deploy idea queue
 
 Prefer the dashboard `/dashboard/idea-reviews`. For command line work, query the
-indexer-backed queue:
+indexer-backed queue. Prioritize submitted/commented ideas with no guidance,
+then refined ideas where the owner replied with new evidence:
 
 ```bash
 curl -s "$INDEXER_GRAPHQL_URL" \
@@ -61,18 +62,36 @@ curl -s "$INDEXER_GRAPHQL_URL" \
   | jq '.data.allIdeaReviewSummaries.nodes[]'
 ```
 
-Reviewer comments and guidance are public and permanent. Do not include private
-coaching notes, secrets, or off-chain personal data.
+For the full public thread:
 
 ```bash
 IDEA_ID=1
 
+curl -s "$INDEXER_GRAPHQL_URL" \
+  -H 'content-type: application/json' \
+  --data "$(jq -nc --arg id "$IDEA_ID" \
+    '{query:"query($id:String!){ allIdeaReviewSummaries(first:1,condition:{ideaId:$id,hidden:false,tombstoned:false}){nodes{ideaId owner githubUrl idea status linkedProgramId latestGuidanceOutcome latestGuidance latestReviewer updatedAt}} allIdeaReviewComments(condition:{ideaId:$id,hidden:false,tombstoned:false},orderBy:TS_ASC,first:250){nodes{author authorRole body ts}} allIdeaReviewGuidances(condition:{ideaId:$id,hidden:false,tombstoned:false},orderBy:TS_ASC,first:100){nodes{reviewer outcome body ts}} allIdeaReviewLinks(condition:{ideaId:$id},orderBy:LINKED_AT_ASC,first:20){nodes{programId linkedAt}} }",variables:{id:$id}}')" \
+  | jq .data
+```
+
+Reviewer comments and guidance are public and permanent. Do not include private
+coaching notes, secrets, or off-chain personal data.
+
+Use `Review/PostIdeaReviewerComment` for questions or short notes that do not
+change the recommendation:
+
+```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/PostIdeaReviewerComment \
   --args "[$IDEA_ID,\"The idea is strongest if it names a real consuming app and a callable method.\"]" \
   "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
+```
 
+Use `Review/RecordIdeaGuidance` for the stateful reviewer outcome builders
+should act on before deployment:
+
+```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/RecordIdeaGuidance \
   --args "[$IDEA_ID,{\"Proceed\":null},\"Proceed if the builder proves demand with one integration partner.\"]" \
@@ -80,8 +99,38 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   --idl "$IDL"
 ```
 
+Guidance rubric:
+
+| Outcome | Use when | Useful reviewer note |
+|---|---|---|
+| `Proceed` | The idea is worth building now. | Name the expected proof: target caller, callable method, repo artifact, or integration evidence. |
+| `Refine` | The value is plausible but the scope, consumer, integration, or first method is unclear. | Tell the builder exactly what to narrow before deploying. |
+| `NeedsEvidence` | The pitch lacks demand, repo, or integration evidence. | Ask for the smallest concrete evidence that would change the recommendation. |
+| `NotRecommended` | The idea is unlikely to create network value in its current form. | Explain the reason and suggest a pivot if one is obvious. |
+
 Self-review is forbidden for idea reviews too. If your reviewer account owns the
 idea, use a different reviewer.
+
+Verify idea-review writes with the protocol read first:
+
+```bash
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
+  Review/GetIdeaReviewSummary --args "[$IDEA_ID]" --idl "$IDL" | jq .result
+```
+
+Then confirm the indexer caught up:
+
+```bash
+curl -s "$INDEXER_GRAPHQL_URL" \
+  -H 'content-type: application/json' \
+  --data "$(jq -nc --arg id "$IDEA_ID" \
+    '{query:"query($id:String!){ allIdeaReviewSummaries(first:1,condition:{ideaId:$id}){nodes{ideaId status latestGuidanceOutcome latestGuidance latestReviewer linkedProgramId updatedAt}} }",variables:{id:$id}}')" \
+  | jq '.data.allIdeaReviewSummaries.nodes[0]'
+```
+
+If the protocol read shows the comment/guidance and the indexer does not, wait
+for the indexer cursor to catch up. Do not duplicate comments or guidance while
+indexing is pending.
 
 ## Queue triage
 
@@ -187,13 +236,16 @@ next pending revision, and sets review status `RevisionRequested`.
 
 | Error | Meaning | Recovery |
 |---|---|---|
+| `ReviewDisabled` | review writes are disabled in runtime config | stop writes; reads still work |
 | `NotReviewer` | caller is not active in the reviewer roster | switch accounts or ask admin to add the reviewer |
 | `UnknownReviewer` | admin add/remove used zero or inactive reviewer id | refresh `Review/ListReviewers` and retry |
-| `SelfReviewForbidden` | reviewer is also owner or program id | assign a different reviewer |
+| `SelfReviewForbidden` | reviewer is also the app owner/program id or idea owner | assign a different reviewer |
+| `UnknownIdeaReview` | idea id does not exist | refresh the idea queue and retry with a valid id |
+| `IdeaAlreadyLinked` | idea review is already linked to an application | refresh `Review/GetIdeaReviewSummary`; do not relink unless the owner fixes the source |
 | `ReviewRevisionMismatch` | stale `expected_revision` | refresh `Review/GetReviewSummary` and retry with current revision |
 | `DecisionAlreadyRecorded` | this submitted revision already has a decision | do not retry; wait for a new submission revision |
 | `ReviewNotAllowedForStatus` | app status is not eligible | comment only on `Building` or `Submitted`; decide only on `Submitted` |
-| `EmptyBody` / `FieldTooLarge` | text failed review body limits | rewrite the comment or reason |
+| `EmptyBody` / `FieldTooLarge` | text failed review/idea body limits | rewrite the comment, guidance, reply, or reason |
 
 ## Verify writes
 
