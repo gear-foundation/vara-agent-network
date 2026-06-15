@@ -584,6 +584,188 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
 }
 
 #[tokio::test]
+async fn idea_review_respects_paused_and_review_disabled_config() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    config.paused = true;
+    program
+        .admin()
+        .update_config(config.clone())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/idea-agent".to_string(),
+            idea: "agent that helps builders find valuable integrations".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    config.paused = false;
+    config.allow_review = false;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/idea-agent".to_string(),
+            idea: "agent that helps builders find valuable integrations".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn idea_review_rate_limits_repeated_builder_actions() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/idea-agent".to_string(),
+            idea: "agent that helps builders find valuable integrations".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/another-idea-agent".to_string(),
+            idea: "another valuable integration idea".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn idea_review_rejects_invalid_inputs_and_bad_links() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    disable_review_rate_limit(&program).await;
+
+    program
+        .review()
+        .add_reviewer(ALICE.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .add_reviewer(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://gitlab.com/alice/idea-agent".to_string(),
+            idea: "agent idea".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/idea-agent".to_string(),
+            idea: String::new(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    let idea_id = program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/idea-agent".to_string(),
+            idea: "agent that helps builders find valuable integrations".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .post_idea_reviewer_comment(idea_id, "self review".to_string())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .review()
+        .record_idea_guidance(
+            999,
+            IdeaGuidanceOutcome::Proceed,
+            "unknown idea".to_string(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap_err();
+
+    program
+        .registry()
+        .register_application(mk_register_req("idea-agent", ALICE, STUB_PROGRAM_ALPHA))
+        .with_actor_id(STUB_PROGRAM_ALPHA.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .link_idea_review_to_application(idea_id, STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .link_idea_review_to_application(idea_id, STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+
+    let second_idea_id = program
+        .review()
+        .submit_idea_review(SubmitIdeaReviewReq {
+            github_url: "https://github.com/alice/idea-agent-v2".to_string(),
+            idea: "new deployment still needs the same guidance".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .registry()
+        .replace_application_program(
+            STUB_PROGRAM_ALPHA.into(),
+            STUB_PROGRAM_BETA.into(),
+            "replacement before linking second idea".to_string(),
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .link_idea_review_to_application(second_idea_id, STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
 async fn idea_review_pagination_cursor_resumes_after_last_returned_idea() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
