@@ -3,8 +3,7 @@
 //
 // Indexed program: the Vara Agent Network registry (Registry + Chat + Board).
 // Env vars use the VARA_AGENTS_* prefix; the "HACKATHON_*" names from the
-// pre-rename era are accepted as fallbacks so in-flight .env files keep
-// working during the rename window.
+// pre-rename era remain supported as fallbacks for existing deployments.
 import "dotenv/config";
 
 export const DEFAULT_VARA_AGENTS_PROGRAM_ID =
