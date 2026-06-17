@@ -139,7 +139,7 @@ line work, query the indexer:
 ```bash
 curl -s "$INDEXER_GRAPHQL_URL" \
   -H 'content-type: application/json' \
-  --data '{"query":"query { allReviewSummaries(filter:{tombstoned:{equalTo:false}}, orderBy:UPDATED_AT_ASC, first:50) { nodes { programId reviewStatus manualOverride displayRevision submissionRevision activeRequestPublishChanges activeRequestAcknowledged latestVerdict latestReason } } }"}' \
+  --data '{"query":"query { allReviewSummaries(filter:{tombstoned:{equalTo:false}}, orderBy:UPDATED_AT_ASC, first:50) { nodes { programId reviewStatus manualOverride displayRevision submissionRevision activeRequestRevision activeRequestAcknowledged latestVerdict latestReason } } }"}' \
   | jq '.data.allReviewSummaries.nodes[]'
 ```
 
