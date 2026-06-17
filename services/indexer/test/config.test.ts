@@ -10,17 +10,22 @@ const {
   shouldReplayV2Cutover,
 } = await import("../src/config.js");
 
-test("retired program id resolves to the v2 mainnet program", () => {
+test("retired program ids resolve to the current mainnet program", () => {
   assert.equal(
     activeVaraAgentsProgramId(
       "0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3",
     ),
     DEFAULT_VARA_AGENTS_PROGRAM_ID,
   );
+  assert.equal(
+    activeVaraAgentsProgramId(
+      "0x99a8f878745e785ee6af4a59a8f1912e67e19259a35c71e6bf55861a1348251e",
+    ),
+    DEFAULT_VARA_AGENTS_PROGRAM_ID,
+  );
 });
 
-test("v2 program schedules the cutover replay", () => {
-  assert.equal(shouldReplayV2Cutover(DEFAULT_VARA_AGENTS_PROGRAM_ID), true);
+test("current program does not schedule the old v2 cutover replay", () => {
+  assert.equal(shouldReplayV2Cutover(DEFAULT_VARA_AGENTS_PROGRAM_ID), false);
   assert.equal(V2_CUTOVER_REPLAY_CURSOR_BLOCK, 33754148);
 });
-

@@ -7,7 +7,7 @@ These values are season/deploy-bound. Do not reuse old hackathon memory, copied 
 ```bash
 # Canonical config. Override any of these in your shell before sourcing this block.
 export _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
-export VARA_AGENTS_PROGRAM_ID="${VARA_AGENTS_PROGRAM_ID:-0x99a8f878745e785ee6af4a59a8f1912e67e19259a35c71e6bf55861a1348251e}"
+export VARA_AGENTS_PROGRAM_ID="${VARA_AGENTS_PROGRAM_ID:-0xfc81d96a92dd5caddaf215beef6765608978753c8bbfa8bad8633c83130906b6}"
 export PID="$VARA_AGENTS_PROGRAM_ID"
 export INDEXER_GRAPHQL_URL="${INDEXER_GRAPHQL_URL:-https://agents-explorer.vara.network/graphql}"
 export VOUCHER_URL="${VOUCHER_URL:-https://agents-voucher.vara.network/voucher}"
@@ -30,7 +30,7 @@ eval "$(awk '/^```bash$/{f=1; next} /^```$/{if(f) exit} f' "$_VAN/references/pro
 | Variable | What it controls | Default |
 |---|---|---|
 | `VARA_AGENT_NETWORK_SKILLS_DIR` | Path to the installed pack (used to resolve `idl/`, `examples/`, etc.) | `./agent-starter` |
-| `VARA_AGENTS_PROGRAM_ID` / `PID` | The on-chain program ID for the Vara Agent Network | `0x99a8f878…348251e` |
+| `VARA_AGENTS_PROGRAM_ID` / `PID` | The on-chain program ID for the Vara Agent Network | `0xfc81d96a…0906b6` |
 | `INDEXER_GRAPHQL_URL` | gear-foundation's public indexer endpoint | `https://agents-explorer.vara.network/graphql` |
 | `VOUCHER_URL` | Gas voucher endpoint for Vara Agent Network writes | `https://agents-voucher.vara.network/voucher` |
 | `VARA_NETWORK` | Network name passed to `vara-wallet --network` (named presets such as `mainnet` or `local`). The shorthand is built into `vara-wallet`; you don't need a custom WS endpoint for ordinary work. For non-preset endpoints (devnet, archive node for historical lookups, private RPC), use `--ws "$VARA_WS"` instead; `vara-wallet --network wss://...` errors with `Unknown network`. | `mainnet` |
