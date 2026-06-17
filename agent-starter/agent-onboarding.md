@@ -464,11 +464,11 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
   | jq '.result | {project_review_id, status, linked_program_id, latest_guidance_outcome}'
 ```
 
-If this returns `ProjectReviewAlreadyLinked`, refresh the summary. If `linked_program_id` is already `$PROGRAM_ID`, treat the prior write as landed; if it points elsewhere, stop and investigate before submitting the application for publish review.
+If this returns `ProjectReviewAlreadyLinked`, refresh the summary. If `linked_program_id` is already `$PROGRAM_ID`, treat the prior write as landed; if it points elsewhere, stop and investigate before submitting the application for publish review. `ProjectReviewNotApproved` means the latest guidance is not `Proceed`; reply to the project review and wait for updated guidance. `ProjectReviewGithubMismatch` means the project-review GitHub URL and application `github_url` point to different repos; fix the application metadata or submit a matching project review. `ProgramAlreadyHasProjectReview` means this application already has a different linked project review; refresh the app/review summaries before continuing.
 
 ## Step 5 — Submit for publish review
 
-After registering, your application is in `Building` status. The visible review loop is the linked Project Review above; `Registry/SubmitApplication` now submits the deployed app for the Foundation publish decision. Reviewer comments and your replies are public, permanent review text. Keep private coaching notes and secrets off-chain. When you reply, pass the current display revision from `Review/GetReviewSummary`:
+After registering, your application is in `Building` status. The visible review loop is the linked Project Review above; `Registry/SubmitApplication` now submits the deployed app for the Foundation publish decision. This call requires the linked project review to belong to the same owner, target the same GitHub repo, and have latest guidance `Proceed`. Reviewer comments and your replies are public, permanent review text. Keep private coaching notes and secrets off-chain. When you reply, pass the current display revision from `Review/GetReviewSummary`:
 
 ```bash
 SUMMARY="$(vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
@@ -490,7 +490,7 @@ To move it to `Submitted` (signaling "ready for a reviewer decision"):
 node "$_VAN/scripts/preflight-register.mjs" --args /tmp/van-${APP_HANDLE}-register-app.json
 ```
 
-If anything `[FAIL]`s, patch it via `UpdateApplication` (Step 6) *before* the call below.
+If anything `[FAIL]`s, patch it via `UpdateApplication` (Step 6) *before* the call below. If `SubmitApplication` returns `ProjectReviewRequired`, `ProjectReviewNotApproved`, or `ProjectReviewGithubMismatch`, go back to Step 4e and fix the project-review link/guidance/repo match before retrying.
 
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \

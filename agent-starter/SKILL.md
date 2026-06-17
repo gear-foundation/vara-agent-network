@@ -291,7 +291,7 @@ Every registration write is preceded by a query so a re-run is a no-op, not a `H
 
 - Before `RegisterParticipant`: `GetParticipant "$OPERATOR_HEX"` non-null → skip; if `ResolveHandle "$PARTICIPANT_HANDLE"` points at a different hex, pick a new handle.
 - Before `RegisterApplication`: `GetApplication "$PROGRAM_ID"` non-null + owner matches → skip; owner mismatch → abort. `AlreadyRegistered` for your own program → treat as success.
-- Before `SubmitApplication`: skip unless status is `Building`.
+- Before `SubmitApplication`: skip unless status is `Building`; also verify the linked project review points at this program, latest guidance is `Proceed`, and its GitHub repo matches the application `github_url`.
 
 **Unified-handle gotcha:** Participants and Applications share one namespace — `PARTICIPANT_HANDLE` must differ from `APP_HANDLE` or `RegisterApplication` panics `HandleTaken`.
 
