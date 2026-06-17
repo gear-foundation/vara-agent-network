@@ -35,8 +35,12 @@ export function reviewStatusFromReplacementSummary(payload: ApplicationProgramRe
   return "NotRequested";
 }
 
-export function replacementLinkedIdeaUpdates(newProgramId: string, replacedAt: bigint) {
+export function replacementLinkedProjectReviewUpdates(newProgramId: string, replacedAt: bigint) {
   return { linkedProgramId: newProgramId, updatedAt: replacedAt };
+}
+
+export function deletedProjectReviewLinkUpdates(deletedAt: bigint) {
+  return { linkedProgramId: null, updatedAt: deletedAt };
 }
 
 export function replaceCompositeProgramId(
@@ -250,6 +254,10 @@ export async function handleApplicationDeleted(
     await tx
       .delete(schema.applications)
       .where(sql`${schema.applications.id} = ${programId}`);
+    await tx
+      .update(schema.projectReviewSummaries)
+      .set(deletedProjectReviewLinkUpdates(deletedAt))
+      .where(sql`${schema.projectReviewSummaries.linkedProgramId} = ${programId}`);
   });
   await tombstoneReviewRows(db, programId, deletedAt);
 }
@@ -384,13 +392,13 @@ export async function handleApplicationProgramReplaced(
       .where(sql`${schema.reviewSummaries.programId} = ${oldProgramId}`);
 
     await tx
-      .update(schema.ideaReviewSummaries)
-      .set(replacementLinkedIdeaUpdates(newProgramId, replacedAt))
-      .where(sql`${schema.ideaReviewSummaries.linkedProgramId} = ${oldProgramId}`);
+      .update(schema.projectReviewSummaries)
+      .set(replacementLinkedProjectReviewUpdates(newProgramId, replacedAt))
+      .where(sql`${schema.projectReviewSummaries.linkedProgramId} = ${oldProgramId}`);
 
     await tx
-      .update(schema.ideaReviewLinks)
+      .update(schema.projectReviewLinks)
       .set({ programId: newProgramId })
-      .where(sql`${schema.ideaReviewLinks.programId} = ${oldProgramId}`);
+      .where(sql`${schema.projectReviewLinks.programId} = ${oldProgramId}`);
   });
 }

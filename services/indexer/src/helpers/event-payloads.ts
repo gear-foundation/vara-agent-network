@@ -17,9 +17,10 @@ export type AnnouncementKind = "Registration" | "Invitation";
 export type ArchiveReason = "AutoPrune" | "Manual";
 export type ReviewAuthorRole = "Reviewer" | "Owner";
 export type ReviewVerdict = "ApprovedForListing" | "RevisionRequested";
+export type PublishOutcome = "Published" | "ChangesRequested";
 export type CriterionCoverage = "Missing" | "Partial" | "Met" | "NotApplicable";
-export type IdeaReviewStatus = "Submitted" | "Commented" | "GuidanceRecorded" | "Linked" | "Closed";
-export type IdeaGuidanceOutcome = "Proceed" | "Refine" | "NeedsEvidence" | "NotRecommended";
+export type ProjectReviewStatus = "Submitted" | "Commented" | "GuidanceRecorded" | "Linked";
+export type ProjectGuidanceOutcome = "Proceed" | "NeedsChanges" | "NotRecommended";
 
 export interface ContactLinks {
   discord?: string | null;
@@ -252,8 +253,21 @@ export interface ReviewDecisionRecorded {
   season_id: number;
 }
 
-export interface IdeaReviewSubmitted {
-  idea_id: bigint | number;
+export interface PublishDecisionRecorded {
+  program_id: Hex;
+  revision: number;
+  reviewer: Hex;
+  outcome: PublishOutcome;
+  reason: string;
+  criteria: ReviewCriteria;
+  old_status: AppStatus;
+  new_status: AppStatus;
+  decided_at: bigint | number;
+  season_id: number;
+}
+
+export interface ProjectReviewSubmitted {
+  project_review_id: bigint | number;
   owner: Hex;
   github_url: string;
   idea: string;
@@ -261,8 +275,8 @@ export interface IdeaReviewSubmitted {
   season_id: number;
 }
 
-export interface IdeaReviewCommentPosted {
-  idea_id: bigint | number;
+export interface ProjectReviewCommentPosted {
+  project_review_id: bigint | number;
   author: Hex;
   author_role: ReviewAuthorRole;
   body: string;
@@ -270,17 +284,17 @@ export interface IdeaReviewCommentPosted {
   season_id: number;
 }
 
-export interface IdeaReviewGuidanceRecorded {
-  idea_id: bigint | number;
+export interface ProjectReviewGuidanceRecorded {
+  project_review_id: bigint | number;
   reviewer: Hex;
-  outcome: IdeaGuidanceOutcome;
+  outcome: ProjectGuidanceOutcome;
   body: string;
   ts: bigint | number;
   season_id: number;
 }
 
-export interface IdeaReviewLinked {
-  idea_id: bigint | number;
+export interface ProjectReviewLinked {
+  project_review_id: bigint | number;
   owner: Hex;
   program_id: Hex;
   linked_at: bigint | number;

@@ -152,8 +152,12 @@ pub enum ContractError {
     DecisionAlreadyRecorded,
     ReviewNotAllowedForStatus,
     ReviewRevisionMismatch,
-    UnknownIdeaReview,
-    IdeaAlreadyLinked,
+    UnknownProjectReview,
+    ProjectReviewAlreadyLinked,
+    ProgramAlreadyHasProjectReview,
+    ProjectReviewRequired,
+    ProjectReviewNotApproved,
+    ProjectReviewGithubMismatch,
     StaleProgramId,
     ProgramIdUnchanged,
     ProgramIdAlreadyRegistered,
@@ -179,7 +183,7 @@ pub enum ContractError {
 pub type ChatMsgId = u64;
 pub type PostId = u64;
 pub type Hash32 = [u8; 32];
-pub type IdeaReviewId = u64;
+pub type ProjectReviewId = u64;
 
 // ---------------------------------------------------------------------------
 // Migration DTOs
@@ -443,22 +447,28 @@ pub enum ReviewVerdict {
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub enum IdeaReviewStatus {
+pub enum ProjectReviewStatus {
     Submitted,
     Commented,
     GuidanceRecorded,
     Linked,
-    Closed,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub enum IdeaGuidanceOutcome {
+pub enum ProjectGuidanceOutcome {
     Proceed,
-    Refine,
-    NeedsEvidence,
+    NeedsChanges,
     NotRecommended,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum PublishOutcome {
+    Published,
+    ChangesRequested,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
@@ -511,7 +521,7 @@ pub struct ReviewSummary {
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub struct SubmitIdeaReviewReq {
+pub struct SubmitProjectReviewReq {
     pub github_url: String,
     pub idea: String,
 }
@@ -519,15 +529,15 @@ pub struct SubmitIdeaReviewReq {
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub struct IdeaReviewSummary {
-    pub idea_id: IdeaReviewId,
+pub struct ProjectReviewSummary {
+    pub project_review_id: ProjectReviewId,
     pub owner: ActorId,
     pub github_url: String,
     pub idea: String,
-    pub status: IdeaReviewStatus,
+    pub status: ProjectReviewStatus,
     pub linked_program_id: Option<ActorId>,
     pub comment_count: u32,
-    pub latest_guidance_outcome: Option<IdeaGuidanceOutcome>,
+    pub latest_guidance_outcome: Option<ProjectGuidanceOutcome>,
     pub latest_guidance: Option<String>,
     pub latest_reviewer: Option<ActorId>,
     pub season_id: u32,
@@ -538,9 +548,9 @@ pub struct IdeaReviewSummary {
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub struct IdeaReviewPage {
-    pub items: Vec<IdeaReviewSummary>,
-    pub next_cursor: Option<IdeaReviewId>,
+pub struct ProjectReviewPage {
+    pub items: Vec<ProjectReviewSummary>,
+    pub next_cursor: Option<ProjectReviewId>,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]

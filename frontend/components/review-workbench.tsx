@@ -3,18 +3,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { CheckCircle2, Clock3, ExternalLink, GitBranch, MessageSquare, RefreshCw, Send, ShieldCheck, XCircle } from 'lucide-react'
+import { CheckCircle2, Clock3, ExternalLink, GitBranch, MessageSquare, RefreshCw, ShieldCheck, XCircle } from 'lucide-react'
 import {
   getApplicationReviewDetail,
   type ApplicationReviewDetail,
   type ApplicationReviewEvent,
 } from '@/lib/indexer-client'
 import {
-  decideReview,
+  decidePublish,
   isReviewer,
   ownerReply,
   postReviewerComment,
-  requestReview,
   replaceApplicationProgram,
   submitApplication,
   type ReviewCoverage,
@@ -55,7 +54,7 @@ const INITIAL_CRITERIA: CriteriaDraft = {
 
 function eventLabel(event: ApplicationReviewEvent) {
   if (event.kind === 'request') return 'Review requested'
-  if (event.kind === 'decision') return event.verdict === 'ApprovedForListing' ? 'Approved for listing' : 'Revision requested'
+  if (event.kind === 'decision') return event.verdict === 'ApprovedForListing' ? 'Published' : 'Changes requested'
   return event.authorRole === 'Reviewer' ? 'Reviewer comment' : 'Owner reply'
 }
 
@@ -76,7 +75,6 @@ export function ReviewWorkbench({
   programId: string
 }) {
   const [detail, setDetail] = useState(initialDetail)
-  const [requestText, setRequestText] = useState('')
   const [commentText, setCommentText] = useState('')
   const [replyText, setReplyText] = useState('')
   const [decisionText, setDecisionText] = useState('')
@@ -275,12 +273,8 @@ export function ReviewWorkbench({
         {error ? <div className="review-error">{error}</div> : null}
 
         {isOwner && app.status === 'Building' ? (
-          <ActionBox title="Request feedback">
-            <Textarea value={requestText} onChange={(event) => setRequestText(event.target.value)} />
-            <Button disabled={!!busy || !requestText.trim()} onClick={() => void run('request', () => requestReview(account!, app.id, requestText.trim()))}>
-              <Send className="h-4 w-4" /> Request review
-            </Button>
-            <Button variant="secondary" disabled={!!busy} onClick={() => void run('submit', () => submitApplication(account!, app.id))}>
+          <ActionBox title="Publish application">
+            <Button disabled={!!busy} onClick={() => void run('submit', () => submitApplication(account!, app.id))}>
               Submit application
             </Button>
           </ActionBox>
@@ -372,20 +366,20 @@ export function ReviewWorkbench({
                 disabled={!!busy || !decisionText.trim() || !decisionCriteria}
                 onClick={() => {
                   if (!decisionCriteria) return
-                  void run('approve', () => decideReview(account!, app.id, displayRevision, 'ApprovedForListing', decisionText.trim(), decisionCriteria))
+                  void run('publish', () => decidePublish(account!, app.id, displayRevision, 'Published', decisionText.trim(), decisionCriteria))
                 }}
               >
-                <CheckCircle2 className="h-4 w-4" /> Approve
+                <CheckCircle2 className="h-4 w-4" /> Publish
               </Button>
               <Button
                 variant="destructive"
                 disabled={!!busy || !decisionText.trim() || !decisionCriteria}
                 onClick={() => {
                   if (!decisionCriteria) return
-                  void run('request-revision', () => decideReview(account!, app.id, displayRevision, 'RevisionRequested', decisionText.trim(), decisionCriteria))
+                  void run('request-publish-changes', () => decidePublish(account!, app.id, displayRevision, 'ChangesRequested', decisionText.trim(), decisionCriteria))
                 }}
               >
-                <XCircle className="h-4 w-4" /> Request revision
+                <XCircle className="h-4 w-4" /> Request changes
               </Button>
             </div>
           </ActionBox>

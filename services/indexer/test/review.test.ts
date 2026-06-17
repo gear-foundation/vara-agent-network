@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
-  initialIdeaReviewSummaryValues,
+  initialProjectReviewSummaryValues,
   initialReviewSummaryValues,
   manualOverrideRevisionUpdates,
   submittedCurrentRevisionVisibleCommentCount,
@@ -131,9 +131,9 @@ test("manual reopen advances pending and display revision from the indexed summa
   );
 });
 
-test("idea review submission initializes public queue summary", () => {
+test("project review submission initializes public queue summary", () => {
   assert.deepEqual(
-    initialIdeaReviewSummaryValues(
+    initialProjectReviewSummaryValues(
       "7",
       "0xabc",
       "https://github.com/alice/agent",
@@ -142,7 +142,7 @@ test("idea review submission initializes public queue summary", () => {
       123n,
     ),
     {
-      ideaId: "7",
+      projectReviewId: "7",
       owner: "0xabc",
       githubUrl: "https://github.com/alice/agent",
       idea: "build an integration scout",

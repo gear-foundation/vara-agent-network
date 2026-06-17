@@ -116,25 +116,26 @@ Registry/UpdateApplication(program_id, patch) # owner-only while Building
 Registry/DeleteApplication(program_id)        # owner or admin
 Registry/SubmitApplication(program_id)        # owner/program self-call
 Admin/SetApplicationStatus(program_id, new_status)   # admin-only
-Review/SubmitIdeaReview({github_url, idea})   # pre-deploy public guidance
-Review/PostIdeaReviewerComment(idea_id, body)
-Review/OwnerIdeaReply(idea_id, body)
-Review/RecordIdeaGuidance(idea_id, outcome, body)
-Review/LinkIdeaReviewToApplication(idea_id, program_id)
-Review/RequestReview(program_id, reason)      # owner-only while Building
+Review/SubmitProjectReview({github_url, idea})   # pre-deploy public guidance
+Review/PostProjectReviewerComment(project_review_id, body)
+Review/OwnerProjectReply(project_review_id, body)
+Review/RecordProjectGuidance(project_review_id, outcome, body)
+Review/LinkProjectReviewToApplication(project_review_id, program_id)
+Review/RequestReview(program_id, reason)      # compatibility-only feedback while Building
 Review/PostReviewerComment(program_id, expected_revision, body)
 Review/OwnerReply(program_id, expected_revision, body)
-Review/ApproveForListing(program_id, expected_revision, reason, criteria)
-Review/RequestRevision(program_id, expected_revision, reason, criteria)
+Review/PublishApplication(program_id, expected_revision, reason, criteria)
+Review/RequestPublishChanges(program_id, expected_revision, reason, criteria)
 ```
 
-Builders can submit an idea review before deployment with only a GitHub URL and
-general idea, then link that review to the registered application later.
+Builders can submit a Project Review before deployment with only a GitHub URL and
+product idea, then link that review to the registered application later.
 Applications start as `Building`. The app owner/operator can patch draft metadata
 only before submission, can delete the application, and can submit the project
-for review (`Building -> Submitted`). Gear Foundation reviewers can post public
-comments on `Building` or `Submitted` apps, approve a submitted revision for
-listing as `Live`, or request revision back to `Building` for the next revision.
+for publish review (`Building -> Submitted`) after linking an approved Project
+Review. Gear Foundation reviewers can post public comments on `Building` or
+`Submitted` apps, publish a submitted revision as `Live`, or request changes
+back to `Building` for the next revision.
 `Finalist` and `Winner` remain admin-only award states.
 
 ### Default Limits

@@ -1,10 +1,11 @@
 import { sql } from "drizzle-orm";
 import type {
   AppStatus,
-  IdeaReviewCommentPosted,
-  IdeaReviewGuidanceRecorded,
-  IdeaReviewLinked,
-  IdeaReviewSubmitted,
+  PublishDecisionRecorded,
+  ProjectReviewCommentPosted,
+  ProjectReviewGuidanceRecorded,
+  ProjectReviewLinked,
+  ProjectReviewSubmitted,
   ReviewerAdded,
   ReviewerRemoved,
   ReviewCommentPosted,
@@ -74,8 +75,8 @@ export function initialReviewSummaryValues(programId: string, seasonId: number, 
   };
 }
 
-export function initialIdeaReviewSummaryValues(
-  ideaId: string,
+export function initialProjectReviewSummaryValues(
+  projectReviewId: string,
   owner: string,
   githubUrl: string,
   idea: string,
@@ -83,7 +84,7 @@ export function initialIdeaReviewSummaryValues(
   submittedAt: bigint,
 ) {
   return {
-    ideaId,
+    projectReviewId,
     owner,
     githubUrl,
     idea,
@@ -570,16 +571,28 @@ export async function handleReviewDecisionRecorded(
   });
 }
 
-export async function handleIdeaReviewSubmitted(
+export async function handlePublishDecisionRecorded(
+  db: Db,
+  ctx: HandlerContext,
+  payload: PublishDecisionRecorded,
+): Promise<void> {
+  const { outcome, ...rest } = payload;
+  await handleReviewDecisionRecorded(db, ctx, {
+    ...rest,
+    verdict: outcome === "Published" ? "ApprovedForListing" : "RevisionRequested",
+  });
+}
+
+export async function handleProjectReviewSubmitted(
   db: Db,
   _ctx: HandlerContext,
-  payload: IdeaReviewSubmitted,
+  payload: ProjectReviewSubmitted,
 ): Promise<void> {
-  const ideaId = asBigInt(payload.idea_id).toString();
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
   const owner = normalizeActorId(payload.owner);
   const submittedAt = asBigInt(payload.submitted_at);
-  const values = initialIdeaReviewSummaryValues(
-    ideaId,
+  const values = initialProjectReviewSummaryValues(
+    projectReviewId,
     owner,
     payload.github_url,
     payload.idea,
@@ -588,82 +601,82 @@ export async function handleIdeaReviewSubmitted(
   );
 
   await db
-    .insert(schema.ideaReviewSummaries)
+    .insert(schema.projectReviewSummaries)
     .values(values)
-    .onConflictDoNothing({ target: schema.ideaReviewSummaries.ideaId });
+    .onConflictDoNothing({ target: schema.projectReviewSummaries.projectReviewId });
 }
 
-export async function handleIdeaReviewCommentPosted(
+export async function handleProjectReviewCommentPosted(
   db: Db,
   ctx: HandlerContext,
-  payload: IdeaReviewCommentPosted,
+  payload: ProjectReviewCommentPosted,
 ): Promise<void> {
   const eventId = makeRowId(ctx);
-  const ideaId = asBigInt(payload.idea_id).toString();
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
   const author = normalizeActorId(payload.author);
   const ts = asBigInt(payload.ts);
 
   await db.transaction(async (tx) => {
     const inserted = await tx
-      .insert(schema.ideaReviewComments)
+      .insert(schema.projectReviewComments)
       .values({
         eventId,
-        ideaId,
+        projectReviewId,
         author,
         authorRole: payload.author_role,
         body: payload.body,
         ts,
         seasonId: payload.season_id,
       })
-      .onConflictDoNothing({ target: schema.ideaReviewComments.eventId })
-      .returning({ eventId: schema.ideaReviewComments.eventId });
+      .onConflictDoNothing({ target: schema.projectReviewComments.eventId })
+      .returning({ eventId: schema.projectReviewComments.eventId });
     if (inserted.length === 0) return;
 
     await tx
-      .update(schema.ideaReviewSummaries)
+      .update(schema.projectReviewSummaries)
       .set({
         status: sql`CASE
-          WHEN ${schema.ideaReviewSummaries.status} = 'Submitted' THEN 'Commented'
-          ELSE ${schema.ideaReviewSummaries.status}
+          WHEN ${schema.projectReviewSummaries.status} = 'Submitted' THEN 'Commented'
+          ELSE ${schema.projectReviewSummaries.status}
         END`,
-        commentCount: sql`${schema.ideaReviewSummaries.commentCount} + 1`,
+        commentCount: sql`${schema.projectReviewSummaries.commentCount} + 1`,
         updatedAt: ts,
       })
-      .where(sql`${schema.ideaReviewSummaries.ideaId} = ${ideaId}`);
+      .where(sql`${schema.projectReviewSummaries.projectReviewId} = ${projectReviewId}`);
   });
 }
 
-export async function handleIdeaReviewGuidanceRecorded(
+export async function handleProjectReviewGuidanceRecorded(
   db: Db,
   ctx: HandlerContext,
-  payload: IdeaReviewGuidanceRecorded,
+  payload: ProjectReviewGuidanceRecorded,
 ): Promise<void> {
   const eventId = makeRowId(ctx);
-  const ideaId = asBigInt(payload.idea_id).toString();
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
   const reviewer = normalizeActorId(payload.reviewer);
   const ts = asBigInt(payload.ts);
 
   await db.transaction(async (tx) => {
     const inserted = await tx
-      .insert(schema.ideaReviewGuidance)
+      .insert(schema.projectReviewGuidance)
       .values({
         eventId,
-        ideaId,
+        projectReviewId,
         reviewer,
         outcome: payload.outcome,
         body: payload.body,
         ts,
         seasonId: payload.season_id,
       })
-      .onConflictDoNothing({ target: schema.ideaReviewGuidance.eventId })
-      .returning({ eventId: schema.ideaReviewGuidance.eventId });
+      .onConflictDoNothing({ target: schema.projectReviewGuidance.eventId })
+      .returning({ eventId: schema.projectReviewGuidance.eventId });
     if (inserted.length === 0) return;
 
     await tx
-      .update(schema.ideaReviewSummaries)
+      .update(schema.projectReviewSummaries)
       .set({
         status: sql`CASE
-          WHEN ${schema.ideaReviewSummaries.status} = 'Linked' THEN 'Linked'
+          WHEN ${schema.projectReviewSummaries.status} = 'Linked' THEN 'Linked'
           ELSE 'GuidanceRecorded'
         END`,
         latestGuidanceOutcome: payload.outcome,
@@ -671,43 +684,43 @@ export async function handleIdeaReviewGuidanceRecorded(
         latestReviewer: reviewer,
         updatedAt: ts,
       })
-      .where(sql`${schema.ideaReviewSummaries.ideaId} = ${ideaId}`);
+      .where(sql`${schema.projectReviewSummaries.projectReviewId} = ${projectReviewId}`);
   });
 }
 
-export async function handleIdeaReviewLinked(
+export async function handleProjectReviewLinked(
   db: Db,
   ctx: HandlerContext,
-  payload: IdeaReviewLinked,
+  payload: ProjectReviewLinked,
 ): Promise<void> {
   const eventId = makeRowId(ctx);
-  const ideaId = asBigInt(payload.idea_id).toString();
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
   const owner = normalizeActorId(payload.owner);
   const programId = normalizeActorId(payload.program_id);
   const linkedAt = asBigInt(payload.linked_at);
 
   await db.transaction(async (tx) => {
     const inserted = await tx
-      .insert(schema.ideaReviewLinks)
+      .insert(schema.projectReviewLinks)
       .values({
         eventId,
-        ideaId,
+        projectReviewId,
         owner,
         programId,
         linkedAt,
         seasonId: payload.season_id,
       })
-      .onConflictDoNothing({ target: schema.ideaReviewLinks.eventId })
-      .returning({ eventId: schema.ideaReviewLinks.eventId });
+      .onConflictDoNothing({ target: schema.projectReviewLinks.eventId })
+      .returning({ eventId: schema.projectReviewLinks.eventId });
     if (inserted.length === 0) return;
 
     await tx
-      .update(schema.ideaReviewSummaries)
+      .update(schema.projectReviewSummaries)
       .set({
         status: "Linked",
         linkedProgramId: programId,
         updatedAt: linkedAt,
       })
-      .where(sql`${schema.ideaReviewSummaries.ideaId} = ${ideaId}`);
+      .where(sql`${schema.projectReviewSummaries.projectReviewId} = ${projectReviewId}`);
   });
 }

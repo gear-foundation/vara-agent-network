@@ -3,11 +3,46 @@
 mod common;
 
 use agents_network_client::{
-    AgentsNetworkClient, AppStatus, IdeaGuidanceOutcome, IdeaReviewStatus, ReviewVerdict,
-    SubmitIdeaReviewReq, admin::Admin, registry::Registry, review::Review,
+    AgentsNetworkClient, AppStatus, ProjectGuidanceOutcome, ProjectReviewStatus, ReviewVerdict,
+    SubmitProjectReviewReq, admin::Admin, registry::Registry, review::Review,
 };
 use common::*;
 use sails_rs::client::*;
+
+async fn link_approved_project_review(
+    program: &Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    owner: u64,
+    reviewer: u64,
+    handle: &str,
+    program_id: u64,
+) -> u64 {
+    let project_review_id = program
+        .review()
+        .submit_project_review(SubmitProjectReviewReq {
+            github_url: format!("https://github.com/alice/{handle}"),
+            idea: format!("{handle} provides useful network value"),
+        })
+        .with_actor_id(owner.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .record_project_guidance(
+            project_review_id,
+            ProjectGuidanceOutcome::Proceed,
+            "ready to build".to_string(),
+        )
+        .with_actor_id(reviewer.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .link_project_review_to_application(project_review_id, program_id.into())
+        .with_actor_id(owner.into())
+        .await
+        .unwrap();
+    project_review_id
+}
 
 #[tokio::test]
 async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions() {
@@ -29,6 +64,7 @@ async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions()
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_approved_project_review(&program, ALICE, CAROL, "reviewed-app", STUB_PROGRAM_ALPHA).await;
 
     let summary = program
         .review()
@@ -205,6 +241,7 @@ async fn review_guards_reject_self_review_and_stale_revision() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_approved_project_review(&program, ALICE, CAROL, "guarded-app", STUB_PROGRAM_ALPHA).await;
 
     program
         .review()
@@ -272,6 +309,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_approved_project_review(&program, ALICE, CAROL, "reopened-app", STUB_PROGRAM_ALPHA).await;
 
     program
         .registry()
@@ -375,6 +413,14 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_approved_project_review(
+        &program,
+        ALICE,
+        CAROL,
+        "reviewed-then-deleted",
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     program
         .registry()
         .submit_application(STUB_PROGRAM_ALPHA.into())
@@ -405,6 +451,7 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
         .with_actor_id(STUB_PROGRAM_BETA.into())
         .await
         .unwrap();
+    link_approved_project_review(&program, ALICE, CAROL, "reviewed-again", STUB_PROGRAM_BETA).await;
     program
         .registry()
         .submit_application(STUB_PROGRAM_BETA.into())
@@ -447,7 +494,7 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
 }
 
 #[tokio::test]
-async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_thread() {
+async fn project_review_guidance_link_and_program_replacement_preserve_predeploy_thread() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -466,9 +513,9 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
         .await
         .unwrap();
 
-    let idea_id = program
+    let project_review_id = program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/idea-agent".to_string(),
             idea: "agent that helps builders find valuable integrations".to_string(),
         })
@@ -478,30 +525,33 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
 
     program
         .review()
-        .post_idea_reviewer_comment(idea_id, "focus on integration demand".to_string())
+        .post_project_reviewer_comment(project_review_id, "focus on integration demand".to_string())
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
 
     program
         .review()
-        .post_idea_reviewer_comment(idea_id, "focus on integration demand".to_string())
+        .post_project_reviewer_comment(project_review_id, "focus on integration demand".to_string())
         .with_actor_id(CAROL.into())
         .await
         .unwrap();
 
     program
         .review()
-        .owner_idea_reply(idea_id, "will target app-to-app matching".to_string())
+        .owner_project_reply(
+            project_review_id,
+            "will target app-to-app matching".to_string(),
+        )
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
 
     program
         .review()
-        .record_idea_guidance(
-            idea_id,
-            IdeaGuidanceOutcome::Proceed,
+        .record_project_guidance(
+            project_review_id,
+            ProjectGuidanceOutcome::Proceed,
             "valuable if it proves demand with one consuming app".to_string(),
         )
         .with_actor_id(CAROL.into())
@@ -510,15 +560,15 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
 
     let idea = program
         .review()
-        .get_idea_review_summary(idea_id)
+        .get_project_review_summary(project_review_id)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(idea.status, IdeaReviewStatus::GuidanceRecorded);
+    assert_eq!(idea.status, ProjectReviewStatus::GuidanceRecorded);
     assert_eq!(idea.comment_count, 2);
     assert_eq!(
         idea.latest_guidance_outcome,
-        Some(IdeaGuidanceOutcome::Proceed)
+        Some(ProjectGuidanceOutcome::Proceed)
     );
 
     program
@@ -529,7 +579,7 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
         .unwrap();
     program
         .review()
-        .link_idea_review_to_application(idea_id, STUB_PROGRAM_ALPHA.into())
+        .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
@@ -549,18 +599,18 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
 
     program
         .review()
-        .link_idea_review_to_application(idea_id, STUB_PROGRAM_BETA.into())
+        .link_project_review_to_application(project_review_id, STUB_PROGRAM_BETA.into())
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
 
     let linked = program
         .review()
-        .get_idea_review_summary(idea_id)
+        .get_project_review_summary(project_review_id)
         .await
         .unwrap()
         .unwrap();
-    assert_eq!(linked.status, IdeaReviewStatus::Linked);
+    assert_eq!(linked.status, ProjectReviewStatus::Linked);
     assert_eq!(linked.linked_program_id, Some(STUB_PROGRAM_BETA.into()));
 
     program
@@ -576,7 +626,7 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
 
     let replaced = program
         .review()
-        .get_idea_review_summary(idea_id)
+        .get_project_review_summary(project_review_id)
         .await
         .unwrap()
         .unwrap();
@@ -584,7 +634,7 @@ async fn idea_review_guidance_link_and_program_replacement_preserve_predeploy_th
 }
 
 #[tokio::test]
-async fn idea_review_respects_paused_and_review_disabled_config() {
+async fn project_review_respects_paused_and_review_disabled_config() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -600,7 +650,7 @@ async fn idea_review_respects_paused_and_review_disabled_config() {
         .unwrap();
     program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/idea-agent".to_string(),
             idea: "agent that helps builders find valuable integrations".to_string(),
         })
@@ -618,7 +668,7 @@ async fn idea_review_respects_paused_and_review_disabled_config() {
         .unwrap();
     program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/idea-agent".to_string(),
             idea: "agent that helps builders find valuable integrations".to_string(),
         })
@@ -628,14 +678,14 @@ async fn idea_review_respects_paused_and_review_disabled_config() {
 }
 
 #[tokio::test]
-async fn idea_review_rate_limits_repeated_builder_actions() {
+async fn project_review_rate_limits_repeated_builder_actions() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
     program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/idea-agent".to_string(),
             idea: "agent that helps builders find valuable integrations".to_string(),
         })
@@ -644,7 +694,7 @@ async fn idea_review_rate_limits_repeated_builder_actions() {
         .unwrap();
     program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/another-idea-agent".to_string(),
             idea: "another valuable integration idea".to_string(),
         })
@@ -654,7 +704,7 @@ async fn idea_review_rate_limits_repeated_builder_actions() {
 }
 
 #[tokio::test]
-async fn idea_review_rejects_invalid_inputs_and_bad_links() {
+async fn project_review_rejects_invalid_inputs_and_bad_links() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -675,7 +725,7 @@ async fn idea_review_rejects_invalid_inputs_and_bad_links() {
 
     program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://gitlab.com/alice/idea-agent".to_string(),
             idea: "agent idea".to_string(),
         })
@@ -684,7 +734,7 @@ async fn idea_review_rejects_invalid_inputs_and_bad_links() {
         .unwrap_err();
     program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/idea-agent".to_string(),
             idea: String::new(),
         })
@@ -692,9 +742,9 @@ async fn idea_review_rejects_invalid_inputs_and_bad_links() {
         .await
         .unwrap_err();
 
-    let idea_id = program
+    let project_review_id = program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/idea-agent".to_string(),
             idea: "agent that helps builders find valuable integrations".to_string(),
         })
@@ -704,15 +754,15 @@ async fn idea_review_rejects_invalid_inputs_and_bad_links() {
 
     program
         .review()
-        .post_idea_reviewer_comment(idea_id, "self review".to_string())
+        .post_project_reviewer_comment(project_review_id, "self review".to_string())
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
     program
         .review()
-        .record_idea_guidance(
+        .record_project_guidance(
             999,
-            IdeaGuidanceOutcome::Proceed,
+            ProjectGuidanceOutcome::Proceed,
             "unknown idea".to_string(),
         )
         .with_actor_id(CAROL.into())
@@ -727,20 +777,36 @@ async fn idea_review_rejects_invalid_inputs_and_bad_links() {
         .unwrap();
     program
         .review()
-        .link_idea_review_to_application(idea_id, STUB_PROGRAM_ALPHA.into())
+        .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .review()
+        .record_project_guidance(
+            project_review_id,
+            ProjectGuidanceOutcome::Proceed,
+            "ready to build".to_string(),
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
     program
         .review()
-        .link_idea_review_to_application(idea_id, STUB_PROGRAM_ALPHA.into())
+        .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
 
-    let second_idea_id = program
+    let second_project_review_id = program
         .review()
-        .submit_idea_review(SubmitIdeaReviewReq {
+        .submit_project_review(SubmitProjectReviewReq {
             github_url: "https://github.com/alice/idea-agent-v2".to_string(),
             idea: "new deployment still needs the same guidance".to_string(),
         })
@@ -759,14 +825,14 @@ async fn idea_review_rejects_invalid_inputs_and_bad_links() {
         .unwrap();
     program
         .review()
-        .link_idea_review_to_application(second_idea_id, STUB_PROGRAM_ALPHA.into())
+        .link_project_review_to_application(second_project_review_id, STUB_PROGRAM_ALPHA.into())
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
 }
 
 #[tokio::test]
-async fn idea_review_pagination_cursor_resumes_after_last_returned_idea() {
+async fn project_review_pagination_cursor_resumes_after_last_returned_idea() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -775,7 +841,7 @@ async fn idea_review_pagination_cursor_resumes_after_last_returned_idea() {
     for idx in 1..=3 {
         program
             .review()
-            .submit_idea_review(SubmitIdeaReviewReq {
+            .submit_project_review(SubmitProjectReviewReq {
                 github_url: format!("https://github.com/alice/idea-agent-{idx}"),
                 idea: format!("valuable integration idea {idx}"),
             })
@@ -786,14 +852,14 @@ async fn idea_review_pagination_cursor_resumes_after_last_returned_idea() {
 
     let first_page = program
         .review()
-        .list_idea_review_summaries(None, 2)
+        .list_project_review_summaries(None, 2)
         .await
         .unwrap();
     assert_eq!(
         first_page
             .items
             .iter()
-            .map(|idea| idea.idea_id)
+            .map(|idea| idea.project_review_id)
             .collect::<Vec<_>>(),
         vec![1, 2]
     );
@@ -801,14 +867,14 @@ async fn idea_review_pagination_cursor_resumes_after_last_returned_idea() {
 
     let second_page = program
         .review()
-        .list_idea_review_summaries(first_page.next_cursor, 2)
+        .list_project_review_summaries(first_page.next_cursor, 2)
         .await
         .unwrap();
     assert_eq!(
         second_page
             .items
             .iter()
-            .map(|idea| idea.idea_id)
+            .map(|idea| idea.project_review_id)
             .collect::<Vec<_>>(),
         vec![3]
     );

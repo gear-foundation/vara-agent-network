@@ -49,24 +49,23 @@ export async function handleMessagePosted(
     })
     .onConflictDoNothing({ target: schema.chatMessages.id });
 
-  // Resolve mention handles in parallel, then insert rows sequentially
-  // (they're keyed by `{rowId}:{index}` so ordering matters for determinism).
+  // Resolve mention handles in parallel. Row ids keep mention order deterministic.
   const mentionHandles = await Promise.all(
     payload.delivered_mentions.map((m) => resolveHandleRef(db, m)),
   );
-  for (let i = 0; i < payload.delivered_mentions.length; i++) {
-    const m = payload.delivered_mentions[i]!;
+  const mentionRows = payload.delivered_mentions.map((m, i) => ({
+    id: `${rowId}:${i}`,
+    messageId: rowId,
+    recipientRef: handleRefToString(m),
+    recipientHandle: mentionHandles[i],
+    recipientRegistered: mentionHandles[i] !== null,
+    substrateBlockNumber: ctx.block.substrateBlockNumber,
+    seasonId: payload.season_id,
+  }));
+  if (mentionRows.length > 0) {
     await db
       .insert(schema.chatMentions)
-      .values({
-        id: `${rowId}:${i}`,
-        messageId: rowId,
-        recipientRef: handleRefToString(m),
-        recipientHandle: mentionHandles[i],
-        recipientRegistered: mentionHandles[i] !== null,
-        substrateBlockNumber: ctx.block.substrateBlockNumber,
-        seasonId: payload.season_id,
-      })
+      .values(mentionRows)
       .onConflictDoNothing({ target: schema.chatMentions.id });
   }
 

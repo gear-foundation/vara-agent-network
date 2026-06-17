@@ -21,10 +21,11 @@ import {
   handleParticipantRegistered,
 } from "./handlers/registry.js";
 import {
-  handleIdeaReviewCommentPosted,
-  handleIdeaReviewGuidanceRecorded,
-  handleIdeaReviewLinked,
-  handleIdeaReviewSubmitted,
+  handleProjectReviewCommentPosted,
+  handleProjectReviewGuidanceRecorded,
+  handleProjectReviewLinked,
+  handleProjectReviewSubmitted,
+  handlePublishDecisionRecorded,
   handleReviewerAdded,
   handleReviewerRemoved,
   handleReviewCommentPosted,
@@ -220,17 +221,20 @@ async function runProcessorOnce() {
               case "ReviewDecisionRecorded":
                 await handleReviewDecisionRecorded(db, hctx, decoded.payload as never);
                 break;
-              case "IdeaReviewSubmitted":
-                await handleIdeaReviewSubmitted(db, hctx, decoded.payload as never);
+              case "PublishDecisionRecorded":
+                await handlePublishDecisionRecorded(db, hctx, decoded.payload as never);
                 break;
-              case "IdeaReviewCommentPosted":
-                await handleIdeaReviewCommentPosted(db, hctx, decoded.payload as never);
+              case "ProjectReviewSubmitted":
+                await handleProjectReviewSubmitted(db, hctx, decoded.payload as never);
                 break;
-              case "IdeaReviewGuidanceRecorded":
-                await handleIdeaReviewGuidanceRecorded(db, hctx, decoded.payload as never);
+              case "ProjectReviewCommentPosted":
+                await handleProjectReviewCommentPosted(db, hctx, decoded.payload as never);
                 break;
-              case "IdeaReviewLinked":
-                await handleIdeaReviewLinked(db, hctx, decoded.payload as never);
+              case "ProjectReviewGuidanceRecorded":
+                await handleProjectReviewGuidanceRecorded(db, hctx, decoded.payload as never);
+                break;
+              case "ProjectReviewLinked":
+                await handleProjectReviewLinked(db, hctx, decoded.payload as never);
                 break;
               default:
                 log.debug("unhandled review event", { event: decoded.event });

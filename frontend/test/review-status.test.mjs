@@ -20,6 +20,6 @@ test('review status labels cover public badge states', () => {
   for (const status of statuses) {
     assert.match(source, new RegExp(`${status}:`))
   }
-  assert.match(source, /ApprovedForListing: 'Approved for listing'/)
-  assert.match(source, /RevisionRequested: 'Revision requested'/)
+  assert.match(source, /ApprovedForListing: 'Published'/)
+  assert.match(source, /RevisionRequested: 'Changes requested'/)
 })

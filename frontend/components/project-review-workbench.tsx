@@ -1,6 +1,7 @@
 'use client'
 
 import { useEffect, useState } from 'react'
+import type { ReactNode } from 'react'
 import Link from 'next/link'
 import { ExternalLink, Link2, MessageSquare, ShieldCheck } from 'lucide-react'
 import { formatTime, shortAddress } from '@/components/review-ui-helpers'
@@ -10,41 +11,40 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentUserState } from '@/hooks/use-current-user-state'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
-import { getIdeaReviewDetail, type IdeaReviewDetail, type IdeaReviewEvent } from '@/lib/indexer-client'
+import { getProjectReviewDetail, type ProjectReviewDetail, type ProjectReviewEvent } from '@/lib/indexer-client'
 import {
   isReviewer,
-  linkIdeaReviewToApplication,
-  ownerIdeaReply,
-  postIdeaReviewerComment,
-  recordIdeaGuidance,
-  type IdeaGuidanceOutcome,
+  linkProjectReviewToApplication,
+  ownerProjectReply,
+  postProjectReviewerComment,
+  recordProjectGuidance,
+  type ProjectGuidanceOutcome,
 } from '@/lib/vara-program'
 
-const OUTCOMES: Array<{ value: IdeaGuidanceOutcome; label: string }> = [
+const OUTCOMES: Array<{ value: ProjectGuidanceOutcome; label: string }> = [
   { value: 'Proceed', label: 'Proceed' },
-  { value: 'Refine', label: 'Refine' },
-  { value: 'NeedsEvidence', label: 'Needs evidence' },
+  { value: 'NeedsChanges', label: 'Needs changes' },
   { value: 'NotRecommended', label: 'Not recommended' },
 ]
 
-function eventTitle(event: IdeaReviewEvent) {
+function eventTitle(event: ProjectReviewEvent) {
   if (event.kind === 'guidance') return `Guidance: ${event.outcome}`
   if (event.kind === 'link') return 'Linked application'
   return event.authorRole === 'Reviewer' ? 'Reviewer comment' : 'Owner reply'
 }
 
-export function IdeaReviewWorkbench({
-  ideaId,
+export function ProjectReviewWorkbench({
+  projectReviewId,
   initialDetail,
 }: {
-  ideaId: string
-  initialDetail: IdeaReviewDetail
+  projectReviewId: string
+  initialDetail: ProjectReviewDetail
 }) {
   const [detail, setDetail] = useState(initialDetail)
   const [commentText, setCommentText] = useState('')
   const [replyText, setReplyText] = useState('')
   const [guidanceText, setGuidanceText] = useState('')
-  const [outcome, setOutcome] = useState<IdeaGuidanceOutcome>('Proceed')
+  const [outcome, setOutcome] = useState<ProjectGuidanceOutcome>('Proceed')
   const [programId, setProgramId] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -76,7 +76,7 @@ export function IdeaReviewWorkbench({
   }, [account])
 
   async function refresh() {
-    setDetail(await getIdeaReviewDetail(ideaId))
+    setDetail(await getProjectReviewDetail(projectReviewId))
   }
 
   async function run(label: string, action: () => Promise<unknown>) {
@@ -99,8 +99,8 @@ export function IdeaReviewWorkbench({
   if (!summary) {
     return (
       <div className="review-empty">
-        <h1>Idea review not found</h1>
-        <Link href="/dashboard/idea-reviews">Back to idea queue</Link>
+        <h1>Project Review not found</h1>
+        <Link href="/dashboard/project-reviews">Back to project queue</Link>
       </div>
     )
   }
@@ -108,8 +108,8 @@ export function IdeaReviewWorkbench({
   return (
     <div className="review-workbench">
       <aside className="review-panel review-dossier">
-        <div className="review-panel__kicker">Idea review</div>
-        <h1>Idea #{summary.ideaId}</h1>
+        <div className="review-panel__kicker">Project Review</div>
+        <h1>Project Review #{summary.projectReviewId}</h1>
         <div className="review-dossier__meta">
           <span>{summary.status}</span>
           <span>{summary.commentCount} comments</span>
@@ -177,43 +177,39 @@ export function IdeaReviewWorkbench({
 
       <aside className="review-panel review-actions">
         <div className="review-panel__kicker">Actions</div>
-        <h2>Idea controls</h2>
+        <h2>Project controls</h2>
         <p>All comments and guidance are public. Do not post secrets, private coaching notes, or PII.</p>
         {error ? <div className="review-error">{error}</div> : null}
 
         {isOwner ? (
           <>
-            <div className="review-action-box">
-              <h3>Owner reply</h3>
+            <ActionBox title="Owner reply">
               <Textarea value={replyText} onChange={(event) => setReplyText(event.target.value)} />
-              <Button disabled={!!busy || !replyText.trim()} onClick={() => void run('reply', () => ownerIdeaReply(account!, ideaId, replyText.trim()))}>
+              <Button disabled={!!busy || !replyText.trim()} onClick={() => void run('reply', () => ownerProjectReply(account!, projectReviewId, replyText.trim()))}>
                 Reply
               </Button>
-            </div>
+            </ActionBox>
             {!summary.linkedProgramId ? (
-              <div className="review-action-box">
-                <h3>Link deployed app</h3>
+              <ActionBox title="Link deployed app">
                 <Input placeholder="0x..." value={programId} onChange={(event) => setProgramId(event.target.value)} />
-                <Button disabled={!!busy || !programId.trim()} onClick={() => void run('link', () => linkIdeaReviewToApplication(account!, ideaId, programId.trim()))}>
+                <Button disabled={!!busy || !programId.trim()} onClick={() => void run('link', () => linkProjectReviewToApplication(account!, projectReviewId, programId.trim()))}>
                   <Link2 className="h-4 w-4" /> Link app
                 </Button>
-              </div>
+              </ActionBox>
             ) : null}
           </>
         ) : null}
 
         {reviewer ? (
           <>
-            <div className="review-action-box">
-              <h3>Reviewer comment</h3>
+            <ActionBox title="Reviewer comment">
               <Textarea value={commentText} onChange={(event) => setCommentText(event.target.value)} />
-              <Button disabled={!!busy || !commentText.trim()} onClick={() => void run('comment', () => postIdeaReviewerComment(account!, ideaId, commentText.trim()))}>
+              <Button disabled={!!busy || !commentText.trim()} onClick={() => void run('comment', () => postProjectReviewerComment(account!, projectReviewId, commentText.trim()))}>
                 <ShieldCheck className="h-4 w-4" /> Comment
               </Button>
-            </div>
-            <div className="review-action-box">
-              <h3>Record guidance</h3>
-              <Select value={outcome} onValueChange={(value) => setOutcome(value as IdeaGuidanceOutcome)}>
+            </ActionBox>
+            <ActionBox title="Record guidance">
+              <Select value={outcome} onValueChange={(value) => setOutcome(value as ProjectGuidanceOutcome)}>
                 <SelectTrigger>
                   <SelectValue />
                 </SelectTrigger>
@@ -224,17 +220,26 @@ export function IdeaReviewWorkbench({
                 </SelectContent>
               </Select>
               <Textarea value={guidanceText} onChange={(event) => setGuidanceText(event.target.value)} />
-              <Button disabled={!!busy || !guidanceText.trim()} onClick={() => void run('guidance', () => recordIdeaGuidance(account!, ideaId, outcome, guidanceText.trim()))}>
+              <Button disabled={!!busy || !guidanceText.trim()} onClick={() => void run('guidance', () => recordProjectGuidance(account!, projectReviewId, outcome, guidanceText.trim()))}>
                 Record guidance
               </Button>
-            </div>
+            </ActionBox>
           </>
         ) : null}
 
         {!isOwner && !reviewer ? (
-          <div className="review-empty">Connect as the owner or an active reviewer to act on this idea.</div>
+          <div className="review-empty">Connect as the owner or an active reviewer to act on this project review.</div>
         ) : null}
       </aside>
+    </div>
+  )
+}
+
+function ActionBox({ title, children }: { title: string, children: ReactNode }) {
+  return (
+    <div className="review-action-box">
+      <h3>{title}</h3>
+      {children}
     </div>
   )
 }

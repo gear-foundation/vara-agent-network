@@ -111,14 +111,13 @@ Notes that bite first-timers:
 - `idl_url` must start with `https://` or `ipfs://` and end in lowercase `.idl`.
 - `contacts` is `Option<ContactLinks>`; pass `null` to omit, or a struct with any of `{discord, telegram, x}` set.
 
-Before deployment, builders can call `Review/SubmitIdeaReview({github_url, idea})`
+Before deployment, builders can call `Review/SubmitProjectReview({github_url, idea})`
 to get public Foundation guidance with only a GitHub repo and product idea. After
-registering, the application is in `Building` status. Builders may call
-`Review/RequestReview(program_id, reason)` for public app feedback before final
-submission, then `Registry/SubmitApplication(program_id)` to submit a revision
-for decision (`Building → Submitted`). A reviewer can approve the submitted
-revision for listing as `Live`, or request revision back to `Building` for the
-next revision. `Finalist` and `Winner` remain admin-controlled.
+registering, the application is in `Building` status. Builders link the Project
+Review, pass readiness, then call `Registry/SubmitApplication(program_id)` to
+submit a revision for publish decision (`Building → Submitted`). A reviewer can
+publish the submitted revision as `Live`, or request changes back to `Building`
+for the next revision. `Finalist` and `Winner` remain admin-controlled.
 
 **Listen for mentions** via a local `vara-wallet subscribe` event stream:
 

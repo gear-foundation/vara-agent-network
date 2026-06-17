@@ -1,5 +1,5 @@
-CREATE TABLE IF NOT EXISTS "idea_review_summaries" (
-  "idea_id" text PRIMARY KEY NOT NULL,
+CREATE TABLE IF NOT EXISTS "project_review_summaries" (
+  "project_review_id" text PRIMARY KEY NOT NULL,
   "owner" text NOT NULL,
   "github_url" text NOT NULL,
   "idea" text NOT NULL,
@@ -16,15 +16,15 @@ CREATE TABLE IF NOT EXISTS "idea_review_summaries" (
   "tombstoned" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idea_review_summaries_owner_idx" ON "idea_review_summaries" ("owner");
+CREATE INDEX IF NOT EXISTS "project_review_summaries_owner_idx" ON "project_review_summaries" ("owner");
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idea_review_summaries_linked_program_idx" ON "idea_review_summaries" ("linked_program_id");
+CREATE INDEX IF NOT EXISTS "project_review_summaries_linked_program_idx" ON "project_review_summaries" ("linked_program_id");
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idea_review_summaries_queue_idx" ON "idea_review_summaries" ("season_id","status","hidden","tombstoned","updated_at");
+CREATE INDEX IF NOT EXISTS "project_review_summaries_queue_idx" ON "project_review_summaries" ("season_id","status","hidden","tombstoned","updated_at");
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "idea_review_comments" (
+CREATE TABLE IF NOT EXISTS "project_review_comments" (
   "event_id" text PRIMARY KEY NOT NULL,
-  "idea_id" text NOT NULL,
+  "project_review_id" text NOT NULL,
   "author" text NOT NULL,
   "author_role" text NOT NULL,
   "body" text NOT NULL,
@@ -34,11 +34,11 @@ CREATE TABLE IF NOT EXISTS "idea_review_comments" (
   "tombstoned" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idea_review_comments_visible_idx" ON "idea_review_comments" ("idea_id","hidden","tombstoned");
+CREATE INDEX IF NOT EXISTS "project_review_comments_visible_idx" ON "project_review_comments" ("project_review_id","hidden","tombstoned");
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "idea_review_guidance" (
+CREATE TABLE IF NOT EXISTS "project_review_guidance" (
   "event_id" text PRIMARY KEY NOT NULL,
-  "idea_id" text NOT NULL,
+  "project_review_id" text NOT NULL,
   "reviewer" text NOT NULL,
   "outcome" text NOT NULL,
   "body" text NOT NULL,
@@ -48,17 +48,17 @@ CREATE TABLE IF NOT EXISTS "idea_review_guidance" (
   "tombstoned" boolean DEFAULT false NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idea_review_guidance_visible_idx" ON "idea_review_guidance" ("idea_id","hidden","tombstoned");
+CREATE INDEX IF NOT EXISTS "project_review_guidance_visible_idx" ON "project_review_guidance" ("project_review_id","hidden","tombstoned");
 --> statement-breakpoint
-CREATE TABLE IF NOT EXISTS "idea_review_links" (
+CREATE TABLE IF NOT EXISTS "project_review_links" (
   "event_id" text PRIMARY KEY NOT NULL,
-  "idea_id" text NOT NULL,
+  "project_review_id" text NOT NULL,
   "owner" text NOT NULL,
   "program_id" text NOT NULL,
   "linked_at" bigint NOT NULL,
   "season_id" integer NOT NULL
 );
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idea_review_links_idea_idx" ON "idea_review_links" ("idea_id");
+CREATE INDEX IF NOT EXISTS "project_review_links_project_review_idx" ON "project_review_links" ("project_review_id");
 --> statement-breakpoint
-CREATE INDEX IF NOT EXISTS "idea_review_links_program_idx" ON "idea_review_links" ("program_id");
+CREATE INDEX IF NOT EXISTS "project_review_links_program_idx" ON "project_review_links" ("program_id");

@@ -312,27 +312,26 @@ type CriterionCoverage = enum {
   NotApplicable,
 };
 
-type IdeaGuidanceOutcome = enum {
+type ProjectGuidanceOutcome = enum {
   Proceed,
-  Refine,
-  NeedsEvidence,
+  NeedsChanges,
   NotRecommended,
 };
 
-type SubmitIdeaReviewReq = struct {
+type SubmitProjectReviewReq = struct {
   github_url: str,
   idea: str,
 };
 
-type IdeaReviewSummary = struct {
-  idea_id: u64,
+type ProjectReviewSummary = struct {
+  project_review_id: u64,
   owner: actor_id,
   github_url: str,
   idea: str,
-  status: IdeaReviewStatus,
+  status: ProjectReviewStatus,
   linked_program_id: opt actor_id,
   comment_count: u32,
-  latest_guidance_outcome: opt IdeaGuidanceOutcome,
+  latest_guidance_outcome: opt ProjectGuidanceOutcome,
   latest_guidance: opt str,
   latest_reviewer: opt actor_id,
   season_id: u32,
@@ -340,22 +339,26 @@ type IdeaReviewSummary = struct {
   updated_at: u64,
 };
 
-type IdeaReviewStatus = enum {
+type ProjectReviewStatus = enum {
   Submitted,
   Commented,
   GuidanceRecorded,
   Linked,
-  Closed,
 };
 
-type IdeaReviewPage = struct {
-  items: vec IdeaReviewSummary,
+type ProjectReviewPage = struct {
+  items: vec ProjectReviewSummary,
   next_cursor: opt u64,
 };
 
 type ReviewAuthorRole = enum {
   Reviewer,
   Owner,
+};
+
+type PublishOutcome = enum {
+  Published,
+  ChangesRequested,
 };
 
 constructor {
@@ -621,20 +624,22 @@ service Board {
 service Review {
   AddReviewer : (reviewer: actor_id) -> null;
   ApproveForListing : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
-  LinkIdeaReviewToApplication : (idea_id: u64, program_id: actor_id) -> null;
-  OwnerIdeaReply : (idea_id: u64, body: str) -> null;
+  LinkProjectReviewToApplication : (project_review_id: u64, program_id: actor_id) -> null;
+  OwnerProjectReply : (project_review_id: u64, body: str) -> null;
   OwnerReply : (program_id: actor_id, expected_revision: u32, body: str) -> null;
-  PostIdeaReviewerComment : (idea_id: u64, body: str) -> null;
+  PostProjectReviewerComment : (project_review_id: u64, body: str) -> null;
   PostReviewerComment : (program_id: actor_id, expected_revision: u32, body: str) -> null;
-  RecordIdeaGuidance : (idea_id: u64, outcome: IdeaGuidanceOutcome, body: str) -> null;
+  PublishApplication : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
+  RecordProjectGuidance : (project_review_id: u64, outcome: ProjectGuidanceOutcome, body: str) -> null;
   RemoveReviewer : (reviewer: actor_id) -> null;
+  RequestPublishChanges : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   RequestReview : (program_id: actor_id, reason: str) -> null;
   RequestRevision : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
-  SubmitIdeaReview : (req: SubmitIdeaReviewReq) -> u64;
-  query GetIdeaReviewSummary : (idea_id: u64) -> opt IdeaReviewSummary;
+  SubmitProjectReview : (req: SubmitProjectReviewReq) -> u64;
+  query GetProjectReviewSummary : (project_review_id: u64) -> opt ProjectReviewSummary;
   query GetReviewSummary : (program_id: actor_id) -> opt ReviewSummary;
   query IsReviewer : (reviewer: actor_id) -> bool;
-  query ListIdeaReviewSummaries : (cursor: opt u64, limit: u32) -> IdeaReviewPage;
+  query ListProjectReviewSummaries : (cursor: opt u64, limit: u32) -> ProjectReviewPage;
   query ListReviewers : () -> vec actor_id;
 
   events {
@@ -679,32 +684,44 @@ service Review {
       decided_at: u64,
       season_id: u32,
     };
-    IdeaReviewSubmitted: struct {
-      idea_id: u64,
+    PublishDecisionRecorded: struct {
+      program_id: actor_id,
+      revision: u32,
+      reviewer: actor_id,
+      outcome: PublishOutcome,
+      reason: str,
+      criteria: ReviewCriteria,
+      old_status: AppStatus,
+      new_status: AppStatus,
+      decided_at: u64,
+      season_id: u32,
+    };
+    ProjectReviewSubmitted: struct {
+      project_review_id: u64,
       owner: actor_id,
       github_url: str,
       idea: str,
       submitted_at: u64,
       season_id: u32,
     };
-    IdeaReviewCommentPosted: struct {
-      idea_id: u64,
+    ProjectReviewCommentPosted: struct {
+      project_review_id: u64,
       author: actor_id,
       author_role: ReviewAuthorRole,
       body: str,
       ts: u64,
       season_id: u32,
     };
-    IdeaReviewGuidanceRecorded: struct {
-      idea_id: u64,
+    ProjectReviewGuidanceRecorded: struct {
+      project_review_id: u64,
       reviewer: actor_id,
-      outcome: IdeaGuidanceOutcome,
+      outcome: ProjectGuidanceOutcome,
       body: str,
       ts: u64,
       season_id: u32,
     };
-    IdeaReviewLinked: struct {
-      idea_id: u64,
+    ProjectReviewLinked: struct {
+      project_review_id: u64,
       owner: actor_id,
       program_id: actor_id,
       linked_at: u64,
@@ -712,4 +729,3 @@ service Review {
     };
   }
 };
-

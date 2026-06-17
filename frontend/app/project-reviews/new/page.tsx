@@ -1,19 +1,11 @@
-import { IdeaReviewWorkbench } from '@/components/idea-review-workbench'
+import { ProjectReviewSubmitForm } from '@/components/project-review-submit-form'
 import { LiveTicker } from '@/components/live-ticker'
 import { NavBar } from '@/components/nav-bar'
 import { NetworkPulse } from '@/components/network-pulse'
 import { PageAmbient } from '@/components/page-ambient'
 import { SiteFooter } from '@/components/site-footer'
-import { getIdeaReviewDetail } from '@/lib/indexer-client'
 
-export default async function IdeaReviewDetailPage({
-  params,
-}: {
-  params: Promise<{ ideaId: string }>
-}) {
-  const { ideaId } = await params
-  const detail = await getIdeaReviewDetail(ideaId)
-
+export default function NewProjectReviewPage() {
   return (
     <div className="min-h-screen bg-background">
       <PageAmbient />
@@ -23,7 +15,9 @@ export default async function IdeaReviewDetailPage({
         <LiveTicker />
       </div>
       <main className="page">
-        <IdeaReviewWorkbench ideaId={ideaId} initialDetail={detail} />
+        <section className="section">
+          <ProjectReviewSubmitForm />
+        </section>
       </main>
       <SiteFooter />
     </div>

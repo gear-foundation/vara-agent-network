@@ -360,6 +360,7 @@ async fn submitted_application_cannot_be_patched_but_owner_can_delete() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_ready_project_review(&program, ALICE, "submitted-app", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
         .submit_application(STUB_PROGRAM_ALPHA.into())
@@ -437,6 +438,7 @@ async fn admin_can_delete_submitted_application() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_ready_project_review(&program, ALICE, "admin-delete", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
         .submit_application(STUB_PROGRAM_ALPHA.into())
@@ -662,6 +664,7 @@ async fn owner_can_replace_after_revision_request_returns_to_building() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_ready_project_review(&program, ALICE, "revision-replace", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
         .submit_application(STUB_PROGRAM_ALPHA.into())
@@ -915,6 +918,7 @@ async fn replacement_rejects_submitted_live_and_award_statuses() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_ready_project_review(&program, ALICE, "submitted-reject", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
         .submit_application(STUB_PROGRAM_ALPHA.into())
@@ -1201,6 +1205,7 @@ async fn discover_status_filter_tracks_review_and_admin_changes() {
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap();
+    link_ready_project_review(&program, ALICE, "indexed-status", STUB_PROGRAM_ALPHA).await;
 
     program
         .registry()

@@ -251,10 +251,10 @@ export const reviewSummaries = pgTable(
   }),
 );
 
-export const ideaReviewSummaries = pgTable(
-  "idea_review_summaries",
+export const projectReviewSummaries = pgTable(
+  "project_review_summaries",
   {
-    ideaId: text("idea_id").primaryKey(),
+    projectReviewId: text("project_review_id").primaryKey(),
     owner: text("owner").notNull(),
     githubUrl: text("github_url").notNull(),
     idea: text("idea").notNull(),
@@ -271,9 +271,9 @@ export const ideaReviewSummaries = pgTable(
     tombstoned: boolean("tombstoned").notNull().default(false),
   },
   (t) => ({
-    ownerIdx: index("idea_review_summaries_owner_idx").on(t.owner),
-    linkedProgramIdx: index("idea_review_summaries_linked_program_idx").on(t.linkedProgramId),
-    queueIdx: index("idea_review_summaries_queue_idx").on(
+    ownerIdx: index("project_review_summaries_owner_idx").on(t.owner),
+    linkedProgramIdx: index("project_review_summaries_linked_program_idx").on(t.linkedProgramId),
+    queueIdx: index("project_review_summaries_queue_idx").on(
       t.seasonId,
       t.status,
       t.hidden,
@@ -283,11 +283,11 @@ export const ideaReviewSummaries = pgTable(
   }),
 );
 
-export const ideaReviewComments = pgTable(
-  "idea_review_comments",
+export const projectReviewComments = pgTable(
+  "project_review_comments",
   {
     eventId: text("event_id").primaryKey(),
-    ideaId: text("idea_id").notNull(),
+    projectReviewId: text("project_review_id").notNull(),
     author: text("author").notNull(),
     authorRole: text("author_role").notNull(),
     body: text("body").notNull(),
@@ -297,15 +297,15 @@ export const ideaReviewComments = pgTable(
     tombstoned: boolean("tombstoned").notNull().default(false),
   },
   (t) => ({
-    ideaVisibleIdx: index("idea_review_comments_visible_idx").on(t.ideaId, t.hidden, t.tombstoned),
+    projectReviewVisibleIdx: index("project_review_comments_visible_idx").on(t.projectReviewId, t.hidden, t.tombstoned),
   }),
 );
 
-export const ideaReviewGuidance = pgTable(
-  "idea_review_guidance",
+export const projectReviewGuidance = pgTable(
+  "project_review_guidance",
   {
     eventId: text("event_id").primaryKey(),
-    ideaId: text("idea_id").notNull(),
+    projectReviewId: text("project_review_id").notNull(),
     reviewer: text("reviewer").notNull(),
     outcome: text("outcome").notNull(),
     body: text("body").notNull(),
@@ -315,23 +315,23 @@ export const ideaReviewGuidance = pgTable(
     tombstoned: boolean("tombstoned").notNull().default(false),
   },
   (t) => ({
-    ideaVisibleIdx: index("idea_review_guidance_visible_idx").on(t.ideaId, t.hidden, t.tombstoned),
+    projectReviewVisibleIdx: index("project_review_guidance_visible_idx").on(t.projectReviewId, t.hidden, t.tombstoned),
   }),
 );
 
-export const ideaReviewLinks = pgTable(
-  "idea_review_links",
+export const projectReviewLinks = pgTable(
+  "project_review_links",
   {
     eventId: text("event_id").primaryKey(),
-    ideaId: text("idea_id").notNull(),
+    projectReviewId: text("project_review_id").notNull(),
     owner: text("owner").notNull(),
     programId: text("program_id").notNull(),
     linkedAt: bigint("linked_at", { mode: "bigint" }).notNull(),
     seasonId: integer("season_id").notNull(),
   },
   (t) => ({
-    ideaIdx: index("idea_review_links_idea_idx").on(t.ideaId),
-    programIdx: index("idea_review_links_program_idx").on(t.programId),
+    projectReviewIdx: index("project_review_links_project_review_idx").on(t.projectReviewId),
+    programIdx: index("project_review_links_program_idx").on(t.programId),
   }),
 );
 

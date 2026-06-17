@@ -119,8 +119,8 @@ type ReviewDecisionRow = {
   tombstoned: boolean
 }
 
-type IdeaReviewSummaryRow = {
-  ideaId: string
+type ProjectReviewSummaryRow = {
+  projectReviewId: string
   owner: string
   githubUrl: string
   idea: string
@@ -137,9 +137,9 @@ type IdeaReviewSummaryRow = {
   tombstoned: boolean
 }
 
-type IdeaReviewCommentRow = {
+type ProjectReviewCommentRow = {
   eventId: string
-  ideaId: string
+  projectReviewId: string
   author: string
   authorRole: string
   body: string
@@ -148,9 +148,9 @@ type IdeaReviewCommentRow = {
   tombstoned: boolean
 }
 
-type IdeaReviewGuidanceRow = {
+type ProjectReviewGuidanceRow = {
   eventId: string
-  ideaId: string
+  projectReviewId: string
   reviewer: string
   outcome: string
   body: string
@@ -159,9 +159,9 @@ type IdeaReviewGuidanceRow = {
   tombstoned: boolean
 }
 
-type IdeaReviewLinkRow = {
+type ProjectReviewLinkRow = {
   eventId: string
-  ideaId: string
+  projectReviewId: string
   owner: string
   programId: string
   linkedAt: string
@@ -408,8 +408,8 @@ export type ApplicationReviewDetail = {
   currentProgramId: string
 }
 
-export type IdeaReviewSummary = {
-  ideaId: string
+export type ProjectReviewSummary = {
+  projectReviewId: string
   owner: string
   githubUrl: string
   idea: string
@@ -424,7 +424,7 @@ export type IdeaReviewSummary = {
   updatedAt: string
 }
 
-export type IdeaReviewEvent =
+export type ProjectReviewEvent =
   | {
       id: string
       kind: 'comment'
@@ -449,9 +449,9 @@ export type IdeaReviewEvent =
       at: string
     }
 
-export type IdeaReviewDetail = {
-  summary: IdeaReviewSummary | null
-  events: IdeaReviewEvent[]
+export type ProjectReviewDetail = {
+  summary: ProjectReviewSummary | null
+  events: ProjectReviewEvent[]
 }
 
 export type MentionTarget = {
@@ -501,8 +501,8 @@ const REVIEW_SUMMARY_FIELDS = `
         updatedAt
 `
 
-const IDEA_REVIEW_SUMMARY_FIELDS = `
-        ideaId
+const PROJECT_REVIEW_SUMMARY_FIELDS = `
+        projectReviewId
         owner
         githubUrl
         idea
@@ -519,33 +519,32 @@ const IDEA_REVIEW_SUMMARY_FIELDS = `
         tombstoned
 `
 
-const IDEA_REVIEW_QUEUE_QUERY = `
-  query IdeaReviewQueue($first: Int!, $offset: Int!) {
-    ideaReviewSummaries: allIdeaReviewSummaries(
+const PROJECT_REVIEW_QUEUE_QUERY = `
+  query ProjectReviewQueue($first: Int!, $offset: Int!) {
+    projectReviewSummaries: allProjectReviewSummaries(
       first: $first
       offset: $offset
       orderBy: UPDATED_AT_DESC
       condition: { hidden: false, tombstoned: false }
     ) {
-      totalCount
       nodes {
-${IDEA_REVIEW_SUMMARY_FIELDS}
+${PROJECT_REVIEW_SUMMARY_FIELDS}
       }
     }
   }
 `
 
-const IDEA_REVIEW_DETAIL_QUERY = `
-  query IdeaReviewDetail($ideaId: String!) {
-    ideaReviewSummaries: allIdeaReviewSummaries(first: 1, condition: { ideaId: $ideaId, hidden: false, tombstoned: false }) {
+const PROJECT_REVIEW_DETAIL_QUERY = `
+  query ProjectReviewDetail($projectReviewId: String!) {
+    projectReviewSummaries: allProjectReviewSummaries(first: 1, condition: { projectReviewId: $projectReviewId, hidden: false, tombstoned: false }) {
       nodes {
-${IDEA_REVIEW_SUMMARY_FIELDS}
+${PROJECT_REVIEW_SUMMARY_FIELDS}
       }
     }
-    ideaReviewComments: allIdeaReviewComments(first: 250, orderBy: TS_ASC, condition: { ideaId: $ideaId, hidden: false, tombstoned: false }) {
+    projectReviewComments: allProjectReviewComments(first: 250, orderBy: TS_ASC, condition: { projectReviewId: $projectReviewId, hidden: false, tombstoned: false }) {
       nodes {
         eventId
-        ideaId
+        projectReviewId
         author
         authorRole
         body
@@ -554,10 +553,10 @@ ${IDEA_REVIEW_SUMMARY_FIELDS}
         tombstoned
       }
     }
-    ideaReviewGuidance: allIdeaReviewGuidances(first: 100, orderBy: TS_ASC, condition: { ideaId: $ideaId, hidden: false, tombstoned: false }) {
+    projectReviewGuidance: allProjectReviewGuidances(first: 100, orderBy: TS_ASC, condition: { projectReviewId: $projectReviewId, hidden: false, tombstoned: false }) {
       nodes {
         eventId
-        ideaId
+        projectReviewId
         reviewer
         outcome
         body
@@ -566,10 +565,10 @@ ${IDEA_REVIEW_SUMMARY_FIELDS}
         tombstoned
       }
     }
-    ideaReviewLinks: allIdeaReviewLinks(first: 20, orderBy: LINKED_AT_ASC, condition: { ideaId: $ideaId }) {
+    projectReviewLinks: allProjectReviewLinks(first: 20, orderBy: LINKED_AT_ASC, condition: { projectReviewId: $projectReviewId }) {
       nodes {
         eventId
-        ideaId
+        projectReviewId
         owner
         programId
         linkedAt
@@ -1184,15 +1183,15 @@ type ApplicationReviewHistoryQueryResult = Pick<
   'reviewRequests' | 'reviewComments' | 'reviewDecisions'
 >
 
-type IdeaReviewQueueQueryResult = {
-  ideaReviewSummaries: Connection<IdeaReviewSummaryRow>
+type ProjectReviewQueueQueryResult = {
+  projectReviewSummaries: Connection<ProjectReviewSummaryRow>
 }
 
-type IdeaReviewDetailQueryResult = {
-  ideaReviewSummaries: Connection<IdeaReviewSummaryRow>
-  ideaReviewComments: Connection<IdeaReviewCommentRow>
-  ideaReviewGuidance: Connection<IdeaReviewGuidanceRow>
-  ideaReviewLinks: Connection<IdeaReviewLinkRow>
+type ProjectReviewDetailQueryResult = {
+  projectReviewSummaries: Connection<ProjectReviewSummaryRow>
+  projectReviewComments: Connection<ProjectReviewCommentRow>
+  projectReviewGuidance: Connection<ProjectReviewGuidanceRow>
+  projectReviewLinks: Connection<ProjectReviewLinkRow>
 }
 
 const MAX_APPLICATION_REPLACEMENT_DEPTH = 8
@@ -1269,10 +1268,10 @@ function reviewSummaryMap(rows: ReviewSummaryRow[] | undefined) {
   return new Map((rows ?? []).map((row) => [row.programId.toLowerCase(), toReviewSummary(row)]))
 }
 
-function toIdeaReviewSummary(row: IdeaReviewSummaryRow | null | undefined): IdeaReviewSummary | null {
+function toProjectReviewSummary(row: ProjectReviewSummaryRow | null | undefined): ProjectReviewSummary | null {
   if (!row || row.hidden || row.tombstoned) return null
   return {
-    ideaId: row.ideaId,
+    projectReviewId: row.projectReviewId,
     owner: row.owner,
     githubUrl: row.githubUrl,
     idea: row.idea,
@@ -1288,9 +1287,9 @@ function toIdeaReviewSummary(row: IdeaReviewSummaryRow | null | undefined): Idea
   }
 }
 
-function ideaReviewEventsFromData(data: IdeaReviewDetailQueryResult): IdeaReviewEvent[] {
+function projectReviewEventsFromData(data: ProjectReviewDetailQueryResult): ProjectReviewEvent[] {
   return [
-    ...data.ideaReviewComments.nodes
+    ...data.projectReviewComments.nodes
       .filter((item) => !item.hidden && !item.tombstoned)
       .map((item) => ({
         id: item.eventId,
@@ -1300,7 +1299,7 @@ function ideaReviewEventsFromData(data: IdeaReviewDetailQueryResult): IdeaReview
         body: item.body,
         at: item.ts,
       })),
-    ...data.ideaReviewGuidance.nodes
+    ...data.projectReviewGuidance.nodes
       .filter((item) => !item.hidden && !item.tombstoned)
       .map((item) => ({
         id: item.eventId,
@@ -1310,7 +1309,7 @@ function ideaReviewEventsFromData(data: IdeaReviewDetailQueryResult): IdeaReview
         body: item.body,
         at: item.ts,
       })),
-    ...data.ideaReviewLinks.nodes.map((item) => ({
+    ...data.projectReviewLinks.nodes.map((item) => ({
       id: item.eventId,
       kind: 'link' as const,
       author: item.owner,
@@ -1971,9 +1970,8 @@ async function collectLineageReplacements(currentProgramId: string, seed: Applic
   const lineage = new Set<string>([currentProgramId.toLowerCase()])
   const queue = [currentProgramId.toLowerCase()]
 
-  while (queue.length > 0) {
-    const next = queue.shift()
-    if (!next) break
+  for (let i = 0; i < queue.length; i++) {
+    const next = queue[i]
     const inbound = await fetchReplacementsByNewProgramId(next)
     for (const replacement of inbound) {
       replacementsByEventId.set(replacement.eventId, replacement)
@@ -2047,25 +2045,25 @@ export async function getReviewQueue(): Promise<RegistryAgent[]> {
     .sort((a, b) => Number(b.reviewSummary?.updatedAt ?? 0) - Number(a.reviewSummary?.updatedAt ?? 0))
 }
 
-export async function getIdeaReviewQueue(first = 100, offset = 0): Promise<IdeaReviewSummary[]> {
-  const data = await fetchIndexerGraphql<IdeaReviewQueueQueryResult>(
-    IDEA_REVIEW_QUEUE_QUERY,
+export async function getProjectReviewQueue(first = 100, offset = 0): Promise<ProjectReviewSummary[]> {
+  const data = await fetchIndexerGraphql<ProjectReviewQueueQueryResult>(
+    PROJECT_REVIEW_QUEUE_QUERY,
     { first, offset },
   )
   if (!data) return []
-  return data.ideaReviewSummaries.nodes
-    .map(toIdeaReviewSummary)
-    .filter((item): item is IdeaReviewSummary => Boolean(item))
+  return data.projectReviewSummaries.nodes
+    .map(toProjectReviewSummary)
+    .filter((item): item is ProjectReviewSummary => Boolean(item))
 }
 
-export async function getIdeaReviewDetail(ideaId: string): Promise<IdeaReviewDetail> {
-  const data = await fetchIndexerGraphql<IdeaReviewDetailQueryResult>(
-    IDEA_REVIEW_DETAIL_QUERY,
-    { ideaId },
+export async function getProjectReviewDetail(projectReviewId: string): Promise<ProjectReviewDetail> {
+  const data = await fetchIndexerGraphql<ProjectReviewDetailQueryResult>(
+    PROJECT_REVIEW_DETAIL_QUERY,
+    { projectReviewId },
   )
   if (!data) return { summary: null, events: [] }
   return {
-    summary: toIdeaReviewSummary(data.ideaReviewSummaries.nodes[0]),
-    events: ideaReviewEventsFromData(data),
+    summary: toProjectReviewSummary(data.projectReviewSummaries.nodes[0]),
+    events: projectReviewEventsFromData(data),
   }
 }

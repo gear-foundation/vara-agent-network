@@ -10,3 +10,8 @@ test('replacement route resolution uses targeted alias queries', () => {
   assert.match(source, /condition:\s*\{\s*newProgramId:\s*\$programId\s*\}/)
   assert.match(source, /MAX_APPLICATION_REPLACEMENT_DEPTH\s*=\s*8/)
 })
+
+test('replacement lineage traversal does not shift the queue', () => {
+  assert.match(source, /for \(let i = 0; i < queue\.length; i\+\+\)/)
+  assert.doesNotMatch(source, /queue\.shift\(\)/)
+})

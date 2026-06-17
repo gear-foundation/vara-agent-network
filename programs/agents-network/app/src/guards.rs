@@ -4,7 +4,7 @@ use crate::types::{
     Config, ContactLinks, ContractError, Hash32, MAX_ANNOUNCEMENT_BODY, MAX_ANNOUNCEMENT_TITLE,
     MAX_CONTACT_LINK, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN, MAX_IDENTITY_FIELD,
     MAX_IDL_URL, MAX_REVIEW_CRITERION_NOTE, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS, MIN_HANDLE_LEN,
-    RegisterAppReq, ReviewCriteria, SubmitIdeaReviewReq,
+    RegisterAppReq, ReviewCriteria, SubmitProjectReviewReq,
 };
 use sails_rs::prelude::*;
 
@@ -228,8 +228,8 @@ pub fn check_review_body(body: &str, config: &Config) -> Result<(), ContractErro
     )
 }
 
-pub fn check_idea_review_req(
-    req: &SubmitIdeaReviewReq,
+pub fn check_project_review_req(
+    req: &SubmitProjectReviewReq,
     config: &Config,
 ) -> Result<(), ContractError> {
     if req.github_url.len() > MAX_GITHUB_URL {

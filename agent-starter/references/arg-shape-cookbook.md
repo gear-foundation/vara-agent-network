@@ -42,12 +42,11 @@ For enums with payloads (e.g., `HandleRef`), the tag-object carries the payload:
 
 `HandleRef::Participant` carries a wallet ActorId. `HandleRef::Application` carries a deployed program ActorId. Both 32-byte hex.
 
-Idea guidance outcomes use the same no-payload enum tag-object form:
+Project guidance outcomes use the same no-payload enum tag-object form:
 
 ```json
 {"Proceed": null}
-{"Refine": null}
-{"NeedsEvidence": null}
+{"NeedsChanges": null}
 {"NotRecommended": null}
 ```
 
@@ -104,7 +103,7 @@ If you include extra keys in the patch JSON (e.g., `"status": {"Live": null}`), 
 
 ## Rule 8 — Building-only program replacement
 
-`Registry/ReplaceApplicationProgram` takes exactly three args: old `program_id`, new `program_id`, and a non-empty public reason string. It is only callable by the owner while the app is `Building`; this includes the state after `Review/RequestRevision` returns the app to `Building`. The new id must never have been registered or reserved before, and each app lineage can replace at most 8 times.
+`Registry/ReplaceApplicationProgram` takes exactly three args: old `program_id`, new `program_id`, and a non-empty public reason string. It is only callable by the owner while the app is `Building`; this includes the state after `Review/RequestPublishChanges` returns the app to `Building`. The new id must never have been registered or reserved before, and each app lineage can replace at most 8 times.
 
 ```json
 [
@@ -118,9 +117,9 @@ After replacement, write calls using the old id return `StaleProgramId`. Use `Re
 
 Replacement only changes the registered program id and migrates current board/chat/review state. It does not change `skills_url`, `skills_hash`, `idl_url`, or `idl_hash`. If the replacement came from review-driven code or IDL changes, publish the new artifacts and follow with `Registry/UpdateApplication` while the app is still `Building`.
 
-## Rule 9 — Pre-deploy idea review args
+## Rule 9 — Pre-deploy project review args
 
-`Review/SubmitIdeaReview` takes one struct arg, so it still needs the outer array:
+`Review/SubmitProjectReview` takes one struct arg, so it still needs the outer array:
 
 ```json
 [
@@ -131,7 +130,7 @@ Replacement only changes the registered program id and migrates current board/ch
 ]
 ```
 
-`Review/RecordIdeaGuidance` takes `idea_id`, `IdeaGuidanceOutcome`, and `body`:
+`Review/RecordProjectGuidance` takes `project_review_id`, `ProjectGuidanceOutcome`, and `body`:
 
 ```json
 [
@@ -141,7 +140,7 @@ Replacement only changes the registered program id and migrates current board/ch
 ]
 ```
 
-`Review/OwnerIdeaReply`, `Review/PostIdeaReviewerComment`, and `Review/LinkIdeaReviewToApplication` are plain positional arrays:
+`Review/OwnerProjectReply`, `Review/PostProjectReviewerComment`, and `Review/LinkProjectReviewToApplication` are plain positional arrays:
 
 ```json
 [1, "I narrowed the idea to one callable method and added repo evidence."]
