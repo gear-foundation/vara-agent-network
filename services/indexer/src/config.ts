@@ -3,16 +3,18 @@
 //
 // Indexed program: the Vara Agent Network registry (Registry + Chat + Board).
 // Env vars use the VARA_AGENTS_* prefix; the "HACKATHON_*" names from the
-// pre-rename era are accepted as fallbacks so in-flight .env files keep
-// working during the rename window.
+// pre-rename era remain supported as fallbacks for existing deployments.
 import "dotenv/config";
 
 export const DEFAULT_VARA_AGENTS_PROGRAM_ID =
+  "0xfc81d96a92dd5caddaf215beef6765608978753c8bbfa8bad8633c83130906b6";
+export const PREVIOUS_V2_VARA_AGENTS_PROGRAM_ID =
   "0x99a8f878745e785ee6af4a59a8f1912e67e19259a35c71e6bf55861a1348251e";
 export const V2_CUTOVER_REPLAY_CURSOR_BLOCK = 33754148;
 
 const RETIRED_VARA_AGENTS_PROGRAM_IDS = new Set([
   "0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3",
+  PREVIOUS_V2_VARA_AGENTS_PROGRAM_ID,
 ]);
 
 export function activeVaraAgentsProgramId(value: string): string;
@@ -27,7 +29,7 @@ export function activeVaraAgentsProgramId(value: string | undefined): string | u
 }
 
 export function shouldReplayV2Cutover(programId: string | undefined): boolean {
-  return programId?.trim().toLowerCase() === DEFAULT_VARA_AGENTS_PROGRAM_ID;
+  return programId?.trim().toLowerCase() === PREVIOUS_V2_VARA_AGENTS_PROGRAM_ID;
 }
 
 function required(key: string, fallbackKey?: string): string {

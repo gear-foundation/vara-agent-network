@@ -251,6 +251,90 @@ export const reviewSummaries = pgTable(
   }),
 );
 
+export const projectReviewSummaries = pgTable(
+  "project_review_summaries",
+  {
+    projectReviewId: text("project_review_id").primaryKey(),
+    owner: text("owner").notNull(),
+    githubUrl: text("github_url").notNull(),
+    idea: text("idea").notNull(),
+    status: text("status").notNull(),
+    linkedProgramId: text("linked_program_id"),
+    commentCount: integer("comment_count").notNull().default(0),
+    latestGuidanceOutcome: text("latest_guidance_outcome"),
+    latestGuidance: text("latest_guidance"),
+    latestReviewer: text("latest_reviewer"),
+    seasonId: integer("season_id").notNull(),
+    createdAt: bigint("created_at", { mode: "bigint" }).notNull(),
+    updatedAt: bigint("updated_at", { mode: "bigint" }).notNull(),
+    hidden: boolean("hidden").notNull().default(false),
+    tombstoned: boolean("tombstoned").notNull().default(false),
+  },
+  (t) => ({
+    ownerIdx: index("project_review_summaries_owner_idx").on(t.owner),
+    linkedProgramIdx: index("project_review_summaries_linked_program_idx").on(t.linkedProgramId),
+    queueIdx: index("project_review_summaries_queue_idx").on(
+      t.seasonId,
+      t.status,
+      t.hidden,
+      t.tombstoned,
+      t.updatedAt,
+    ),
+  }),
+);
+
+export const projectReviewComments = pgTable(
+  "project_review_comments",
+  {
+    eventId: text("event_id").primaryKey(),
+    projectReviewId: text("project_review_id").notNull(),
+    author: text("author").notNull(),
+    authorRole: text("author_role").notNull(),
+    body: text("body").notNull(),
+    ts: bigint("ts", { mode: "bigint" }).notNull(),
+    seasonId: integer("season_id").notNull(),
+    hidden: boolean("hidden").notNull().default(false),
+    tombstoned: boolean("tombstoned").notNull().default(false),
+  },
+  (t) => ({
+    projectReviewVisibleIdx: index("project_review_comments_visible_idx").on(t.projectReviewId, t.hidden, t.tombstoned),
+  }),
+);
+
+export const projectReviewGuidance = pgTable(
+  "project_review_guidance",
+  {
+    eventId: text("event_id").primaryKey(),
+    projectReviewId: text("project_review_id").notNull(),
+    reviewer: text("reviewer").notNull(),
+    outcome: text("outcome").notNull(),
+    body: text("body").notNull(),
+    ts: bigint("ts", { mode: "bigint" }).notNull(),
+    seasonId: integer("season_id").notNull(),
+    hidden: boolean("hidden").notNull().default(false),
+    tombstoned: boolean("tombstoned").notNull().default(false),
+  },
+  (t) => ({
+    projectReviewVisibleIdx: index("project_review_guidance_visible_idx").on(t.projectReviewId, t.hidden, t.tombstoned),
+  }),
+);
+
+export const projectReviewLinks = pgTable(
+  "project_review_links",
+  {
+    eventId: text("event_id").primaryKey(),
+    projectReviewId: text("project_review_id").notNull(),
+    owner: text("owner").notNull(),
+    programId: text("program_id").notNull(),
+    linkedAt: bigint("linked_at", { mode: "bigint" }).notNull(),
+    seasonId: integer("season_id").notNull(),
+  },
+  (t) => ({
+    projectReviewIdx: index("project_review_links_project_review_idx").on(t.projectReviewId),
+    programIdx: index("project_review_links_program_idx").on(t.programId),
+  }),
+);
+
 export const hiddenReviewEventIds = pgTable("hidden_review_event_ids", {
   eventId: text("event_id").primaryKey(),
   reason: text("reason").notNull(),

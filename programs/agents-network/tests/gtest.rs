@@ -182,6 +182,7 @@ async fn application_lifecycle_owner_submits_admin_sets_trusted_status() {
         .expect("application should exist");
     assert_eq!(app.status, AppStatus::Building);
 
+    link_ready_project_review(&program, ALICE, "lifecycle", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
         .submit_application(STUB_PROGRAM_ALPHA.into())

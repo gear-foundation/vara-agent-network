@@ -1,6 +1,11 @@
 import { sql } from "drizzle-orm";
 import type {
   AppStatus,
+  PublishDecisionRecorded,
+  ProjectReviewCommentPosted,
+  ProjectReviewGuidanceRecorded,
+  ProjectReviewLinked,
+  ProjectReviewSubmitted,
   ReviewerAdded,
   ReviewerRemoved,
   ReviewCommentPosted,
@@ -67,6 +72,33 @@ export function initialReviewSummaryValues(programId: string, seasonId: number, 
     tombstoned: false,
     seasonId,
     updatedAt,
+  };
+}
+
+export function initialProjectReviewSummaryValues(
+  projectReviewId: string,
+  owner: string,
+  githubUrl: string,
+  idea: string,
+  seasonId: number,
+  submittedAt: bigint,
+) {
+  return {
+    projectReviewId,
+    owner,
+    githubUrl,
+    idea,
+    status: "Submitted",
+    linkedProgramId: null,
+    commentCount: 0,
+    latestGuidanceOutcome: null,
+    latestGuidance: null,
+    latestReviewer: null,
+    seasonId,
+    createdAt: submittedAt,
+    updatedAt: submittedAt,
+    hidden: false,
+    tombstoned: false,
   };
 }
 
@@ -536,5 +568,159 @@ export async function handleReviewDecisionRecorded(
           updatedAt: decidedAt,
         },
       });
+  });
+}
+
+export async function handlePublishDecisionRecorded(
+  db: Db,
+  ctx: HandlerContext,
+  payload: PublishDecisionRecorded,
+): Promise<void> {
+  const { outcome, ...rest } = payload;
+  await handleReviewDecisionRecorded(db, ctx, {
+    ...rest,
+    verdict: outcome === "Published" ? "ApprovedForListing" : "RevisionRequested",
+  });
+}
+
+export async function handleProjectReviewSubmitted(
+  db: Db,
+  _ctx: HandlerContext,
+  payload: ProjectReviewSubmitted,
+): Promise<void> {
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
+  const owner = normalizeActorId(payload.owner);
+  const submittedAt = asBigInt(payload.submitted_at);
+  const values = initialProjectReviewSummaryValues(
+    projectReviewId,
+    owner,
+    payload.github_url,
+    payload.idea,
+    payload.season_id,
+    submittedAt,
+  );
+
+  await db
+    .insert(schema.projectReviewSummaries)
+    .values(values)
+    .onConflictDoNothing({ target: schema.projectReviewSummaries.projectReviewId });
+}
+
+export async function handleProjectReviewCommentPosted(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ProjectReviewCommentPosted,
+): Promise<void> {
+  const eventId = makeRowId(ctx);
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
+  const author = normalizeActorId(payload.author);
+  const ts = asBigInt(payload.ts);
+
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(schema.projectReviewComments)
+      .values({
+        eventId,
+        projectReviewId,
+        author,
+        authorRole: payload.author_role,
+        body: payload.body,
+        ts,
+        seasonId: payload.season_id,
+      })
+      .onConflictDoNothing({ target: schema.projectReviewComments.eventId })
+      .returning({ eventId: schema.projectReviewComments.eventId });
+    if (inserted.length === 0) return;
+
+    await tx
+      .update(schema.projectReviewSummaries)
+      .set({
+        status: sql`CASE
+          WHEN ${schema.projectReviewSummaries.status} = 'Submitted' THEN 'Commented'
+          ELSE ${schema.projectReviewSummaries.status}
+        END`,
+        commentCount: sql`${schema.projectReviewSummaries.commentCount} + 1`,
+        updatedAt: ts,
+      })
+      .where(sql`${schema.projectReviewSummaries.projectReviewId} = ${projectReviewId}`);
+  });
+}
+
+export async function handleProjectReviewGuidanceRecorded(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ProjectReviewGuidanceRecorded,
+): Promise<void> {
+  const eventId = makeRowId(ctx);
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
+  const reviewer = normalizeActorId(payload.reviewer);
+  const ts = asBigInt(payload.ts);
+
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(schema.projectReviewGuidance)
+      .values({
+        eventId,
+        projectReviewId,
+        reviewer,
+        outcome: payload.outcome,
+        body: payload.body,
+        ts,
+        seasonId: payload.season_id,
+      })
+      .onConflictDoNothing({ target: schema.projectReviewGuidance.eventId })
+      .returning({ eventId: schema.projectReviewGuidance.eventId });
+    if (inserted.length === 0) return;
+
+    await tx
+      .update(schema.projectReviewSummaries)
+      .set({
+        status: sql`CASE
+          WHEN ${schema.projectReviewSummaries.status} = 'Linked' THEN 'Linked'
+          ELSE 'GuidanceRecorded'
+        END`,
+        latestGuidanceOutcome: payload.outcome,
+        latestGuidance: payload.body,
+        latestReviewer: reviewer,
+        updatedAt: ts,
+      })
+      .where(sql`${schema.projectReviewSummaries.projectReviewId} = ${projectReviewId}`);
+  });
+}
+
+export async function handleProjectReviewLinked(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ProjectReviewLinked,
+): Promise<void> {
+  const eventId = makeRowId(ctx);
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
+  const owner = normalizeActorId(payload.owner);
+  const programId = normalizeActorId(payload.program_id);
+  const linkedAt = asBigInt(payload.linked_at);
+
+  await db.transaction(async (tx) => {
+    const inserted = await tx
+      .insert(schema.projectReviewLinks)
+      .values({
+        eventId,
+        projectReviewId,
+        owner,
+        programId,
+        linkedAt,
+        seasonId: payload.season_id,
+      })
+      .onConflictDoNothing({ target: schema.projectReviewLinks.eventId })
+      .returning({ eventId: schema.projectReviewLinks.eventId });
+    if (inserted.length === 0) return;
+
+    await tx
+      .update(schema.projectReviewSummaries)
+      .set({
+        status: "Linked",
+        linkedProgramId: programId,
+        updatedAt: linkedAt,
+      })
+      .where(sql`${schema.projectReviewSummaries.projectReviewId} = ${projectReviewId}`);
   });
 }

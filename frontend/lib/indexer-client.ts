@@ -119,6 +119,55 @@ type ReviewDecisionRow = {
   tombstoned: boolean
 }
 
+type ProjectReviewSummaryRow = {
+  projectReviewId: string
+  owner: string
+  githubUrl: string
+  idea: string
+  status: string
+  linkedProgramId: string | null
+  commentCount: number
+  latestGuidanceOutcome: string | null
+  latestGuidance: string | null
+  latestReviewer: string | null
+  seasonId: number
+  createdAt: string
+  updatedAt: string
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type ProjectReviewCommentRow = {
+  eventId: string
+  projectReviewId: string
+  author: string
+  authorRole: string
+  body: string
+  ts: string
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type ProjectReviewGuidanceRow = {
+  eventId: string
+  projectReviewId: string
+  reviewer: string
+  outcome: string
+  body: string
+  ts: string
+  hidden: boolean
+  tombstoned: boolean
+}
+
+type ProjectReviewLinkRow = {
+  eventId: string
+  projectReviewId: string
+  owner: string
+  programId: string
+  linkedAt: string
+  seasonId: number
+}
+
 type HandleClaimRow = {
   handle: string
   ownerKind: 'Participant' | 'Application' | string
@@ -359,6 +408,52 @@ export type ApplicationReviewDetail = {
   currentProgramId: string
 }
 
+export type ProjectReviewSummary = {
+  projectReviewId: string
+  owner: string
+  githubUrl: string
+  idea: string
+  status: string
+  linkedProgramId: string | null
+  commentCount: number
+  latestGuidanceOutcome: string | null
+  latestGuidance: string | null
+  latestReviewer: string | null
+  seasonId: number
+  createdAt: string
+  updatedAt: string
+}
+
+export type ProjectReviewEvent =
+  | {
+      id: string
+      kind: 'comment'
+      author: string
+      authorRole: string
+      body: string
+      at: string
+    }
+  | {
+      id: string
+      kind: 'guidance'
+      author: string
+      outcome: string
+      body: string
+      at: string
+    }
+  | {
+      id: string
+      kind: 'link'
+      author: string
+      programId: string
+      at: string
+    }
+
+export type ProjectReviewDetail = {
+  summary: ProjectReviewSummary | null
+  events: ProjectReviewEvent[]
+}
+
 export type MentionTarget = {
   handle: string
   ownerKind: string
@@ -404,6 +499,83 @@ const REVIEW_SUMMARY_FIELDS = `
         tombstoned
         seasonId
         updatedAt
+`
+
+const PROJECT_REVIEW_SUMMARY_FIELDS = `
+        projectReviewId
+        owner
+        githubUrl
+        idea
+        status
+        linkedProgramId
+        commentCount
+        latestGuidanceOutcome
+        latestGuidance
+        latestReviewer
+        seasonId
+        createdAt
+        updatedAt
+        hidden
+        tombstoned
+`
+
+const PROJECT_REVIEW_QUEUE_QUERY = `
+  query ProjectReviewQueue($first: Int!, $offset: Int!) {
+    projectReviewSummaries: allProjectReviewSummaries(
+      first: $first
+      offset: $offset
+      orderBy: UPDATED_AT_DESC
+      condition: { hidden: false, tombstoned: false }
+    ) {
+      nodes {
+${PROJECT_REVIEW_SUMMARY_FIELDS}
+      }
+    }
+  }
+`
+
+const PROJECT_REVIEW_DETAIL_QUERY = `
+  query ProjectReviewDetail($projectReviewId: String!) {
+    projectReviewSummaries: allProjectReviewSummaries(first: 1, condition: { projectReviewId: $projectReviewId, hidden: false, tombstoned: false }) {
+      nodes {
+${PROJECT_REVIEW_SUMMARY_FIELDS}
+      }
+    }
+    projectReviewComments: allProjectReviewComments(first: 250, orderBy: TS_ASC, condition: { projectReviewId: $projectReviewId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        projectReviewId
+        author
+        authorRole
+        body
+        ts
+        hidden
+        tombstoned
+      }
+    }
+    projectReviewGuidance: allProjectReviewGuidances(first: 100, orderBy: TS_ASC, condition: { projectReviewId: $projectReviewId, hidden: false, tombstoned: false }) {
+      nodes {
+        eventId
+        projectReviewId
+        reviewer
+        outcome
+        body
+        ts
+        hidden
+        tombstoned
+      }
+    }
+    projectReviewLinks: allProjectReviewLinks(first: 20, orderBy: LINKED_AT_ASC, condition: { projectReviewId: $projectReviewId }) {
+      nodes {
+        eventId
+        projectReviewId
+        owner
+        programId
+        linkedAt
+        seasonId
+      }
+    }
+  }
 `
 
 const DASHBOARD_QUERY = `
@@ -1011,6 +1183,17 @@ type ApplicationReviewHistoryQueryResult = Pick<
   'reviewRequests' | 'reviewComments' | 'reviewDecisions'
 >
 
+type ProjectReviewQueueQueryResult = {
+  projectReviewSummaries: Connection<ProjectReviewSummaryRow>
+}
+
+type ProjectReviewDetailQueryResult = {
+  projectReviewSummaries: Connection<ProjectReviewSummaryRow>
+  projectReviewComments: Connection<ProjectReviewCommentRow>
+  projectReviewGuidance: Connection<ProjectReviewGuidanceRow>
+  projectReviewLinks: Connection<ProjectReviewLinkRow>
+}
+
 const MAX_APPLICATION_REPLACEMENT_DEPTH = 8
 
 function titleizeHandle(handle: string) {
@@ -1083,6 +1266,57 @@ function toReviewSummary(row: ReviewSummaryRow | null | undefined): ReviewSummar
 
 function reviewSummaryMap(rows: ReviewSummaryRow[] | undefined) {
   return new Map((rows ?? []).map((row) => [row.programId.toLowerCase(), toReviewSummary(row)]))
+}
+
+function toProjectReviewSummary(row: ProjectReviewSummaryRow | null | undefined): ProjectReviewSummary | null {
+  if (!row || row.hidden || row.tombstoned) return null
+  return {
+    projectReviewId: row.projectReviewId,
+    owner: row.owner,
+    githubUrl: row.githubUrl,
+    idea: row.idea,
+    status: row.status,
+    linkedProgramId: row.linkedProgramId,
+    commentCount: row.commentCount,
+    latestGuidanceOutcome: row.latestGuidanceOutcome,
+    latestGuidance: row.latestGuidance,
+    latestReviewer: row.latestReviewer,
+    seasonId: row.seasonId,
+    createdAt: row.createdAt,
+    updatedAt: row.updatedAt,
+  }
+}
+
+function projectReviewEventsFromData(data: ProjectReviewDetailQueryResult): ProjectReviewEvent[] {
+  return [
+    ...data.projectReviewComments.nodes
+      .filter((item) => !item.hidden && !item.tombstoned)
+      .map((item) => ({
+        id: item.eventId,
+        kind: 'comment' as const,
+        author: item.author,
+        authorRole: item.authorRole,
+        body: item.body,
+        at: item.ts,
+      })),
+    ...data.projectReviewGuidance.nodes
+      .filter((item) => !item.hidden && !item.tombstoned)
+      .map((item) => ({
+        id: item.eventId,
+        kind: 'guidance' as const,
+        author: item.reviewer,
+        outcome: item.outcome,
+        body: item.body,
+        at: item.ts,
+      })),
+    ...data.projectReviewLinks.nodes.map((item) => ({
+      id: item.eventId,
+      kind: 'link' as const,
+      author: item.owner,
+      programId: item.programId,
+      at: item.linkedAt,
+    })),
+  ].sort((a, b) => Number(a.at) - Number(b.at))
 }
 
 function utcDateKey(ms: number) {
@@ -1736,9 +1970,8 @@ async function collectLineageReplacements(currentProgramId: string, seed: Applic
   const lineage = new Set<string>([currentProgramId.toLowerCase()])
   const queue = [currentProgramId.toLowerCase()]
 
-  while (queue.length > 0) {
-    const next = queue.shift()
-    if (!next) break
+  for (let i = 0; i < queue.length; i++) {
+    const next = queue[i]
     const inbound = await fetchReplacementsByNewProgramId(next)
     for (const replacement of inbound) {
       replacementsByEventId.set(replacement.eventId, replacement)
@@ -1810,4 +2043,27 @@ export async function getReviewQueue(): Promise<RegistryAgent[]> {
       return status !== 'Legacy' && !agent.reviewSummary?.tombstoned
     })
     .sort((a, b) => Number(b.reviewSummary?.updatedAt ?? 0) - Number(a.reviewSummary?.updatedAt ?? 0))
+}
+
+export async function getProjectReviewQueue(first = 100, offset = 0): Promise<ProjectReviewSummary[]> {
+  const data = await fetchIndexerGraphql<ProjectReviewQueueQueryResult>(
+    PROJECT_REVIEW_QUEUE_QUERY,
+    { first, offset },
+  )
+  if (!data) return []
+  return data.projectReviewSummaries.nodes
+    .map(toProjectReviewSummary)
+    .filter((item): item is ProjectReviewSummary => Boolean(item))
+}
+
+export async function getProjectReviewDetail(projectReviewId: string): Promise<ProjectReviewDetail> {
+  const data = await fetchIndexerGraphql<ProjectReviewDetailQueryResult>(
+    PROJECT_REVIEW_DETAIL_QUERY,
+    { projectReviewId },
+  )
+  if (!data) return { summary: null, events: [] }
+  return {
+    summary: toProjectReviewSummary(data.projectReviewSummaries.nodes[0]),
+    events: projectReviewEventsFromData(data),
+  }
 }

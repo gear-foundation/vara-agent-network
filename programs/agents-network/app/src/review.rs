@@ -8,6 +8,7 @@ use crate::admin::AdminState;
 use crate::guards;
 use crate::registry::{self, RegistryState};
 use crate::types::*;
+use core::ops::Bound::{Excluded, Unbounded};
 use sails_rs::cell::RefCell;
 use sails_rs::collections::BTreeMap;
 use sails_rs::gstd::{exec, msg};
@@ -19,6 +20,9 @@ pub struct ReviewState {
     pub summaries: BTreeMap<ActorId, ReviewSummary>,
     pub decisions: BTreeMap<(ActorId, u32), bool>,
     pub last_review_at: BTreeMap<ActorId, u64>,
+    pub next_project_review_id: ProjectReviewId,
+    pub project_summaries: BTreeMap<ProjectReviewId, ProjectReviewSummary>,
+    pub project_review_by_program: BTreeMap<ActorId, ProjectReviewId>,
 }
 
 #[sails_rs::event]
@@ -65,6 +69,49 @@ pub enum ReviewEvent {
         old_status: AppStatus,
         new_status: AppStatus,
         decided_at: u64,
+        season_id: u32,
+    },
+    PublishDecisionRecorded {
+        program_id: ActorId,
+        revision: u32,
+        reviewer: ActorId,
+        outcome: PublishOutcome,
+        reason: String,
+        criteria: ReviewCriteria,
+        old_status: AppStatus,
+        new_status: AppStatus,
+        decided_at: u64,
+        season_id: u32,
+    },
+    ProjectReviewSubmitted {
+        project_review_id: ProjectReviewId,
+        owner: ActorId,
+        github_url: String,
+        idea: String,
+        submitted_at: u64,
+        season_id: u32,
+    },
+    ProjectReviewCommentPosted {
+        project_review_id: ProjectReviewId,
+        author: ActorId,
+        author_role: ReviewAuthorRole,
+        body: String,
+        ts: u64,
+        season_id: u32,
+    },
+    ProjectReviewGuidanceRecorded {
+        project_review_id: ProjectReviewId,
+        reviewer: ActorId,
+        outcome: ProjectGuidanceOutcome,
+        body: String,
+        ts: u64,
+        season_id: u32,
+    },
+    ProjectReviewLinked {
+        project_review_id: ProjectReviewId,
+        owner: ActorId,
+        program_id: ActorId,
+        linked_at: u64,
         season_id: u32,
     },
 }
@@ -296,6 +343,42 @@ impl<'a> ReviewService<'a> {
         )
     }
 
+    #[export(unwrap_result)]
+    pub fn publish_application(
+        &mut self,
+        program_id: ActorId,
+        expected_revision: u32,
+        reason: String,
+        criteria: ReviewCriteria,
+    ) -> Result<(), ContractError> {
+        self.publish_with_event(
+            program_id,
+            expected_revision,
+            reason,
+            criteria,
+            ReviewVerdict::ApprovedForListing,
+            PublishOutcome::Published,
+        )
+    }
+
+    #[export(unwrap_result)]
+    pub fn request_publish_changes(
+        &mut self,
+        program_id: ActorId,
+        expected_revision: u32,
+        reason: String,
+        criteria: ReviewCriteria,
+    ) -> Result<(), ContractError> {
+        self.publish_with_event(
+            program_id,
+            expected_revision,
+            reason,
+            criteria,
+            ReviewVerdict::RevisionRequested,
+            PublishOutcome::ChangesRequested,
+        )
+    }
+
     fn post_comment_with_event(
         &mut self,
         program_id: ActorId,
@@ -342,9 +425,255 @@ impl<'a> ReviewService<'a> {
         Ok(())
     }
 
+    fn publish_with_event(
+        &mut self,
+        program_id: ActorId,
+        expected_revision: u32,
+        reason: String,
+        criteria: ReviewCriteria,
+        verdict: ReviewVerdict,
+        outcome: PublishOutcome,
+    ) -> Result<(), ContractError> {
+        let result = self.decide(program_id, expected_revision, verdict, &reason, &criteria)?;
+        self.emit_event(ReviewEvent::PublishDecisionRecorded {
+            program_id,
+            revision: expected_revision,
+            reviewer: result.reviewer,
+            outcome,
+            reason,
+            criteria,
+            old_status: result.old_status,
+            new_status: result.new_status,
+            decided_at: result.decided_at,
+            season_id: result.season_id,
+        })
+        .expect("emit PublishDecisionRecorded failed");
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn submit_project_review(
+        &mut self,
+        req: SubmitProjectReviewReq,
+    ) -> Result<ProjectReviewId, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_project_review_req(&req, &config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let project_review_id = {
+            let mut review = self.review.borrow_mut();
+            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+            review.next_project_review_id = review.next_project_review_id.saturating_add(1);
+            let project_review_id = review.next_project_review_id;
+            review.project_summaries.insert(
+                project_review_id,
+                ProjectReviewSummary {
+                    project_review_id,
+                    owner: caller,
+                    github_url: req.github_url.clone(),
+                    idea: req.idea.clone(),
+                    status: ProjectReviewStatus::Submitted,
+                    linked_program_id: None,
+                    comment_count: 0,
+                    latest_guidance_outcome: None,
+                    latest_guidance: None,
+                    latest_reviewer: None,
+                    season_id,
+                    created_at: now,
+                    updated_at: now,
+                },
+            );
+            project_review_id
+        };
+
+        self.emit_event(ReviewEvent::ProjectReviewSubmitted {
+            project_review_id,
+            owner: caller,
+            github_url: req.github_url,
+            idea: req.idea,
+            submitted_at: now,
+            season_id,
+        })
+        .expect("emit ProjectReviewSubmitted failed");
+
+        Ok(project_review_id)
+    }
+
+    #[export(unwrap_result)]
+    pub fn post_project_reviewer_comment(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        body: String,
+    ) -> Result<(), ContractError> {
+        self.post_project_comment_with_event(project_review_id, body, ReviewAuthorRole::Reviewer)
+    }
+
+    #[export(unwrap_result)]
+    pub fn owner_project_reply(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        body: String,
+    ) -> Result<(), ContractError> {
+        self.post_project_comment_with_event(project_review_id, body, ReviewAuthorRole::Owner)
+    }
+
+    #[export(unwrap_result)]
+    pub fn record_project_guidance(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        outcome: ProjectGuidanceOutcome,
+        body: String,
+    ) -> Result<(), ContractError> {
+        let result = self.record_project_guidance_state(project_review_id, outcome, &body)?;
+        self.emit_event(ReviewEvent::ProjectReviewGuidanceRecorded {
+            project_review_id,
+            reviewer: result.author,
+            outcome,
+            body,
+            ts: result.ts,
+            season_id: result.season_id,
+        })
+        .expect("emit ProjectReviewGuidanceRecorded failed");
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn link_project_review_to_application(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        program_id: ActorId,
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let app_github = {
+            let reg = self.registry.borrow();
+            registry::ensure_current_program_id(&reg, program_id)?;
+            let app = reg
+                .applications
+                .get(&program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            if caller != app.owner {
+                return Err(ContractError::NotOwner);
+            }
+            app.github_url.clone()
+        };
+        {
+            let mut review = self.review.borrow_mut();
+            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+            if review.project_review_by_program.contains_key(&program_id) {
+                return Err(ContractError::ProgramAlreadyHasProjectReview);
+            }
+            {
+                let summary = review
+                    .project_summaries
+                    .get_mut(&project_review_id)
+                    .ok_or(ContractError::UnknownProjectReview)?;
+                if summary.owner != caller {
+                    return Err(ContractError::NotOwner);
+                }
+                if summary.linked_program_id.is_some() {
+                    return Err(ContractError::ProjectReviewAlreadyLinked);
+                }
+                if summary.latest_guidance_outcome != Some(ProjectGuidanceOutcome::Proceed) {
+                    return Err(ContractError::ProjectReviewNotApproved);
+                }
+                if !github_repo_matches(&summary.github_url, &app_github)? {
+                    return Err(ContractError::ProjectReviewGithubMismatch);
+                }
+                summary.linked_program_id = Some(program_id);
+                summary.status = ProjectReviewStatus::Linked;
+                summary.updated_at = now;
+            }
+            review
+                .project_review_by_program
+                .insert(program_id, project_review_id);
+        }
+
+        self.emit_event(ReviewEvent::ProjectReviewLinked {
+            project_review_id,
+            owner: caller,
+            program_id,
+            linked_at: now,
+            season_id,
+        })
+        .expect("emit ProjectReviewLinked failed");
+        Ok(())
+    }
+
     #[export]
     pub fn get_review_summary(&self, program_id: ActorId) -> Option<ReviewSummary> {
         self.review.borrow().summaries.get(&program_id).cloned()
+    }
+
+    #[export]
+    pub fn get_project_review_summary(
+        &self,
+        project_review_id: ProjectReviewId,
+    ) -> Option<ProjectReviewSummary> {
+        self.review
+            .borrow()
+            .project_summaries
+            .get(&project_review_id)
+            .cloned()
+    }
+
+    #[export]
+    pub fn list_project_review_summaries(
+        &self,
+        cursor: Option<ProjectReviewId>,
+        limit: u32,
+    ) -> ProjectReviewPage {
+        let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_LIST) as usize;
+        if limit == 0 {
+            return ProjectReviewPage {
+                items: Vec::new(),
+                next_cursor: None,
+            };
+        }
+        let start_after = cursor.unwrap_or(0);
+        let mut items = Vec::new();
+        let mut next_cursor = None;
+        for (project_review_id, summary) in self
+            .review
+            .borrow()
+            .project_summaries
+            .range((Excluded(start_after), Unbounded))
+        {
+            items.push(summary.clone());
+            if items.len() == limit {
+                next_cursor = Some(*project_review_id);
+                break;
+            }
+        }
+        ProjectReviewPage { items, next_cursor }
+    }
+
+    fn post_project_comment_with_event(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        body: String,
+        role: ReviewAuthorRole,
+    ) -> Result<(), ContractError> {
+        let result = self.post_project_comment(project_review_id, &body, role)?;
+        self.emit_event(ReviewEvent::ProjectReviewCommentPosted {
+            project_review_id,
+            author: result.author,
+            author_role: role,
+            body,
+            ts: result.ts,
+            season_id: result.season_id,
+        })
+        .expect("emit ProjectReviewCommentPosted failed");
+        Ok(())
     }
 }
 
@@ -473,6 +802,97 @@ impl<'a> ReviewService<'a> {
             season_id,
         })
     }
+
+    fn post_project_comment(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        body: &str,
+        role: ReviewAuthorRole,
+    ) -> Result<CommentOutcome, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_review_body(body, &config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let mut review = self.review.borrow_mut();
+        ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+        match role {
+            ReviewAuthorRole::Reviewer => {
+                if !is_active_reviewer(&review, season_id, caller) {
+                    return Err(ContractError::NotReviewer);
+                }
+                ensure_not_project_self_review(&review, project_review_id, caller)?;
+            }
+            ReviewAuthorRole::Owner => {
+                let summary = review
+                    .project_summaries
+                    .get(&project_review_id)
+                    .ok_or(ContractError::UnknownProjectReview)?;
+                if summary.owner != caller {
+                    return Err(ContractError::NotOwner);
+                }
+            }
+        }
+
+        let summary = review
+            .project_summaries
+            .get_mut(&project_review_id)
+            .ok_or(ContractError::UnknownProjectReview)?;
+        summary.comment_count = summary.comment_count.saturating_add(1);
+        if summary.status == ProjectReviewStatus::Submitted {
+            summary.status = ProjectReviewStatus::Commented;
+        }
+        summary.updated_at = now;
+
+        Ok(CommentOutcome {
+            author: caller,
+            ts: now,
+            season_id,
+        })
+    }
+
+    fn record_project_guidance_state(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        outcome: ProjectGuidanceOutcome,
+        body: &str,
+    ) -> Result<CommentOutcome, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_review_body(body, &config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let mut review = self.review.borrow_mut();
+        ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+        if !is_active_reviewer(&review, season_id, caller) {
+            return Err(ContractError::NotReviewer);
+        }
+        ensure_not_project_self_review(&review, project_review_id, caller)?;
+
+        let summary = review
+            .project_summaries
+            .get_mut(&project_review_id)
+            .ok_or(ContractError::UnknownProjectReview)?;
+        if summary.linked_program_id.is_none() {
+            summary.status = ProjectReviewStatus::GuidanceRecorded;
+        }
+        summary.latest_guidance_outcome = Some(outcome);
+        summary.latest_guidance = Some(body.to_string());
+        summary.latest_reviewer = Some(caller);
+        summary.updated_at = now;
+
+        Ok(CommentOutcome {
+            author: caller,
+            ts: now,
+            season_id,
+        })
+    }
 }
 
 pub fn init_application(review: &mut ReviewState, program_id: ActorId) {
@@ -490,6 +910,11 @@ pub fn delete_application(review: &mut ReviewState, program_id: ActorId) {
     review
         .decisions
         .retain(|(decision_program_id, _), _| *decision_program_id != program_id);
+    if let Some(project_review_id) = review.project_review_by_program.remove(&program_id) {
+        if let Some(project) = review.project_summaries.get_mut(&project_review_id) {
+            project.linked_program_id = None;
+        }
+    }
 }
 
 pub fn replace_application_program(
@@ -515,6 +940,14 @@ pub fn replace_application_program(
     });
     for (key, value) in decisions {
         review.decisions.insert(key, value);
+    }
+    if let Some(project_review_id) = review.project_review_by_program.remove(&old_program_id) {
+        if let Some(project) = review.project_summaries.get_mut(&project_review_id) {
+            project.linked_program_id = Some(new_program_id);
+        }
+        review
+            .project_review_by_program
+            .insert(new_program_id, project_review_id);
     }
 
     summary
@@ -597,6 +1030,7 @@ pub fn submit_application(
     if app.status != AppStatus::Building {
         return Err(ContractError::InvalidStatusTransition);
     }
+    ensure_project_review_gate(review, program_id, app)?;
 
     let summary = ensure_summary(review, program_id);
     let revision = summary.pending_submission_revision.unwrap_or(1);
@@ -727,6 +1161,67 @@ fn ensure_not_self_review(reviewer: ActorId, app: &Application) -> Result<(), Co
         return Err(ContractError::SelfReviewForbidden);
     }
     Ok(())
+}
+
+fn ensure_not_project_self_review(
+    review: &ReviewState,
+    project_review_id: ProjectReviewId,
+    reviewer: ActorId,
+) -> Result<(), ContractError> {
+    let summary = review
+        .project_summaries
+        .get(&project_review_id)
+        .ok_or(ContractError::UnknownProjectReview)?;
+    if summary.owner == reviewer {
+        return Err(ContractError::SelfReviewForbidden);
+    }
+    Ok(())
+}
+
+fn ensure_project_review_gate(
+    review: &ReviewState,
+    program_id: ActorId,
+    app: &Application,
+) -> Result<(), ContractError> {
+    let project_review_id = review
+        .project_review_by_program
+        .get(&program_id)
+        .ok_or(ContractError::ProjectReviewRequired)?;
+    let project = review
+        .project_summaries
+        .get(project_review_id)
+        .ok_or(ContractError::UnknownProjectReview)?;
+    if project.owner != app.owner || project.linked_program_id != Some(program_id) {
+        return Err(ContractError::ProjectReviewRequired);
+    }
+    if project.latest_guidance_outcome != Some(ProjectGuidanceOutcome::Proceed) {
+        return Err(ContractError::ProjectReviewNotApproved);
+    }
+    if !github_repo_matches(&project.github_url, &app.github_url)? {
+        return Err(ContractError::ProjectReviewGithubMismatch);
+    }
+    Ok(())
+}
+
+fn github_repo_matches(left: &str, right: &str) -> Result<bool, ContractError> {
+    Ok(github_repo_key(left)? == github_repo_key(right)?)
+}
+
+fn github_repo_key(url: &str) -> Result<(String, String), ContractError> {
+    let tail = url
+        .strip_prefix("https://github.com/")
+        .ok_or(ContractError::InvalidGithubUrl)?;
+    let mut parts = tail.split('/');
+    let owner = parts.next().unwrap_or_default().trim();
+    let repo = parts
+        .next()
+        .unwrap_or_default()
+        .trim()
+        .trim_end_matches(".git");
+    if owner.is_empty() || repo.is_empty() {
+        return Err(ContractError::InvalidGithubUrl);
+    }
+    Ok((owner.to_ascii_lowercase(), repo.to_ascii_lowercase()))
 }
 
 fn ensure_reviewable_status(status: AppStatus) -> Result<(), ContractError> {

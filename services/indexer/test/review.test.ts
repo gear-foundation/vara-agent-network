@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import {
+  initialProjectReviewSummaryValues,
   initialReviewSummaryValues,
   manualOverrideRevisionUpdates,
   submittedCurrentRevisionVisibleCommentCount,
@@ -127,5 +128,35 @@ test("manual reopen advances pending and display revision from the indexed summa
       "Live",
     ),
     {},
+  );
+});
+
+test("project review submission initializes public queue summary", () => {
+  assert.deepEqual(
+    initialProjectReviewSummaryValues(
+      "7",
+      "0xabc",
+      "https://github.com/alice/agent",
+      "build an integration scout",
+      1,
+      123n,
+    ),
+    {
+      projectReviewId: "7",
+      owner: "0xabc",
+      githubUrl: "https://github.com/alice/agent",
+      idea: "build an integration scout",
+      status: "Submitted",
+      linkedProgramId: null,
+      commentCount: 0,
+      latestGuidanceOutcome: null,
+      latestGuidance: null,
+      latestReviewer: null,
+      seasonId: 1,
+      createdAt: 123n,
+      updatedAt: 123n,
+      hidden: false,
+      tombstoned: false,
+    },
   );
 });

@@ -29,6 +29,7 @@ export type PostChatParams = {
 }
 
 export type ReviewCoverage = 'Missing' | 'Partial' | 'Met' | 'NotApplicable'
+export type ProjectGuidanceOutcome = 'Proceed' | 'NeedsChanges' | 'NotRecommended'
 
 export type ReviewCriteriaInput = {
   technical_readiness: { coverage: ReviewCoverage; note?: string | null }
@@ -396,4 +397,78 @@ export async function decideReview(
     : sails.services.Review.functions.RequestRevision
   const tx = fn(programId, revision, reason, criteria)
   return sendTx(account, `review.tx.${verdict}`, tx)
+}
+
+export async function decidePublish(
+  account: WalletAccount,
+  programId: string,
+  revision: number,
+  outcome: 'Published' | 'ChangesRequested',
+  reason: string,
+  criteria: ReviewCriteriaInput,
+) {
+  const sails = await getSailsClient()
+  const fn = outcome === 'Published'
+    ? sails.services.Review.functions.PublishApplication
+    : sails.services.Review.functions.RequestPublishChanges
+  const tx = fn(programId, revision, reason, criteria)
+  return sendTx(account, `review.tx.${outcome}`, tx)
+}
+
+export async function submitProjectReview(
+  account: WalletAccount,
+  githubUrl: string,
+  idea: string,
+) {
+  const normalizedGithub = githubUrl.trim()
+  if (!isGithubUrl(normalizedGithub)) {
+    throw new Error(`GitHub URL must start with ${GITHUB_URL_PREFIX}`)
+  }
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.SubmitProjectReview({
+    github_url: normalizedGithub,
+    idea: idea.trim(),
+  })
+  return sendTx(account, 'review.tx.SubmitProjectReview', tx)
+}
+
+export async function postProjectReviewerComment(
+  account: WalletAccount,
+  projectReviewId: string | number,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.PostProjectReviewerComment(BigInt(projectReviewId), body)
+  return sendTx(account, 'review.tx.PostProjectReviewerComment', tx)
+}
+
+export async function ownerProjectReply(
+  account: WalletAccount,
+  projectReviewId: string | number,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.OwnerProjectReply(BigInt(projectReviewId), body)
+  return sendTx(account, 'review.tx.OwnerProjectReply', tx)
+}
+
+export async function recordProjectGuidance(
+  account: WalletAccount,
+  projectReviewId: string | number,
+  outcome: ProjectGuidanceOutcome,
+  body: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.RecordProjectGuidance(BigInt(projectReviewId), outcome, body)
+  return sendTx(account, 'review.tx.RecordProjectGuidance', tx)
+}
+
+export async function linkProjectReviewToApplication(
+  account: WalletAccount,
+  projectReviewId: string | number,
+  programId: string,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.LinkProjectReviewToApplication(BigInt(projectReviewId), programId.trim())
+  return sendTx(account, 'review.tx.LinkProjectReviewToApplication', tx)
 }

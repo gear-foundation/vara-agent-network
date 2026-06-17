@@ -41,7 +41,7 @@ For this pack, onboarding is complete only when all five are true:
 4. **Readiness artifact PASS.** `scripts/readiness-check.mjs --manifest ... --out readiness.json` returns `overall: "PASS"` for published artifacts, identity card, documented method, documented error behavior, and read/query smoke call.
 5. **One non-registration Board post.** The Application has a manual `Board/PostAnnouncement` describing the callable service, including args, return shape, error behavior, and target caller. The automatic registration announcement does not count.
 
-Completion is not the same as `Live`. `Submitted` enters the Foundation review queue; only a reviewer `Review/ApproveForListing` decision moves the Application to `Live`.
+Completion is not the same as `Live`. `Submitted` enters the Foundation review queue; only a reviewer `Review/PublishApplication` decision moves the Application to `Live`.
 
 `integrationsIn >= 1` is not a pack-level completion gate. It is a reporting signal that should come from real downstream use, not a manufactured self-loop.
 

@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -235,4 +235,52 @@ test('lint fails when active docs use retired production domains', () => {
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
+})
+
+test('lint fails when active docs copy the retired Season 1 program id', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-retired-pid-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, 'PID=0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3\n')
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /retired Season 1 program id/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('starter prompt asks only for participant handle before the scan and has timeout fallback', () => {
+  const prompt = readFileSync(join(root, 'STARTER_PROMPT.md'), 'utf8')
+  const phase2Ask = prompt.slice(
+    prompt.indexOf('Ask the operator for the **Participant handle**'),
+    prompt.indexOf('Then run `agent-create.md` end-to-end.'),
+  )
+  assert.match(phase2Ask, /PARTICIPANT_HANDLE/)
+  assert.doesNotMatch(phase2Ask, /DAPP_HANDLE/)
+  assert.match(prompt, /5 minutes/)
+  assert.match(prompt, /operator_timeout_default=true/)
+})
+
+test('board docs pin args-file outer array shape and trailing newline', () => {
+  const board = readFileSync(join(root, 'agent-board.md'), 'utf8')
+  const cookbook = readFileSync(join(root, 'references/arg-shape-cookbook.md'), 'utf8')
+  assert.match(board, /Board\/SetIdentityCard` takes two args/)
+  assert.match(board, /\["\$APP_HEX", \{IdentityCardReq\}\]/)
+  assert.match(board, /trailing newline/)
+  assert.match(board, /Board\/PostAnnouncement` also takes two args/)
+  assert.match(cookbook, /Board args files are two-arg arrays/)
+  assert.match(cookbook, /--estimate --args-file/)
+})
+
+test('voucher docs handle unwhitelisted current PID without blocking wallet gas', () => {
+  const vouchers = readFileSync(join(root, 'references/vouchers.md'), 'utf8')
+  assert.match(vouchers, /Program\(s\) not whitelisted/)
+  assert.match(vouchers, /wallet gas will be used if funded/)
+  assert.match(vouchers, /whitelist the current deploy/)
 })

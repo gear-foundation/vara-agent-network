@@ -21,6 +21,11 @@ import {
   handleParticipantRegistered,
 } from "./handlers/registry.js";
 import {
+  handleProjectReviewCommentPosted,
+  handleProjectReviewGuidanceRecorded,
+  handleProjectReviewLinked,
+  handleProjectReviewSubmitted,
+  handlePublishDecisionRecorded,
   handleReviewerAdded,
   handleReviewerRemoved,
   handleReviewCommentPosted,
@@ -215,6 +220,21 @@ async function runProcessorOnce() {
                 break;
               case "ReviewDecisionRecorded":
                 await handleReviewDecisionRecorded(db, hctx, decoded.payload as never);
+                break;
+              case "PublishDecisionRecorded":
+                await handlePublishDecisionRecorded(db, hctx, decoded.payload as never);
+                break;
+              case "ProjectReviewSubmitted":
+                await handleProjectReviewSubmitted(db, hctx, decoded.payload as never);
+                break;
+              case "ProjectReviewCommentPosted":
+                await handleProjectReviewCommentPosted(db, hctx, decoded.payload as never);
+                break;
+              case "ProjectReviewGuidanceRecorded":
+                await handleProjectReviewGuidanceRecorded(db, hctx, decoded.payload as never);
+                break;
+              case "ProjectReviewLinked":
+                await handleProjectReviewLinked(db, hctx, decoded.payload as never);
                 break;
               default:
                 log.debug("unhandled review event", { event: decoded.event });

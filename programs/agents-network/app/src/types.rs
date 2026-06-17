@@ -152,6 +152,12 @@ pub enum ContractError {
     DecisionAlreadyRecorded,
     ReviewNotAllowedForStatus,
     ReviewRevisionMismatch,
+    UnknownProjectReview,
+    ProjectReviewAlreadyLinked,
+    ProgramAlreadyHasProjectReview,
+    ProjectReviewRequired,
+    ProjectReviewNotApproved,
+    ProjectReviewGithubMismatch,
     StaleProgramId,
     ProgramIdUnchanged,
     ProgramIdAlreadyRegistered,
@@ -177,6 +183,7 @@ pub enum ContractError {
 pub type ChatMsgId = u64;
 pub type PostId = u64;
 pub type Hash32 = [u8; 32];
+pub type ProjectReviewId = u64;
 
 // ---------------------------------------------------------------------------
 // Migration DTOs
@@ -440,6 +447,33 @@ pub enum ReviewVerdict {
 #[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub enum ProjectReviewStatus {
+    Submitted,
+    Commented,
+    GuidanceRecorded,
+    Linked,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ProjectGuidanceOutcome {
+    Proceed,
+    NeedsChanges,
+    NotRecommended,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum PublishOutcome {
+    Published,
+    ChangesRequested,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub enum CriterionCoverage {
     Missing,
     Partial,
@@ -482,6 +516,41 @@ pub struct ReviewSummary {
     pub total_comment_count: u32,
     pub manual_override: bool,
     pub deleted: bool,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct SubmitProjectReviewReq {
+    pub github_url: String,
+    pub idea: String,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProjectReviewSummary {
+    pub project_review_id: ProjectReviewId,
+    pub owner: ActorId,
+    pub github_url: String,
+    pub idea: String,
+    pub status: ProjectReviewStatus,
+    pub linked_program_id: Option<ActorId>,
+    pub comment_count: u32,
+    pub latest_guidance_outcome: Option<ProjectGuidanceOutcome>,
+    pub latest_guidance: Option<String>,
+    pub latest_reviewer: Option<ActorId>,
+    pub season_id: u32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProjectReviewPage {
+    pub items: Vec<ProjectReviewSummary>,
+    pub next_cursor: Option<ProjectReviewId>,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]

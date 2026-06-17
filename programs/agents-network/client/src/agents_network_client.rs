@@ -833,22 +833,57 @@ pub mod review {
             reason: String,
             criteria: ReviewCriteria,
         ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env>;
+        fn link_project_review_to_application(
+            &mut self,
+            project_review_id: u64,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::LinkProjectReviewToApplication, Self::Env>;
+        fn owner_project_reply(
+            &mut self,
+            project_review_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::OwnerProjectReply, Self::Env>;
         fn owner_reply(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             body: String,
         ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env>;
+        fn post_project_reviewer_comment(
+            &mut self,
+            project_review_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::PostProjectReviewerComment, Self::Env>;
         fn post_reviewer_comment(
             &mut self,
             program_id: ActorId,
             expected_revision: u32,
             body: String,
         ) -> sails_rs::client::PendingCall<io::PostReviewerComment, Self::Env>;
+        fn publish_application(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::PublishApplication, Self::Env>;
+        fn record_project_guidance(
+            &mut self,
+            project_review_id: u64,
+            outcome: ProjectGuidanceOutcome,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::RecordProjectGuidance, Self::Env>;
         fn remove_reviewer(
             &mut self,
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::RemoveReviewer, Self::Env>;
+        fn request_publish_changes(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::RequestPublishChanges, Self::Env>;
         fn request_review(
             &mut self,
             program_id: ActorId,
@@ -861,6 +896,14 @@ pub mod review {
             reason: String,
             criteria: ReviewCriteria,
         ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env>;
+        fn submit_project_review(
+            &mut self,
+            req: SubmitProjectReviewReq,
+        ) -> sails_rs::client::PendingCall<io::SubmitProjectReview, Self::Env>;
+        fn get_project_review_summary(
+            &self,
+            project_review_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetProjectReviewSummary, Self::Env>;
         fn get_review_summary(
             &self,
             program_id: ActorId,
@@ -869,6 +912,11 @@ pub mod review {
             &self,
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env>;
+        fn list_project_review_summaries(
+            &self,
+            cursor: Option<u64>,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::ListProjectReviewSummaries, Self::Env>;
         fn list_reviewers(&self) -> sails_rs::client::PendingCall<io::ListReviewers, Self::Env>;
     }
     pub struct ReviewImpl;
@@ -889,6 +937,20 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env> {
             self.pending_call((program_id, expected_revision, reason, criteria))
         }
+        fn link_project_review_to_application(
+            &mut self,
+            project_review_id: u64,
+            program_id: ActorId,
+        ) -> sails_rs::client::PendingCall<io::LinkProjectReviewToApplication, Self::Env> {
+            self.pending_call((project_review_id, program_id))
+        }
+        fn owner_project_reply(
+            &mut self,
+            project_review_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::OwnerProjectReply, Self::Env> {
+            self.pending_call((project_review_id, body))
+        }
         fn owner_reply(
             &mut self,
             program_id: ActorId,
@@ -896,6 +958,13 @@ pub mod review {
             body: String,
         ) -> sails_rs::client::PendingCall<io::OwnerReply, Self::Env> {
             self.pending_call((program_id, expected_revision, body))
+        }
+        fn post_project_reviewer_comment(
+            &mut self,
+            project_review_id: u64,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::PostProjectReviewerComment, Self::Env> {
+            self.pending_call((project_review_id, body))
         }
         fn post_reviewer_comment(
             &mut self,
@@ -905,11 +974,37 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::PostReviewerComment, Self::Env> {
             self.pending_call((program_id, expected_revision, body))
         }
+        fn publish_application(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::PublishApplication, Self::Env> {
+            self.pending_call((program_id, expected_revision, reason, criteria))
+        }
+        fn record_project_guidance(
+            &mut self,
+            project_review_id: u64,
+            outcome: ProjectGuidanceOutcome,
+            body: String,
+        ) -> sails_rs::client::PendingCall<io::RecordProjectGuidance, Self::Env> {
+            self.pending_call((project_review_id, outcome, body))
+        }
         fn remove_reviewer(
             &mut self,
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::RemoveReviewer, Self::Env> {
             self.pending_call((reviewer,))
+        }
+        fn request_publish_changes(
+            &mut self,
+            program_id: ActorId,
+            expected_revision: u32,
+            reason: String,
+            criteria: ReviewCriteria,
+        ) -> sails_rs::client::PendingCall<io::RequestPublishChanges, Self::Env> {
+            self.pending_call((program_id, expected_revision, reason, criteria))
         }
         fn request_review(
             &mut self,
@@ -927,6 +1022,18 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env> {
             self.pending_call((program_id, expected_revision, reason, criteria))
         }
+        fn submit_project_review(
+            &mut self,
+            req: SubmitProjectReviewReq,
+        ) -> sails_rs::client::PendingCall<io::SubmitProjectReview, Self::Env> {
+            self.pending_call((req,))
+        }
+        fn get_project_review_summary(
+            &self,
+            project_review_id: u64,
+        ) -> sails_rs::client::PendingCall<io::GetProjectReviewSummary, Self::Env> {
+            self.pending_call((project_review_id,))
+        }
         fn get_review_summary(
             &self,
             program_id: ActorId,
@@ -939,6 +1046,13 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env> {
             self.pending_call((reviewer,))
         }
+        fn list_project_review_summaries(
+            &self,
+            cursor: Option<u64>,
+            limit: u32,
+        ) -> sails_rs::client::PendingCall<io::ListProjectReviewSummaries, Self::Env> {
+            self.pending_call((cursor, limit))
+        }
         fn list_reviewers(&self) -> sails_rs::client::PendingCall<io::ListReviewers, Self::Env> {
             self.pending_call(())
         }
@@ -948,13 +1062,22 @@ pub mod review {
         use super::*;
         sails_rs::io_struct_impl!(AddReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(ApproveForListing (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(LinkProjectReviewToApplication (project_review_id: u64, program_id: ActorId) -> ());
+        sails_rs::io_struct_impl!(OwnerProjectReply (project_review_id: u64, body: String) -> ());
         sails_rs::io_struct_impl!(OwnerReply (program_id: ActorId, expected_revision: u32, body: String) -> ());
+        sails_rs::io_struct_impl!(PostProjectReviewerComment (project_review_id: u64, body: String) -> ());
         sails_rs::io_struct_impl!(PostReviewerComment (program_id: ActorId, expected_revision: u32, body: String) -> ());
+        sails_rs::io_struct_impl!(PublishApplication (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(RecordProjectGuidance (project_review_id: u64, outcome: super::ProjectGuidanceOutcome, body: String) -> ());
         sails_rs::io_struct_impl!(RemoveReviewer (reviewer: ActorId) -> ());
+        sails_rs::io_struct_impl!(RequestPublishChanges (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
         sails_rs::io_struct_impl!(RequestReview (program_id: ActorId, reason: String) -> ());
         sails_rs::io_struct_impl!(RequestRevision (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(SubmitProjectReview (req: super::SubmitProjectReviewReq) -> u64);
+        sails_rs::io_struct_impl!(GetProjectReviewSummary (project_review_id: u64) -> Option<super::ProjectReviewSummary>);
         sails_rs::io_struct_impl!(GetReviewSummary (program_id: ActorId) -> Option<super::ReviewSummary>);
         sails_rs::io_struct_impl!(IsReviewer (reviewer: ActorId) -> bool);
+        sails_rs::io_struct_impl!(ListProjectReviewSummaries (cursor: Option<u64>, limit: u32) -> super::ProjectReviewPage);
         sails_rs::io_struct_impl!(ListReviewers () -> Vec<ActorId>);
     }
 
@@ -1005,6 +1128,49 @@ pub mod review {
                 decided_at: u64,
                 season_id: u32,
             },
+            PublishDecisionRecorded {
+                program_id: ActorId,
+                revision: u32,
+                reviewer: ActorId,
+                outcome: PublishOutcome,
+                reason: String,
+                criteria: ReviewCriteria,
+                old_status: AppStatus,
+                new_status: AppStatus,
+                decided_at: u64,
+                season_id: u32,
+            },
+            ProjectReviewSubmitted {
+                project_review_id: u64,
+                owner: ActorId,
+                github_url: String,
+                idea: String,
+                submitted_at: u64,
+                season_id: u32,
+            },
+            ProjectReviewCommentPosted {
+                project_review_id: u64,
+                author: ActorId,
+                author_role: ReviewAuthorRole,
+                body: String,
+                ts: u64,
+                season_id: u32,
+            },
+            ProjectReviewGuidanceRecorded {
+                project_review_id: u64,
+                reviewer: ActorId,
+                outcome: ProjectGuidanceOutcome,
+                body: String,
+                ts: u64,
+                season_id: u32,
+            },
+            ProjectReviewLinked {
+                project_review_id: u64,
+                owner: ActorId,
+                program_id: ActorId,
+                linked_at: u64,
+                season_id: u32,
+            },
         }
         impl sails_rs::client::Event for ReviewEvents {
             const EVENT_NAMES: &'static [Route] = &[
@@ -1013,6 +1179,11 @@ pub mod review {
                 "ReviewRequested",
                 "ReviewCommentPosted",
                 "ReviewDecisionRecorded",
+                "PublishDecisionRecorded",
+                "ProjectReviewSubmitted",
+                "ProjectReviewCommentPosted",
+                "ProjectReviewGuidanceRecorded",
+                "ProjectReviewLinked",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for ReviewImpl {
@@ -1413,7 +1584,63 @@ pub enum CriterionCoverage {
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
+pub enum ProjectGuidanceOutcome {
+    Proceed,
+    NeedsChanges,
+    NotRecommended,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct SubmitProjectReviewReq {
+    pub github_url: String,
+    pub idea: String,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProjectReviewSummary {
+    pub project_review_id: u64,
+    pub owner: ActorId,
+    pub github_url: String,
+    pub idea: String,
+    pub status: ProjectReviewStatus,
+    pub linked_program_id: Option<ActorId>,
+    pub comment_count: u32,
+    pub latest_guidance_outcome: Option<ProjectGuidanceOutcome>,
+    pub latest_guidance: Option<String>,
+    pub latest_reviewer: Option<ActorId>,
+    pub season_id: u32,
+    pub created_at: u64,
+    pub updated_at: u64,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ProjectReviewStatus {
+    Submitted,
+    Commented,
+    GuidanceRecorded,
+    Linked,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProjectReviewPage {
+    pub items: Vec<ProjectReviewSummary>,
+    pub next_cursor: Option<u64>,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
 pub enum ReviewAuthorRole {
     Reviewer,
     Owner,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum PublishOutcome {
+    Published,
+    ChangesRequested,
 }

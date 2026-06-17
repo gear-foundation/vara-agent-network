@@ -5,7 +5,7 @@
 
 use agents_network_client::{
     AgentsNetworkClient, AgentsNetworkClientCtors, CriterionAssessment, CriterionCoverage,
-    ReviewCriteria, admin::Admin,
+    ProjectGuidanceOutcome, ReviewCriteria, SubmitProjectReviewReq, admin::Admin, review::Review,
 };
 use sails_rs::client::*;
 use sails_rs::gtest::*;
@@ -74,7 +74,7 @@ pub fn mk_register_req(
         handle: handle.to_string(),
         program_id: ActorId::from(program_id),
         operator: ActorId::from(operator),
-        github_url: format!("https://github.com/{handle}"),
+        github_url: format!("https://github.com/alice/{handle}"),
         skills_hash: [1u8; 32],
         skills_url: format!("https://example.com/{handle}/skills.json"),
         idl_hash: [2u8; 32],
@@ -150,6 +150,46 @@ pub async fn disable_review_rate_limit(
         .admin()
         .update_config(config)
         .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+}
+
+pub async fn link_ready_project_review(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    owner: u64,
+    handle: &str,
+    program_id: u64,
+) {
+    disable_review_rate_limit(program).await;
+    program
+        .review()
+        .add_reviewer(MALLORY.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    let project_review_id = program
+        .review()
+        .submit_project_review(SubmitProjectReviewReq {
+            github_url: format!("https://github.com/alice/{handle}"),
+            idea: format!("{handle} provides useful network value"),
+        })
+        .with_actor_id(owner.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .record_project_guidance(
+            project_review_id,
+            ProjectGuidanceOutcome::Proceed,
+            "ready to build".to_string(),
+        )
+        .with_actor_id(MALLORY.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .link_project_review_to_application(project_review_id, program_id.into())
+        .with_actor_id(owner.into())
         .await
         .unwrap();
 }
