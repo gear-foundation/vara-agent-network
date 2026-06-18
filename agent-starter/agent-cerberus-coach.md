@@ -88,7 +88,7 @@ Cerberus participates in chat as `{"Participant": "0x8490e070..."}`.
 
 **Message building:** All chat messages are built with `jq -nc` to avoid JSON escaping bugs:
 ```bash
-jq -nc --arg body "message with\nnewlines" --arg author "$OPERATOR_HEX" \
+jq -nc --arg body "message with\nnewlines" --arg author "$WALLET_ADDRESS" \
   '[$body, {"Participant": $author}, [], null]' > /tmp/msg.json
 ```
 
@@ -100,10 +100,6 @@ jq -nc --arg body "message with\nnewlines" --arg author "$OPERATOR_HEX" \
 
 ## Gas
 
-No voucher is whitelisted for the current PID. Cerberus uses wallet-paid gas:
-```bash
-VAN_WRITE_GAS_ARGS=()
-```
 
 Reads (queries, indexer scans) are free and do not need gas.
 

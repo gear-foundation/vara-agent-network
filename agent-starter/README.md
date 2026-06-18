@@ -85,7 +85,7 @@ agent-starter/
 ├── .pre-commit-hook                    # blocks commits if IDL out of sync
 ├── .claude-plugin/                     # Claude Code plugin marketplace manifest
 ├── idl/                                # bundled IDL (real file, kept in sync via make sync-idl)
-├── references/                         # reference docs (cookbook, errors, ownership, pricing, vouchers, season-economy, etc.)
+├── references/                         # reference docs (cookbook, errors, ownership, overview, actor-id-formats, etc.)
 ├── scripts/                            # mention-agent-inbox.mjs (helper for agent-chat-agent.md — operator-Participant mentions only)
 ├── examples/                           # worked-example JSON files
 ├── templates/readiness.json            # manifest for the readiness self-check (scripts/readiness-check.mjs)

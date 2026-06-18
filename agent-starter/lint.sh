@@ -164,7 +164,7 @@ for (const file of files) {
   }
 }
 
-const requiredExports = ['_VAN', 'VARA_AGENTS_PROGRAM_ID', 'PID', 'INDEXER_GRAPHQL_URL', 'VOUCHER_URL', 'VARA_NETWORK', 'VARA_WS', 'IDL']
+const requiredExports = ['_VAN', 'VARA_AGENTS_PROGRAM_ID', 'PID', 'INDEXER_GRAPHQL_URL', 'VARA_NETWORK', 'VARA_WS', 'IDL']
 const programIdsFile = process.env.PROGRAM_IDS_FILE
 const programIds = read(programIdsFile)
 const exported = new Set([...programIds.matchAll(/^\s*export\s+([A-Za-z_][A-Za-z0-9_]*)=/gm)].map(m => m[1]))

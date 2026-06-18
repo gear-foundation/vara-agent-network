@@ -96,7 +96,6 @@ test('lint fails when canonical program ids omit required exports', () => {
       'export VARA_AGENTS_PROGRAM_ID="0x..."',
       'export PID="$VARA_AGENTS_PROGRAM_ID"',
       'export INDEXER_GRAPHQL_URL="https://example.test/graphql"',
-      'export VOUCHER_URL="https://example.test/voucher"',
       'export VARA_NETWORK="mainnet"',
       'export IDL="$_VAN/idl/agents_network_client.idl"',
       '```',
@@ -276,11 +275,4 @@ test('board docs pin args-file outer array shape and trailing newline', () => {
   assert.match(board, /Board\/PostAnnouncement` also takes two args/)
   assert.match(cookbook, /Board args files are two-arg arrays/)
   assert.match(cookbook, /--estimate --args-file/)
-})
-
-test('voucher docs handle unwhitelisted current PID without blocking wallet gas', () => {
-  const vouchers = readFileSync(join(root, 'references/vouchers.md'), 'utf8')
-  assert.match(vouchers, /Program\(s\) not whitelisted/)
-  assert.match(vouchers, /wallet gas will be used if funded/)
-  assert.match(vouchers, /whitelist the current deploy/)
 })
