@@ -10,6 +10,7 @@ import { PageAmbient } from '@/components/page-ambient'
 import { ToastAction } from '@/components/ui/toast'
 import { toast } from '@/hooks/use-toast'
 import { useChatFeed, type LiveChatMessage } from '@/hooks/use-chat-feed'
+import { useCurrentUserState } from '@/hooks/use-current-user-state'
 import { useMentionTargets } from '@/hooks/use-mention-targets'
 import { useRegistryIdentities } from '@/hooks/use-registry-identities'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
@@ -113,6 +114,7 @@ type PendingChatMessage = {
   authorHandle: string | null
   authorRef: string
   body: string
+  replyTo?: string | null
   ts: string
   status: 'signing' | 'submitted'
 }
@@ -120,6 +122,7 @@ type PendingChatMessage = {
 type DisplayChatMessage = LiveChatMessage | PendingChatMessage
 
 const PENDING_DUPLICATE_WINDOW_MS = 120_000
+const CERBERUS_HANDLE = 'cerberus'
 
 function duplicateBucket(ts: number) {
   return Math.floor(ts / PENDING_DUPLICATE_WINDOW_MS)
@@ -170,8 +173,40 @@ function hasConfirmedDuplicate(pending: PendingChatMessage, confirmedIndex: Map<
   return false
 }
 
+function normalizeHandle(value: string | null | undefined) {
+  return value?.replace(/^@/, '').toLowerCase() ?? ''
+}
+
+function bodyMentionsHandle(body: string, handle: string) {
+  const normalized = normalizeHandle(handle)
+  if (!normalized) return false
+  const mentions = body.match(/@\w[\w-]*/g) ?? []
+  return mentions.some((mention) => normalizeHandle(mention) === normalized)
+}
+
+function isAuthoredBy(message: Pick<DisplayChatMessage, 'authorHandle'>, handle: string) {
+  return normalizeHandle(message.authorHandle) === normalizeHandle(handle)
+}
+
+function isAuthoredByAny(message: Pick<DisplayChatMessage, 'authorHandle'>, handles: string[]) {
+  return handles.some((handle) => isAuthoredBy(message, handle))
+}
+
+function bodyMentionsAnyHandle(body: string, handles: string[]) {
+  return handles.some((handle) => bodyMentionsHandle(body, handle))
+}
+
+function cerberusReason(message: DisplayChatMessage, agentHandles: string[], agentMessageIds: Set<string>) {
+  if (!isAuthoredBy(message, CERBERUS_HANDLE)) return null
+  if (bodyMentionsHandle(message.body, 'all')) return 'mentions @all'
+  if (bodyMentionsAnyHandle(message.body, agentHandles)) return 'mentions you'
+  if ('replyTo' in message && message.replyTo && agentMessageIds.has(String(message.replyTo))) return 'reply'
+  return null
+}
+
 export default function ChatPage() {
   const [input, setInput] = useState('')
+  const [chatMode, setChatMode] = useState<'all' | 'cerberus'>('all')
   const [caretIndex, setCaretIndex] = useState(0)
   const [inputFocused, setInputFocused] = useState(false)
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
@@ -191,6 +226,7 @@ export default function ChatPage() {
   const { messages, loading, loadingOlder, totalCount, stats, hasMore, loadOlder } = useChatFeed()
   const { targets: mentionTargets } = useMentionTargets()
   const { identities } = useRegistryIdentities()
+  const { state: currentUserState } = useCurrentUserState()
   const {
     status,
     account,
@@ -224,9 +260,38 @@ export default function ChatPage() {
       ...pendingMessages.filter((pending) => !hasConfirmedDuplicate(pending, confirmedIndex)),
     ].sort((a, b) => Number(a.ts) - Number(b.ts))
   }, [messages, pendingMessages])
+  const myAgentHandles = useMemo(() => {
+    if (currentUserState.kind !== 'connected_registered') return []
+    return [
+      currentUserState.participantHandle,
+      ...currentUserState.ownedApps.map((app) => app.handle),
+    ]
+  }, [currentUserState])
+  const myAgentLabel = myAgentHandles.length > 0
+    ? myAgentHandles.map((handle) => `@${handle}`).join(', ')
+    : ''
+  const canUseCerberusReview = myAgentHandles.length > 0
+  const myAgentMessageIds = useMemo(() => {
+    const ids = new Set<string>()
+    for (const message of displayMessages) {
+      if (isAuthoredByAny(message, myAgentHandles) && 'msgId' in message) ids.add(String(message.msgId))
+    }
+    return ids
+  }, [displayMessages, myAgentHandles])
+  const filteredDisplayMessages = useMemo(() => {
+    if (chatMode !== 'cerberus') return displayMessages
+    if (myAgentHandles.length === 0) return []
+    return displayMessages.filter((message) => (
+      isAuthoredByAny(message, myAgentHandles)
+      || Boolean(cerberusReason(message, myAgentHandles, myAgentMessageIds))
+    ))
+  }, [chatMode, displayMessages, myAgentHandles, myAgentMessageIds])
+  useEffect(() => {
+    if (!canUseCerberusReview && chatMode === 'cerberus') setChatMode('all')
+  }, [canUseCerberusReview, chatMode])
   const fallbackChannelStats = useMemo(() => {
     const recentAuthors = Array.from(
-      displayMessages.reduce((map, message) => {
+      filteredDisplayMessages.reduce((map, message) => {
         const key = authorLabel(message)
         const item = map.get(key) ?? { handle: key, title: authorTitle(message), calls: 0 }
         item.calls += 1
@@ -237,16 +302,16 @@ export default function ChatPage() {
       .map(([, value]) => value)
       .sort((a, b) => b.calls - a.calls)
       .slice(0, 8)
-    const mentionCount = displayMessages.reduce((sum, message) => sum + (message.body.match(/@\w[\w-]*/g)?.length ?? 0), 0)
-    const signedParticipants = new Set(displayMessages.map((message) => authorLabel(message))).size
+    const mentionCount = filteredDisplayMessages.reduce((sum, message) => sum + (message.body.match(/@\w[\w-]*/g)?.length ?? 0), 0)
+    const signedParticipants = new Set(filteredDisplayMessages.map((message) => authorLabel(message))).size
 
     return { recentAuthors, mentionCount, signedParticipants }
-  }, [displayMessages])
-  const loadedCount = displayMessages.length
-  const channelAuthors = stats?.topAuthors ?? fallbackChannelStats.recentAuthors
-  const channelAuthorCount = stats?.totalAuthors ?? fallbackChannelStats.signedParticipants
-  const channelMentionCount = stats?.totalMentions ?? fallbackChannelStats.mentionCount
-  const channelMessageCount = stats?.totalMessages ?? (totalCount || loadedCount)
+  }, [filteredDisplayMessages])
+  const loadedCount = filteredDisplayMessages.length
+  const channelAuthors = chatMode === 'all' ? (stats?.topAuthors ?? fallbackChannelStats.recentAuthors) : fallbackChannelStats.recentAuthors
+  const channelAuthorCount = chatMode === 'all' ? (stats?.totalAuthors ?? fallbackChannelStats.signedParticipants) : fallbackChannelStats.signedParticipants
+  const channelMentionCount = chatMode === 'all' ? (stats?.totalMentions ?? fallbackChannelStats.mentionCount) : fallbackChannelStats.mentionCount
+  const channelMessageCount = chatMode === 'all' ? (stats?.totalMessages ?? (totalCount || loadedCount)) : loadedCount
   const [programConfigured, setProgramConfigured] = useState(true)
   const mentionMatch = input.slice(0, caretIndex).match(/(^|\s)@([a-z0-9_-]*)$/i)
   const mentionQuery = mentionMatch?.[2]?.toLowerCase() ?? ''
@@ -283,11 +348,11 @@ export default function ChatPage() {
     if (suppressNextAutoScroll.current) {
       suppressNextAutoScroll.current = false
       if (feed) lastScrollTop.current = feed.scrollTop
-      previousMessageCount.current = displayMessages.length
+      previousMessageCount.current = filteredDisplayMessages.length
       return
     }
 
-    if (previousCount === 0 && displayMessages.length > 0 && !initialScrollDone.current) {
+    if (previousCount === 0 && filteredDisplayMessages.length > 0 && !initialScrollDone.current) {
       initialScrollDone.current = true
       stickToBottom.current = true
       scrollFeedToBottom()
@@ -307,8 +372,8 @@ export default function ChatPage() {
     } else if (feed) {
       feed.scrollTop = lastScrollTop.current
     }
-    previousMessageCount.current = displayMessages.length
-  }, [displayMessages])
+    previousMessageCount.current = filteredDisplayMessages.length
+  }, [filteredDisplayMessages])
 
   useEffect(() => {
     setProgramConfigured(Boolean(env.programId))
@@ -559,8 +624,14 @@ export default function ChatPage() {
             <div className="chat-main">
               <div className="chat-header">
                 <div>
-                  <div className="chat-header__name">#agent-chat</div>
-                  <div className="chat-header__sub">on-chain · all messages are extrinsics · mention agents by @handle</div>
+                  <div className="chat-header__name">
+                    {chatMode === 'cerberus' ? '#my-agent-cerberus' : '#agent-chat'}
+                  </div>
+                  <div className="chat-header__sub">
+                    {chatMode === 'cerberus'
+                      ? `showing your agent handles plus @${CERBERUS_HANDLE} replies, direct mentions, and @all`
+                      : 'on-chain · all messages are extrinsics · mention agents by @handle'}
+                  </div>
                 </div>
                 <span className="live-pill">
                   <span className="live-dot h-2 w-2 rounded-full bg-primary" />
@@ -568,8 +639,33 @@ export default function ChatPage() {
                 </span>
               </div>
 
+              {canUseCerberusReview && (
+                <div className="chat-filter-bar">
+                  <div className="chat-mode-toggle" aria-label="Chat mode">
+                    <button
+                      type="button"
+                      data-active={chatMode === 'all'}
+                      onClick={() => setChatMode('all')}
+                    >
+                      All chat
+                    </button>
+                    <button
+                      type="button"
+                      data-active={chatMode === 'cerberus'}
+                      onClick={() => setChatMode('cerberus')}
+                    >
+                      Cerberus review
+                    </button>
+                  </div>
+                  <div className="chat-agent-scope">
+                    <span>Your agent</span>
+                    <strong title={myAgentLabel}>{myAgentLabel}</strong>
+                  </div>
+                </div>
+              )}
+
               <div className="chat-feed" onScroll={handleFeedScroll} ref={feedRef}>
-                {hasMore && (
+                {hasMore && chatMode === 'all' && (
                   <button
                     className="chat-feed__older"
                     type="button"
@@ -582,7 +678,7 @@ export default function ChatPage() {
                 {loading && (
                   <div className="chat-feed__loading">Loading on-chain messages...</div>
                 )}
-                {displayMessages.map((message) => {
+                {filteredDisplayMessages.map((message) => {
                   const handle = authorLabel(message)
                   const title = authorTitle(message)
                   const tone = toneForHandle(handle)
@@ -594,7 +690,7 @@ export default function ChatPage() {
                     && authorActorId !== accountActorId
 
                   return (
-                    <div className="chat-msg" key={message.id}>
+                    <div className="chat-msg" data-coach={reason ? 'true' : undefined} key={message.id}>
                       <div className="chat-avatar" data-tone={tone} style={toneStyle(tone)}>
                         {initials(handle)}
                       </div>
@@ -635,8 +731,14 @@ export default function ChatPage() {
                     </div>
                   )
                 })}
-                {!loading && displayMessages.length === 0 && (
-                  <div className="chat-feed__empty">No indexed messages yet.</div>
+                {!loading && filteredDisplayMessages.length === 0 && (
+                  <div className="chat-feed__empty">
+                    {chatMode === 'cerberus'
+                      ? myAgentHandles.length > 0
+                        ? `No @${CERBERUS_HANDLE} messages for your agent or @all in the loaded window yet.`
+                        : 'Connect a registered wallet to show your agent and Cerberus review messages.'
+                      : 'No indexed messages yet.'}
+                  </div>
                 )}
                 <div ref={bottomRef} />
               </div>

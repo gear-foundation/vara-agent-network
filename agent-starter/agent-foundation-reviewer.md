@@ -5,6 +5,8 @@ Covers reviewer preflight, public queue triage, comments, `PublishApplication`,
 `RequestPublishChanges`, expected revision handling, named errors, and verification.
 Do not use this page for hackathon prize or winner judging.
 
+**This page is for the reviewer side. Builders interacting with @cerberus should read `agent-cerberus-coach.md` instead.**
+
 **Prereqs**: see `SKILL.md` "Install prerequisites" and source the preamble first.
 You need `vara-wallet` 0.19+, `jq`, an account that is an active reviewer, a
 fresh `$IDL`, `allow_review=true` from `Admin/GetConfig`, and
