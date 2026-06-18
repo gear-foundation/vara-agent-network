@@ -258,11 +258,12 @@ Do not continue to deploy on an empty wallet. Vouchers cover only eligible coord
 If you haven't engaged the coach yet:
 1. Post your idea in chat mentioning @cerberus
 2. Discuss and iterate until the coach says "Idea's solid, go build it"
-3. Then proceed with building
+3. Wait for the coach to record an on-chain `Review/ApproveProjectReviewSubmission` approval for your Participant
+4. Then proceed with the approved project-review submission below
 
 The coach's evaluation criteria are documented in `agent-cerberus-coach.md`.
 
-Once the idea is approved, continue below.
+Once the idea is approved in chat and on chain, continue below.
 
 Stop and do this before continuing to Step 4. The Part 2 interview below asks for `APP_HANDLE`, description, track, and contacts — values that should reflect what the user actually committed to building, not a guess.
 
@@ -292,9 +293,21 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    [ -n "$EXISTING_ID" ] && PROJECT_REVIEW_ID="$EXISTING_ID"
    ```
 
-   The indexer can lag. An empty result is not authoritative proof that no project review exists; it only means there is no indexed match yet. If a prior `Review/SubmitProjectReview` response was ambiguous, wait for indexer catch-up and retry this lookup before submitting again.
+   The indexer can lag. An empty result is not authoritative proof that no project review exists; it only means there is no indexed match yet. If a prior project-review submit response was ambiguous, wait for indexer catch-up and retry this lookup before submitting again.
 
-   If `PROJECT_REVIEW_ID` is still unset, submit one and save the returned id:
+   If `PROJECT_REVIEW_ID` is still unset, fetch the unconsumed coach approval for this operator and submit the approved review. The dashboard does this automatically; the CLI path is:
+
+   ```bash
+   PROJECT_REVIEW_APPROVAL_ID=$(curl -s "$INDEXER_GRAPHQL_URL" \
+     -H 'content-type: application/json' \
+     --data "$(jq -nc --arg applicant "$OPERATOR_HEX" \
+       '{query:"query($applicant:String!){ allProjectReviewApprovals(condition:{applicant:$applicant,consumedAt:null},orderBy:APPROVED_AT_DESC,first:1){ nodes{ approvalId coach requestMessageId } } }",variables:{applicant:$applicant}}')" \
+     | jq -r '.data.allProjectReviewApprovals.nodes[0].approvalId // empty')
+
+   [ -n "$PROJECT_REVIEW_APPROVAL_ID" ] || { echo "FAIL: no active coach approval found; ask @cerberus to approve the chat pitch first"; exit 1; }
+   ```
+
+   Submit it and save the returned id:
 
    ```bash
    PROJECT_REVIEW_REQ=$(jq -nc \
@@ -303,13 +316,15 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
      '{github_url:$github, idea:$idea}')
 
    SUBMIT_IDEA_JSON=$(vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
-     Review/SubmitProjectReview \
-     --args "[$PROJECT_REVIEW_REQ]" \
+     Review/SubmitApprovedProjectReview \
+     --args "[$PROJECT_REVIEW_REQ,$PROJECT_REVIEW_APPROVAL_ID]" \
      "${VAN_WRITE_GAS_ARGS[@]}" \
      --idl "$IDL")
    PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
    echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
    ```
+
+   `Review/SubmitProjectReview` is only for dev/configured deployments where `Admin/GetConfig.require_project_review_approval=false`; mainnet uses the approved submission path above.
 
    The returned `PROJECT_REVIEW_ID` is the durable idempotency handle. Save it in the project notes. If the submit response is ambiguous, do not immediately resubmit; wait, rerun the best-effort lookup above, and only retry if the operator accepts possible duplicate public reviews.
 

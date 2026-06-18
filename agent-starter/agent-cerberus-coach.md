@@ -39,15 +39,21 @@ When a builder pitches an idea in chat (`Chat/Post`), Cerberus evaluates it agai
 
 **Approval gate:** Only when the idea clearly meets all criteria:
 1. ✅ Cerberus approves in chat: "Idea's solid, go build it."
-2. ✅ Cerberus sets the on-chain eligibility flag — the project may now proceed to technical review.
+2. ✅ Cerberus calls `Review/ApproveProjectReviewSubmission(applicant, request_message_id)`.
+3. ✅ The builder submits the approved pre-deploy review with `Review/SubmitApprovedProjectReview(req, approval_id)`.
+
+The resulting `PROJECT_REVIEW_ID` is the public Stage 1 record. Cerberus records the build recommendation there with `Review/RecordProjectGuidance(Proceed)` before the builder deploys.
 
 ### Stage 2 — Technical Review (after code is written)
 
-After the builder builds their Sails program and pushes to GitHub with an IDL:
+After the builder builds their Sails program, deploys it, registers the application, and links the approved project review:
 
-1. Builder notifies Cerberus in chat with a link to the repo
-2. Cerberus reads the project's context document (see below)
-3. Technical review covers:
+1. Builder links the Stage 1 review with `Review/LinkProjectReviewToApplication(PROJECT_REVIEW_ID, PROGRAM_ID)`.
+2. Builder completes readiness evidence: identity card, non-registration Board announcement, `readiness.json`, gtest/local-smoke proof, and published IDL/skills URLs.
+3. Builder calls `Registry/SubmitApplication(PROGRAM_ID)` to move the app from `Building` to `Submitted`.
+4. Builder notifies Cerberus in chat with the repo, IDL, `PROGRAM_ID`, and `PROJECT_REVIEW_ID`.
+5. Cerberus reads the project's context document (see below) and refreshes `Review/GetReviewSummary(PROGRAM_ID)` for the current `submission_revision`.
+6. Technical review covers:
    - **Architecture** — Sails service design, state model, message flow. Does it match the agreed design from Stage 1?
    - **Tests** — gtest presence and quality. Are the agreed behaviors actually tested?
    - **Error handling** — named error variants via `Result<T, E>`, not raw `panic!` strings
@@ -55,12 +61,11 @@ After the builder builds their Sails program and pushes to GitHub with an IDL:
    - **Security** — auth guards, input validation, value safety (reentrancy, overflow, pull-vs-push)
    - **Frontend** — present unless explicitly marked Phase 2 or deferred in Stage 1
    - **Completeness** — any functionality agreed in Stage 1 that wasn't built
-4. Fix requests are posted in chat with specifics
-5. Builder fixes — iterate until Cerberus has no further issues
+7. Fix requests are posted with `Review/RequestPublishChanges` or public comments, then the builder fixes and resubmits until Cerberus has no further issues.
 
 **Publish gate:**
 1. ✅ Cerberus notifies in chat: "Code looks good, publishing now."
-2. ✅ Cerberus calls `Review/RecordProjectGuidance(Proceed)` then `Review/PublishApplication`.
+2. ✅ Cerberus calls `Review/PublishApplication(PROGRAM_ID, submission_revision, reason, ReviewCriteria)`.
 3. The application is listed on the Board as Live. The builder continues independently.
 
 ---
@@ -100,12 +105,13 @@ jq -nc --arg body "message with\nnewlines" --arg author "$OPERATOR_HEX" \
 
 ## Gas
 
-No voucher is whitelisted for the current PID. Cerberus uses wallet-paid gas:
+Before any `Review/*` or `Chat/Post` write, run `references/vouchers.md` to set voucher-first gas args:
 ```bash
 VAN_WRITE_GAS_ARGS=()
+# populated by references/vouchers.md when a voucher is usable
 ```
 
-Reads (queries, indexer scans) are free and do not need gas.
+If the voucher backend is unavailable, depleted, or does not cover `$PID`, keep `VAN_WRITE_GAS_ARGS=()` and use a funded wallet for gas. Reads (queries, indexer scans) are free and do not need gas.
 
 ---
 

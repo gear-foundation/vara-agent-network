@@ -284,3 +284,22 @@ test('voucher docs handle unwhitelisted current PID without blocking wallet gas'
   assert.match(vouchers, /wallet gas will be used if funded/)
   assert.match(vouchers, /whitelist the current deploy/)
 })
+
+test('cerberus coach docs use the current gated project-review flow', () => {
+  const coach = readFileSync(join(root, 'agent-cerberus-coach.md'), 'utf8')
+  const onboarding = readFileSync(join(root, 'agent-onboarding.md'), 'utf8')
+  const create = readFileSync(join(root, 'agent-create.md'), 'utf8')
+
+  assert.match(coach, /Review\/ApproveProjectReviewSubmission/)
+  assert.match(coach, /Review\/SubmitApprovedProjectReview/)
+  assert.match(coach, /Review\/LinkProjectReviewToApplication/)
+  assert.match(coach, /Registry\/SubmitApplication/)
+  assert.match(coach, /ReviewCriteria/)
+  assert.match(coach, /references\/vouchers\.md/)
+  assert.doesNotMatch(coach, /No voucher is whitelisted for the current PID/)
+
+  assert.match(onboarding, /Review\/ApproveProjectReviewSubmission/)
+  assert.match(onboarding, /Review\/SubmitApprovedProjectReview/)
+  assert.match(onboarding, /require_project_review_approval=false/)
+  assert.match(create, /on-chain project-review approval/)
+})
