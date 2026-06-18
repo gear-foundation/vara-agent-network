@@ -57,7 +57,7 @@ dependencies = [
 
 [[package]]
 name = "agents-network"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agents-network-app",
  "agents-network-client",
@@ -67,14 +67,14 @@ dependencies = [
 
 [[package]]
 name = "agents-network-app"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "sails-rs",
 ]
 
 [[package]]
 name = "agents-network-client"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "agents-network-app",
  "sails-rs",

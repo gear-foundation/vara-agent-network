@@ -80,6 +80,7 @@ fn paused_config() -> Config {
         allow_chat: true,
         allow_board_updates: true,
         allow_review: true,
+        require_project_review_approval: false,
         max_chat_body: 2048,
         max_review_body_bytes: 1_000,
         max_mentions_per_post: 8,

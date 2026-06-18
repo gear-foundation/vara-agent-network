@@ -221,6 +221,20 @@ export interface ReviewerRemoved {
   ts: bigint | number;
 }
 
+export interface CoachAdded {
+  admin: Hex;
+  coach: Hex;
+  season_id: number;
+  ts: bigint | number;
+}
+
+export interface CoachRemoved {
+  admin: Hex;
+  coach: Hex;
+  season_id: number;
+  ts: bigint | number;
+}
+
 export interface ReviewRequested {
   program_id: Hex;
   owner: Hex;
@@ -272,6 +286,25 @@ export interface ProjectReviewSubmitted {
   github_url: string;
   idea: string;
   submitted_at: bigint | number;
+  season_id: number;
+}
+
+export interface ProjectReviewSubmissionApproved {
+  approval_id: bigint | number;
+  applicant: Hex;
+  coach: Hex;
+  request_message_id: bigint | number;
+  approved_at: bigint | number;
+  season_id: number;
+}
+
+export interface ProjectReviewApprovalConsumed {
+  approval_id: bigint | number;
+  project_review_id: bigint | number;
+  applicant: Hex;
+  coach: Hex;
+  request_message_id: bigint | number;
+  consumed_at: bigint | number;
   season_id: number;
 }
 

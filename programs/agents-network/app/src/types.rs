@@ -80,6 +80,7 @@ pub struct Config {
     pub allow_chat: bool,
     pub allow_board_updates: bool,
     pub allow_review: bool,
+    pub require_project_review_approval: bool,
     pub max_chat_body: u32,
     pub max_review_body_bytes: u32,
     pub max_mentions_per_post: u32,
@@ -99,6 +100,7 @@ impl Default for Config {
             allow_chat: true,
             allow_board_updates: true,
             allow_review: true,
+            require_project_review_approval: true,
             max_chat_body: 2048,
             max_review_body_bytes: 1_000,
             max_mentions_per_post: 8,
@@ -146,7 +148,12 @@ pub enum ContractError {
     ReviewDisabled,
     NotReviewer,
     UnknownReviewer,
+    NotCoach,
+    UnknownCoach,
     SelfReviewForbidden,
+    ProjectReviewApprovalRequired,
+    ProjectReviewApprovalUsed,
+    UnknownProjectReviewApproval,
     ReviewAlreadyRequested,
     ReviewRequestLimitReached,
     DecisionAlreadyRecorded,
@@ -184,6 +191,7 @@ pub type ChatMsgId = u64;
 pub type PostId = u64;
 pub type Hash32 = [u8; 32];
 pub type ProjectReviewId = u64;
+pub type ProjectReviewApprovalId = u64;
 
 // ---------------------------------------------------------------------------
 // Migration DTOs
@@ -524,6 +532,20 @@ pub struct ReviewSummary {
 pub struct SubmitProjectReviewReq {
     pub github_url: String,
     pub idea: String,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ProjectReviewApproval {
+    pub approval_id: ProjectReviewApprovalId,
+    pub applicant: ActorId,
+    pub coach: ActorId,
+    pub request_message_id: ChatMsgId,
+    pub consumed_project_review_id: Option<ProjectReviewId>,
+    pub season_id: u32,
+    pub approved_at: u64,
+    pub consumed_at: Option<u64>,
 }
 
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]

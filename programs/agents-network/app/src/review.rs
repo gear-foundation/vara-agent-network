@@ -17,10 +17,13 @@ use sails_rs::prelude::*;
 #[derive(Default)]
 pub struct ReviewState {
     pub reviewers: BTreeMap<(u32, ActorId), bool>,
+    pub coaches: BTreeMap<(u32, ActorId), bool>,
     pub summaries: BTreeMap<ActorId, ReviewSummary>,
     pub decisions: BTreeMap<(ActorId, u32), bool>,
     pub last_review_at: BTreeMap<ActorId, u64>,
     pub next_project_review_id: ProjectReviewId,
+    pub next_project_review_approval_id: ProjectReviewApprovalId,
+    pub project_review_approvals: BTreeMap<ProjectReviewApprovalId, ProjectReviewApproval>,
     pub project_summaries: BTreeMap<ProjectReviewId, ProjectReviewSummary>,
     pub project_review_by_program: BTreeMap<ActorId, ProjectReviewId>,
 }
@@ -39,6 +42,18 @@ pub enum ReviewEvent {
     ReviewerRemoved {
         admin: ActorId,
         reviewer: ActorId,
+        season_id: u32,
+        ts: u64,
+    },
+    CoachAdded {
+        admin: ActorId,
+        coach: ActorId,
+        season_id: u32,
+        ts: u64,
+    },
+    CoachRemoved {
+        admin: ActorId,
+        coach: ActorId,
         season_id: u32,
         ts: u64,
     },
@@ -89,6 +104,23 @@ pub enum ReviewEvent {
         github_url: String,
         idea: String,
         submitted_at: u64,
+        season_id: u32,
+    },
+    ProjectReviewSubmissionApproved {
+        approval_id: ProjectReviewApprovalId,
+        applicant: ActorId,
+        coach: ActorId,
+        request_message_id: ChatMsgId,
+        approved_at: u64,
+        season_id: u32,
+    },
+    ProjectReviewApprovalConsumed {
+        approval_id: ProjectReviewApprovalId,
+        project_review_id: ProjectReviewId,
+        applicant: ActorId,
+        coach: ActorId,
+        request_message_id: ChatMsgId,
+        consumed_at: u64,
         season_id: u32,
     },
     ProjectReviewCommentPosted {
@@ -213,18 +245,64 @@ impl<'a> ReviewService<'a> {
 
     #[export]
     pub fn list_reviewers(&self) -> Vec<ActorId> {
-        self.review
-            .borrow()
-            .reviewers
-            .iter()
-            .filter_map(|((season, reviewer), active)| {
-                if *season == self.current_season && *active {
-                    Some(*reviewer)
-                } else {
-                    None
-                }
-            })
-            .collect()
+        list_active_role_members(&self.review.borrow().reviewers, self.current_season)
+    }
+
+    #[export(unwrap_result)]
+    pub fn add_coach(&mut self, coach: ActorId) -> Result<(), ContractError> {
+        let admin = self.ensure_admin()?;
+        if coach == ActorId::zero() {
+            return Err(ContractError::UnknownCoach);
+        }
+        let season_id = self.current_season;
+        {
+            let mut review = self.review.borrow_mut();
+            if is_active_role_member(&review.coaches, season_id, coach) {
+                return Err(ContractError::AlreadyRegistered);
+            }
+            review.coaches.insert((season_id, coach), true);
+        }
+        let ts = exec::block_timestamp();
+        self.emit_event(ReviewEvent::CoachAdded {
+            admin,
+            coach,
+            season_id,
+            ts,
+        })
+        .expect("emit CoachAdded failed");
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn remove_coach(&mut self, coach: ActorId) -> Result<(), ContractError> {
+        let admin = self.ensure_admin()?;
+        let season_id = self.current_season;
+        {
+            let mut review = self.review.borrow_mut();
+            if !is_active_role_member(&review.coaches, season_id, coach) {
+                return Err(ContractError::UnknownCoach);
+            }
+            review.coaches.insert((season_id, coach), false);
+        }
+        let ts = exec::block_timestamp();
+        self.emit_event(ReviewEvent::CoachRemoved {
+            admin,
+            coach,
+            season_id,
+            ts,
+        })
+        .expect("emit CoachRemoved failed");
+        Ok(())
+    }
+
+    #[export]
+    pub fn is_coach(&self, coach: ActorId) -> bool {
+        is_active_coach(&self.review.borrow(), self.current_season, coach)
+    }
+
+    #[export]
+    pub fn list_coaches(&self) -> Vec<ActorId> {
+        list_active_role_members(&self.review.borrow().coaches, self.current_season)
     }
 
     #[export(unwrap_result)]
@@ -459,48 +537,73 @@ impl<'a> ReviewService<'a> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_user_mutations_allowed(&config)?;
         guards::ensure_review_enabled(&config)?;
-        guards::check_project_review_req(&req, &config)?;
+        if config.require_project_review_approval {
+            return Err(ContractError::ProjectReviewApprovalRequired);
+        }
+        self.submit_project_review_state(req, None)
+    }
+
+    #[export(unwrap_result)]
+    pub fn approve_project_review_submission(
+        &mut self,
+        applicant: ActorId,
+        request_message_id: ChatMsgId,
+    ) -> Result<ProjectReviewApprovalId, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
 
         let caller = msg::source();
         let now = exec::block_timestamp();
         let season_id = self.current_season;
-        let project_review_id = {
+        let approval_id = {
             let mut review = self.review.borrow_mut();
             ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
-            review.next_project_review_id = review.next_project_review_id.saturating_add(1);
-            let project_review_id = review.next_project_review_id;
-            review.project_summaries.insert(
-                project_review_id,
-                ProjectReviewSummary {
-                    project_review_id,
-                    owner: caller,
-                    github_url: req.github_url.clone(),
-                    idea: req.idea.clone(),
-                    status: ProjectReviewStatus::Submitted,
-                    linked_program_id: None,
-                    comment_count: 0,
-                    latest_guidance_outcome: None,
-                    latest_guidance: None,
-                    latest_reviewer: None,
+            if !is_active_coach(&review, season_id, caller) {
+                return Err(ContractError::NotCoach);
+            }
+            if applicant == caller {
+                return Err(ContractError::SelfReviewForbidden);
+            }
+            review.next_project_review_approval_id =
+                review.next_project_review_approval_id.saturating_add(1);
+            let approval_id = review.next_project_review_approval_id;
+            review.project_review_approvals.insert(
+                approval_id,
+                ProjectReviewApproval {
+                    approval_id,
+                    applicant,
+                    coach: caller,
+                    request_message_id,
+                    consumed_project_review_id: None,
                     season_id,
-                    created_at: now,
-                    updated_at: now,
+                    approved_at: now,
+                    consumed_at: None,
                 },
             );
-            project_review_id
+            approval_id
         };
 
-        self.emit_event(ReviewEvent::ProjectReviewSubmitted {
-            project_review_id,
-            owner: caller,
-            github_url: req.github_url,
-            idea: req.idea,
-            submitted_at: now,
+        self.emit_event(ReviewEvent::ProjectReviewSubmissionApproved {
+            approval_id,
+            applicant,
+            coach: caller,
+            request_message_id,
+            approved_at: now,
             season_id,
         })
-        .expect("emit ProjectReviewSubmitted failed");
+        .expect("emit ProjectReviewSubmissionApproved failed");
 
-        Ok(project_review_id)
+        Ok(approval_id)
+    }
+
+    #[export(unwrap_result)]
+    pub fn submit_approved_project_review(
+        &mut self,
+        req: SubmitProjectReviewReq,
+        approval_id: ProjectReviewApprovalId,
+    ) -> Result<ProjectReviewId, ContractError> {
+        self.submit_project_review_state(req, Some(approval_id))
     }
 
     #[export(unwrap_result)]
@@ -655,6 +758,108 @@ impl<'a> ReviewService<'a> {
             }
         }
         ProjectReviewPage { items, next_cursor }
+    }
+
+    fn submit_project_review_state(
+        &mut self,
+        req: SubmitProjectReviewReq,
+        approval_id: Option<ProjectReviewApprovalId>,
+    ) -> Result<ProjectReviewId, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_project_review_req(&req, &config)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let consumed_approval = {
+            let mut review = self.review.borrow_mut();
+            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+            match approval_id {
+                Some(approval_id) => {
+                    let approval = review
+                        .project_review_approvals
+                        .get(&approval_id)
+                        .ok_or(ContractError::UnknownProjectReviewApproval)?;
+                    if approval.applicant != caller || approval.season_id != season_id {
+                        return Err(ContractError::ProjectReviewApprovalRequired);
+                    }
+                    if approval.consumed_project_review_id.is_some() {
+                        return Err(ContractError::ProjectReviewApprovalUsed);
+                    }
+                    if !is_active_coach(&review, season_id, approval.coach) {
+                        return Err(ContractError::NotCoach);
+                    }
+                    Some(approval.clone())
+                }
+                None => {
+                    if config.require_project_review_approval {
+                        return Err(ContractError::ProjectReviewApprovalRequired);
+                    }
+                    None
+                }
+            }
+        };
+
+        let project_review_id = {
+            let mut review = self.review.borrow_mut();
+            review.next_project_review_id = review.next_project_review_id.saturating_add(1);
+            let project_review_id = review.next_project_review_id;
+            review.project_summaries.insert(
+                project_review_id,
+                ProjectReviewSummary {
+                    project_review_id,
+                    owner: caller,
+                    github_url: req.github_url.clone(),
+                    idea: req.idea.clone(),
+                    status: ProjectReviewStatus::Submitted,
+                    linked_program_id: None,
+                    comment_count: 0,
+                    latest_guidance_outcome: None,
+                    latest_guidance: None,
+                    latest_reviewer: None,
+                    season_id,
+                    created_at: now,
+                    updated_at: now,
+                },
+            );
+            if let Some(approval) = &consumed_approval {
+                if let Some(stored) = review
+                    .project_review_approvals
+                    .get_mut(&approval.approval_id)
+                {
+                    stored.consumed_project_review_id = Some(project_review_id);
+                    stored.consumed_at = Some(now);
+                }
+            }
+            project_review_id
+        };
+
+        self.emit_event(ReviewEvent::ProjectReviewSubmitted {
+            project_review_id,
+            owner: caller,
+            github_url: req.github_url,
+            idea: req.idea,
+            submitted_at: now,
+            season_id,
+        })
+        .expect("emit ProjectReviewSubmitted failed");
+
+        if let Some(approval) = consumed_approval {
+            self.emit_event(ReviewEvent::ProjectReviewApprovalConsumed {
+                approval_id: approval.approval_id,
+                project_review_id,
+                applicant: caller,
+                coach: approval.coach,
+                request_message_id: approval.request_message_id,
+                consumed_at: now,
+                season_id,
+            })
+            .expect("emit ProjectReviewApprovalConsumed failed");
+        }
+
+        Ok(project_review_id)
     }
 
     fn post_project_comment_with_event(
@@ -1142,11 +1347,38 @@ fn ensure_rate_limit(
 }
 
 fn is_active_reviewer(review: &ReviewState, season_id: u32, reviewer: ActorId) -> bool {
-    review
-        .reviewers
-        .get(&(season_id, reviewer))
+    is_active_role_member(&review.reviewers, season_id, reviewer)
+}
+
+fn is_active_coach(review: &ReviewState, season_id: u32, coach: ActorId) -> bool {
+    is_active_role_member(&review.coaches, season_id, coach)
+}
+
+fn is_active_role_member(
+    members: &BTreeMap<(u32, ActorId), bool>,
+    season_id: u32,
+    member: ActorId,
+) -> bool {
+    members
+        .get(&(season_id, member))
         .copied()
         .unwrap_or(false)
+}
+
+fn list_active_role_members(
+    members: &BTreeMap<(u32, ActorId), bool>,
+    season_id: u32,
+) -> Vec<ActorId> {
+    members
+        .iter()
+        .filter_map(|((season, member), active)| {
+            if *season == season_id && *active {
+                Some(*member)
+            } else {
+                None
+            }
+        })
+        .collect()
 }
 
 fn ensure_summary(review: &mut ReviewState, program_id: ActorId) -> &mut ReviewSummary {

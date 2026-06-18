@@ -21,9 +21,13 @@ import {
   handleParticipantRegistered,
 } from "./handlers/registry.js";
 import {
+  handleCoachAdded,
+  handleCoachRemoved,
+  handleProjectReviewApprovalConsumed,
   handleProjectReviewCommentPosted,
   handleProjectReviewGuidanceRecorded,
   handleProjectReviewLinked,
+  handleProjectReviewSubmissionApproved,
   handleProjectReviewSubmitted,
   handlePublishDecisionRecorded,
   handleReviewerAdded,
@@ -212,6 +216,12 @@ async function runProcessorOnce() {
               case "ReviewerRemoved":
                 await handleReviewerRemoved(db, hctx, decoded.payload as never);
                 break;
+              case "CoachAdded":
+                await handleCoachAdded(db, hctx, decoded.payload as never);
+                break;
+              case "CoachRemoved":
+                await handleCoachRemoved(db, hctx, decoded.payload as never);
+                break;
               case "ReviewRequested":
                 await handleReviewRequested(db, hctx, decoded.payload as never);
                 break;
@@ -226,6 +236,12 @@ async function runProcessorOnce() {
                 break;
               case "ProjectReviewSubmitted":
                 await handleProjectReviewSubmitted(db, hctx, decoded.payload as never);
+                break;
+              case "ProjectReviewSubmissionApproved":
+                await handleProjectReviewSubmissionApproved(db, hctx, decoded.payload as never);
+                break;
+              case "ProjectReviewApprovalConsumed":
+                await handleProjectReviewApprovalConsumed(db, hctx, decoded.payload as never);
                 break;
               case "ProjectReviewCommentPosted":
                 await handleProjectReviewCommentPosted(db, hctx, decoded.payload as never);

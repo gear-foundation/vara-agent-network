@@ -1,10 +1,14 @@
 import { sql } from "drizzle-orm";
 import type {
   AppStatus,
+  CoachAdded,
+  CoachRemoved,
   PublishDecisionRecorded,
+  ProjectReviewApprovalConsumed,
   ProjectReviewCommentPosted,
   ProjectReviewGuidanceRecorded,
   ProjectReviewLinked,
+  ProjectReviewSubmissionApproved,
   ProjectReviewSubmitted,
   ReviewerAdded,
   ReviewerRemoved,
@@ -276,6 +280,50 @@ export async function handleReviewerRemoved(
     })
     .onConflictDoUpdate({
       target: schema.reviewers.id,
+      set: { active: false, updatedAt },
+    });
+}
+
+export async function handleCoachAdded(
+  db: Db,
+  _ctx: HandlerContext,
+  payload: CoachAdded,
+): Promise<void> {
+  const coach = normalizeActorId(payload.coach);
+  const updatedAt = asBigInt(payload.ts);
+  await db
+    .insert(schema.coaches)
+    .values({
+      id: `${payload.season_id}:${coach}`,
+      coach,
+      seasonId: payload.season_id,
+      active: true,
+      updatedAt,
+    })
+    .onConflictDoUpdate({
+      target: schema.coaches.id,
+      set: { active: true, updatedAt },
+    });
+}
+
+export async function handleCoachRemoved(
+  db: Db,
+  _ctx: HandlerContext,
+  payload: CoachRemoved,
+): Promise<void> {
+  const coach = normalizeActorId(payload.coach);
+  const updatedAt = asBigInt(payload.ts);
+  await db
+    .insert(schema.coaches)
+    .values({
+      id: `${payload.season_id}:${coach}`,
+      coach,
+      seasonId: payload.season_id,
+      active: false,
+      updatedAt,
+    })
+    .onConflictDoUpdate({
+      target: schema.coaches.id,
       set: { active: false, updatedAt },
     });
 }
@@ -604,6 +652,54 @@ export async function handleProjectReviewSubmitted(
     .insert(schema.projectReviewSummaries)
     .values(values)
     .onConflictDoNothing({ target: schema.projectReviewSummaries.projectReviewId });
+}
+
+export async function handleProjectReviewSubmissionApproved(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ProjectReviewSubmissionApproved,
+): Promise<void> {
+  const approvalId = asBigInt(payload.approval_id).toString();
+  const applicant = normalizeActorId(payload.applicant);
+  const coach = normalizeActorId(payload.coach);
+  const requestMessageId = asBigInt(payload.request_message_id).toString();
+  const approvedAt = asBigInt(payload.approved_at);
+
+  await db
+    .insert(schema.projectReviewApprovals)
+    .values({
+      approvalId,
+      approvalEventId: makeRowId(ctx),
+      consumeEventId: null,
+      applicant,
+      coach,
+      requestMessageId,
+      consumedProjectReviewId: null,
+      seasonId: payload.season_id,
+      approvedAt,
+      consumedAt: null,
+    })
+    .onConflictDoNothing({ target: schema.projectReviewApprovals.approvalId });
+}
+
+export async function handleProjectReviewApprovalConsumed(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ProjectReviewApprovalConsumed,
+): Promise<void> {
+  const approvalId = asBigInt(payload.approval_id).toString();
+  const projectReviewId = asBigInt(payload.project_review_id).toString();
+  const consumedAt = asBigInt(payload.consumed_at);
+
+  await db
+    .update(schema.projectReviewApprovals)
+    .set({
+      consumeEventId: makeRowId(ctx),
+      consumedProjectReviewId: projectReviewId,
+      consumedAt,
+    })
+    .where(sql`${schema.projectReviewApprovals.approvalId} = ${approvalId}
+      AND ${schema.projectReviewApprovals.consumedAt} IS NULL`);
 }
 
 export async function handleProjectReviewCommentPosted(
