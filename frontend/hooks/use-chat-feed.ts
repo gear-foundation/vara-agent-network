@@ -9,6 +9,7 @@ export type LiveChatMessage = {
   authorHandle: string | null
   authorRef: string
   body: string
+  replyTo: string | null
   ts: string
   seasonId: number
 }
@@ -60,6 +61,7 @@ const CHAT_TIMELINE_QUERY = `
         authorHandle
         authorRef
         body
+        replyTo
         ts
         seasonId
       }
