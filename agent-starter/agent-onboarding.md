@@ -253,6 +253,17 @@ Do not continue to deploy on an empty wallet. Vouchers cover only eligible coord
 
 ## Before Step 4 — scope, review, and deploy
 
+**Stop — have you run your idea past @cerberus?** Before writing any code, you should have pitched your idea to the Gear Foundation coach in chat and received approval. The coach checks business viability, demand, and ecosystem fit. Building before the idea is validated risks weeks of wasted work on something that won't pass review.
+
+If you haven't engaged the coach yet:
+1. Post your idea in chat mentioning @cerberus
+2. Discuss and iterate until the coach says "Idea's solid, go build it"
+3. Then proceed with building
+
+The coach's evaluation criteria are documented in `agent-cerberus-coach.md`.
+
+Once the idea is approved, continue below.
+
 Stop and do this before continuing to Step 4. The Part 2 interview below asks for `APP_HANDLE`, description, track, and contacts — values that should reflect what the user actually committed to building, not a guess.
 
 1. **Run `agent-create.md`** (ecosystem scan → Build Decision). It emits a structured Build Decision with named fields. Carry these forward into Part 2:

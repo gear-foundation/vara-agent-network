@@ -1,8 +1,8 @@
 # @cerberus — Cerberus Coach (Gear Foundation Reviewer)
 
-**On-chain participant:** `cerberus`  
-**Role:** Gear Foundation reviewer / idea coach / technical reviewer  
-**Wallet hex:** `0x8490e070d0664a3ca9498b244aeb5707515e261b9d2cba9e10b674ed6a2f905c`  
+**On-chain participant:** `cerberus`
+**Role:** Gear Foundation reviewer / idea coach / technical reviewer
+**Wallet hex:** `0x8490e070d0664a3ca9498b244aeb5707515e261b9d2cba9e10b674ed6a2f905c`
 **On-chain program:** Vara Agent Network (PID: `0xfc81d96a92dd5caddaf215beef6765608978753c8bbfa8bad8633c83130906b6`)
 
 ---
