@@ -9,6 +9,9 @@ Do not use this page for hackathon prize or winner judging.
 You need `vara-wallet` 0.19+, `jq`, an account that is an active reviewer, a
 fresh `$IDL`, `allow_review=true` from `Admin/GetConfig`, and
 `VAN_WRITE_GAS_ARGS` from `references/vouchers.md` for write calls.
+If you jump straight to this page, run the `SKILL.md` preamble first. After
+`OPERATOR_HEX` is known, run `references/vouchers.md`; otherwise write examples
+using `"${VAN_WRITE_GAS_ARGS[@]}"` have no gas-args array in scope.
 
 ## Terminology
 
@@ -49,6 +52,45 @@ vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/RemoveReviewer --args "[\"$REVIEWER_HEX\"]" "${VAN_WRITE_GAS_ARGS[@]}" --idl "$IDL"
 ```
 
+## How project reviews start and link
+
+Builders submit pre-deploy project reviews before an application program exists.
+`Review/SubmitProjectReview` takes `SubmitProjectReviewReq { github_url, idea }`
+and returns the durable `u64` project review id. These are builder/owner
+handoff commands; do not run them with the reviewer `ACCT`.
+
+```bash
+BUILDER_ACCT="builder-owner"
+APP_GITHUB_URL="https://github.com/owner/project"
+APP_DESCRIPTION="One-line product idea"
+
+PROJECT_REVIEW_REQ=$(jq -nc \
+  --arg github "$APP_GITHUB_URL" \
+  --arg idea "$APP_DESCRIPTION" \
+  '{github_url:$github, idea:$idea}')
+
+SUBMIT_IDEA_JSON=$(vara-wallet --account "$BUILDER_ACCT" --network "$VARA_NETWORK" --json call "$PID" \
+  Review/SubmitProjectReview \
+  --args "[$PROJECT_REVIEW_REQ]" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
+  --idl "$IDL")
+PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
+echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
+```
+
+After the builder deploys and registers the application, the same owner account
+links that review to the application with `Review/LinkProjectReviewToApplication`.
+This is owner-side, not reviewer-side; reviewers should verify the link or ask
+the builder to run it after latest guidance is `Proceed`.
+
+```bash
+vara-wallet --account "$BUILDER_ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Review/LinkProjectReviewToApplication \
+  --args "[$PROJECT_REVIEW_ID,\"$APP_HEX\"]" \
+  "${VAN_WRITE_GAS_ARGS[@]}" \
+  --idl "$IDL"
+```
+
 ## Pre-deploy project queue
 
 Prefer the dashboard `/dashboard/project-reviews`. For command line work, query the
@@ -61,6 +103,17 @@ curl -s "$INDEXER_GRAPHQL_URL" \
   --data '{"query":"query { allProjectReviewSummaries(condition:{hidden:false,tombstoned:false}, orderBy:UPDATED_AT_DESC, first:50) { nodes { projectReviewId owner githubUrl idea status linkedProgramId commentCount latestGuidanceOutcome updatedAt } } }"}' \
   | jq '.data.allProjectReviewSummaries.nodes[]'
 ```
+
+If the indexer is behind, use the on-chain fallback:
+
+```bash
+vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
+  Review/ListProjectReviewSummaries --args "[null,50]" --idl "$IDL" \
+  | jq '.result.items[]'
+```
+
+For the next page, pass the prior response's `.result.next_cursor` in place of
+`null`.
 
 For the full public thread:
 
@@ -197,6 +250,9 @@ the application program id, the contract returns `SelfReviewForbidden`.
 
 Decisions are only valid for `Submitted` applications. Fill all criteria. Use
 the same public-care standard as comments.
+For current submitted-application publish decisions, use `PublishApplication`
+and `RequestPublishChanges`. `ApproveForListing` and `RequestRevision` are still
+IDL-visible compatibility methods, but this page documents the publish flow.
 
 ```bash
 CRITERIA='{
@@ -241,6 +297,9 @@ next pending revision, and sets review status `RevisionRequested`.
 | `SelfReviewForbidden` | reviewer is also the app owner/program id or project owner | assign a different reviewer |
 | `UnknownProjectReview` | project review id does not exist | refresh the project queue and retry with a valid id |
 | `ProjectReviewAlreadyLinked` | project review is already linked to an application | refresh `Review/GetProjectReviewSummary`; do not relink unless the owner fixes the source |
+| `ProgramAlreadyHasProjectReview` | application already has a different linked project review | refresh the app and project summaries; identify the canonical review before submit |
+| `ProjectReviewNotApproved` | latest project-review guidance is not `Proceed` | ask the builder to reply or adjust scope, then wait for updated guidance |
+| `ProjectReviewGithubMismatch` | project-review GitHub URL and application `github_url` resolve to different repos | ask the owner to fix application metadata or use the matching project review |
 | `ReviewRevisionMismatch` | stale `expected_revision` | refresh `Review/GetReviewSummary` and retry with current revision |
 | `DecisionAlreadyRecorded` | this submitted revision already has a decision | do not retry; wait for a new submission revision |
 | `ReviewNotAllowedForStatus` | app status is not eligible | comment only on `Building` or `Submitted`; decide only on `Submitted` |
