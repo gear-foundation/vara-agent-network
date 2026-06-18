@@ -129,6 +129,21 @@ export const reviewers = pgTable(
   }),
 );
 
+export const coaches = pgTable(
+  "coaches",
+  {
+    id: text("id").primaryKey(), // "{season_id}:{coach}"
+    coach: text("coach").notNull(),
+    seasonId: integer("season_id").notNull(),
+    active: boolean("active").notNull().default(true),
+    updatedAt: bigint("updated_at", { mode: "bigint" }).notNull(),
+  },
+  (t) => ({
+    activeSeasonIdx: index("coaches_active_season_idx").on(t.seasonId, t.active),
+    coachSeasonIdx: uniqueIndex("coaches_coach_season_unique").on(t.coach, t.seasonId),
+  }),
+);
+
 export const reviewRevisionSnapshots = pgTable(
   "review_revision_snapshots",
   {
@@ -280,6 +295,29 @@ export const projectReviewSummaries = pgTable(
       t.tombstoned,
       t.updatedAt,
     ),
+  }),
+);
+
+export const projectReviewApprovals = pgTable(
+  "project_review_approvals",
+  {
+    approvalId: text("approval_id").primaryKey(),
+    approvalEventId: text("approval_event_id").notNull(),
+    consumeEventId: text("consume_event_id"),
+    applicant: text("applicant").notNull(),
+    coach: text("coach").notNull(),
+    requestMessageId: text("request_message_id").notNull(),
+    consumedProjectReviewId: text("consumed_project_review_id"),
+    seasonId: integer("season_id").notNull(),
+    approvedAt: bigint("approved_at", { mode: "bigint" }).notNull(),
+    consumedAt: bigint("consumed_at", { mode: "bigint" }),
+  },
+  (t) => ({
+    approvalEventIdx: uniqueIndex("project_review_approvals_approval_event_unique").on(t.approvalEventId),
+    consumeEventIdx: uniqueIndex("project_review_approvals_consume_event_unique").on(t.consumeEventId),
+    applicantIdx: index("project_review_approvals_applicant_idx").on(t.seasonId, t.applicant, t.consumedAt),
+    coachIdx: index("project_review_approvals_coach_idx").on(t.seasonId, t.coach),
+    requestMessageIdx: index("project_review_approvals_request_message_idx").on(t.requestMessageId),
   }),
 );
 

@@ -168,6 +168,27 @@ type ProjectReviewLinkRow = {
   seasonId: number
 }
 
+export type CoachRole = {
+  coach: string
+  seasonId: number
+  updatedAt: string
+}
+
+export type ProjectReviewApproval = {
+  approvalId: string
+  applicant: string
+  coach: string
+  requestMessageId: string
+  consumedProjectReviewId: string | null
+  seasonId: number
+  approvedAt: string
+  consumedAt: string | null
+}
+
+type CoachRow = CoachRole & {
+  active: boolean
+}
+
 type HandleClaimRow = {
   handle: string
   ownerKind: 'Participant' | 'Application' | string
@@ -573,6 +594,48 @@ ${PROJECT_REVIEW_SUMMARY_FIELDS}
         programId
         linkedAt
         seasonId
+      }
+    }
+  }
+`
+
+const ACTIVE_COACHES_QUERY = `
+  query ActiveCoaches {
+    coaches: allCoaches(first: 250, orderBy: UPDATED_AT_DESC, condition: { active: true }) {
+      nodes {
+        coach
+        seasonId
+        active
+        updatedAt
+      }
+    }
+  }
+`
+
+const ACTIVE_PROJECT_REVIEW_APPROVAL_QUERY = `
+  query ActiveProjectReviewApproval($applicant: String!) {
+    projectReviewApprovals: allProjectReviewApprovals(
+      first: 25
+      orderBy: APPROVED_AT_DESC
+      condition: { applicant: $applicant, consumedAt: null }
+    ) {
+      nodes {
+        approvalId
+        applicant
+        coach
+        requestMessageId
+        consumedProjectReviewId
+        seasonId
+        approvedAt
+        consumedAt
+      }
+    }
+    coaches: allCoaches(first: 250, condition: { active: true }) {
+      nodes {
+        coach
+        seasonId
+        active
+        updatedAt
       }
     }
   }
@@ -1192,6 +1255,15 @@ type ProjectReviewDetailQueryResult = {
   projectReviewComments: Connection<ProjectReviewCommentRow>
   projectReviewGuidance: Connection<ProjectReviewGuidanceRow>
   projectReviewLinks: Connection<ProjectReviewLinkRow>
+}
+
+type ActiveCoachesQueryResult = {
+  coaches: Connection<CoachRow>
+}
+
+type ActiveProjectReviewApprovalQueryResult = {
+  projectReviewApprovals: Connection<ProjectReviewApproval>
+  coaches: Connection<CoachRow>
 }
 
 const MAX_APPLICATION_REPLACEMENT_DEPTH = 8
@@ -2066,4 +2138,26 @@ export async function getProjectReviewDetail(projectReviewId: string): Promise<P
     summary: toProjectReviewSummary(data.projectReviewSummaries.nodes[0]),
     events: projectReviewEventsFromData(data),
   }
+}
+
+export async function getActiveCoaches(): Promise<CoachRole[]> {
+  const data = await fetchIndexerGraphql<ActiveCoachesQueryResult>(ACTIVE_COACHES_QUERY)
+  if (!data) return []
+  return data.coaches.nodes
+    .filter((coach) => coach.active)
+    .map(({ coach, seasonId, updatedAt }) => ({ coach, seasonId, updatedAt }))
+}
+
+export async function getActiveProjectReviewApproval(
+  applicant: string,
+): Promise<ProjectReviewApproval | null> {
+  const data = await fetchIndexerGraphql<ActiveProjectReviewApprovalQueryResult>(
+    ACTIVE_PROJECT_REVIEW_APPROVAL_QUERY,
+    { applicant: applicant.toLowerCase() },
+  )
+  if (!data) return null
+  const activeCoaches = new Set(data.coaches.nodes.map((coach) => coach.coach.toLowerCase()))
+  return data.projectReviewApprovals.nodes.find((approval) => (
+    activeCoaches.has(approval.coach.toLowerCase())
+  )) ?? null
 }

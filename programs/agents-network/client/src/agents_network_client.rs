@@ -822,6 +822,10 @@ pub mod review {
     use super::*;
     pub trait Review {
         type Env: sails_rs::client::GearEnv;
+        fn add_coach(
+            &mut self,
+            coach: ActorId,
+        ) -> sails_rs::client::PendingCall<io::AddCoach, Self::Env>;
         fn add_reviewer(
             &mut self,
             reviewer: ActorId,
@@ -833,6 +837,11 @@ pub mod review {
             reason: String,
             criteria: ReviewCriteria,
         ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env>;
+        fn approve_project_review_submission(
+            &mut self,
+            applicant: ActorId,
+            request_message_id: u64,
+        ) -> sails_rs::client::PendingCall<io::ApproveProjectReviewSubmission, Self::Env>;
         fn link_project_review_to_application(
             &mut self,
             project_review_id: u64,
@@ -873,6 +882,10 @@ pub mod review {
             outcome: ProjectGuidanceOutcome,
             body: String,
         ) -> sails_rs::client::PendingCall<io::RecordProjectGuidance, Self::Env>;
+        fn remove_coach(
+            &mut self,
+            coach: ActorId,
+        ) -> sails_rs::client::PendingCall<io::RemoveCoach, Self::Env>;
         fn remove_reviewer(
             &mut self,
             reviewer: ActorId,
@@ -896,6 +909,11 @@ pub mod review {
             reason: String,
             criteria: ReviewCriteria,
         ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env>;
+        fn submit_approved_project_review(
+            &mut self,
+            req: SubmitProjectReviewReq,
+            approval_id: u64,
+        ) -> sails_rs::client::PendingCall<io::SubmitApprovedProjectReview, Self::Env>;
         fn submit_project_review(
             &mut self,
             req: SubmitProjectReviewReq,
@@ -908,10 +926,13 @@ pub mod review {
             &self,
             program_id: ActorId,
         ) -> sails_rs::client::PendingCall<io::GetReviewSummary, Self::Env>;
+        fn is_coach(&self, coach: ActorId)
+        -> sails_rs::client::PendingCall<io::IsCoach, Self::Env>;
         fn is_reviewer(
             &self,
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env>;
+        fn list_coaches(&self) -> sails_rs::client::PendingCall<io::ListCoaches, Self::Env>;
         fn list_project_review_summaries(
             &self,
             cursor: Option<u64>,
@@ -922,6 +943,12 @@ pub mod review {
     pub struct ReviewImpl;
     impl<E: sails_rs::client::GearEnv> Review for sails_rs::client::Service<ReviewImpl, E> {
         type Env = E;
+        fn add_coach(
+            &mut self,
+            coach: ActorId,
+        ) -> sails_rs::client::PendingCall<io::AddCoach, Self::Env> {
+            self.pending_call((coach,))
+        }
         fn add_reviewer(
             &mut self,
             reviewer: ActorId,
@@ -936,6 +963,13 @@ pub mod review {
             criteria: ReviewCriteria,
         ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env> {
             self.pending_call((program_id, expected_revision, reason, criteria))
+        }
+        fn approve_project_review_submission(
+            &mut self,
+            applicant: ActorId,
+            request_message_id: u64,
+        ) -> sails_rs::client::PendingCall<io::ApproveProjectReviewSubmission, Self::Env> {
+            self.pending_call((applicant, request_message_id))
         }
         fn link_project_review_to_application(
             &mut self,
@@ -991,6 +1025,12 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::RecordProjectGuidance, Self::Env> {
             self.pending_call((project_review_id, outcome, body))
         }
+        fn remove_coach(
+            &mut self,
+            coach: ActorId,
+        ) -> sails_rs::client::PendingCall<io::RemoveCoach, Self::Env> {
+            self.pending_call((coach,))
+        }
         fn remove_reviewer(
             &mut self,
             reviewer: ActorId,
@@ -1022,6 +1062,13 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env> {
             self.pending_call((program_id, expected_revision, reason, criteria))
         }
+        fn submit_approved_project_review(
+            &mut self,
+            req: SubmitProjectReviewReq,
+            approval_id: u64,
+        ) -> sails_rs::client::PendingCall<io::SubmitApprovedProjectReview, Self::Env> {
+            self.pending_call((req, approval_id))
+        }
         fn submit_project_review(
             &mut self,
             req: SubmitProjectReviewReq,
@@ -1040,11 +1087,20 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::GetReviewSummary, Self::Env> {
             self.pending_call((program_id,))
         }
+        fn is_coach(
+            &self,
+            coach: ActorId,
+        ) -> sails_rs::client::PendingCall<io::IsCoach, Self::Env> {
+            self.pending_call((coach,))
+        }
         fn is_reviewer(
             &self,
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::IsReviewer, Self::Env> {
             self.pending_call((reviewer,))
+        }
+        fn list_coaches(&self) -> sails_rs::client::PendingCall<io::ListCoaches, Self::Env> {
+            self.pending_call(())
         }
         fn list_project_review_summaries(
             &self,
@@ -1060,8 +1116,10 @@ pub mod review {
 
     pub mod io {
         use super::*;
+        sails_rs::io_struct_impl!(AddCoach (coach: ActorId) -> ());
         sails_rs::io_struct_impl!(AddReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(ApproveForListing (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(ApproveProjectReviewSubmission (applicant: ActorId, request_message_id: u64) -> u64);
         sails_rs::io_struct_impl!(LinkProjectReviewToApplication (project_review_id: u64, program_id: ActorId) -> ());
         sails_rs::io_struct_impl!(OwnerProjectReply (project_review_id: u64, body: String) -> ());
         sails_rs::io_struct_impl!(OwnerReply (program_id: ActorId, expected_revision: u32, body: String) -> ());
@@ -1069,14 +1127,18 @@ pub mod review {
         sails_rs::io_struct_impl!(PostReviewerComment (program_id: ActorId, expected_revision: u32, body: String) -> ());
         sails_rs::io_struct_impl!(PublishApplication (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
         sails_rs::io_struct_impl!(RecordProjectGuidance (project_review_id: u64, outcome: super::ProjectGuidanceOutcome, body: String) -> ());
+        sails_rs::io_struct_impl!(RemoveCoach (coach: ActorId) -> ());
         sails_rs::io_struct_impl!(RemoveReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(RequestPublishChanges (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
         sails_rs::io_struct_impl!(RequestReview (program_id: ActorId, reason: String) -> ());
         sails_rs::io_struct_impl!(RequestRevision (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
+        sails_rs::io_struct_impl!(SubmitApprovedProjectReview (req: super::SubmitProjectReviewReq, approval_id: u64) -> u64);
         sails_rs::io_struct_impl!(SubmitProjectReview (req: super::SubmitProjectReviewReq) -> u64);
         sails_rs::io_struct_impl!(GetProjectReviewSummary (project_review_id: u64) -> Option<super::ProjectReviewSummary>);
         sails_rs::io_struct_impl!(GetReviewSummary (program_id: ActorId) -> Option<super::ReviewSummary>);
+        sails_rs::io_struct_impl!(IsCoach (coach: ActorId) -> bool);
         sails_rs::io_struct_impl!(IsReviewer (reviewer: ActorId) -> bool);
+        sails_rs::io_struct_impl!(ListCoaches () -> Vec<ActorId>);
         sails_rs::io_struct_impl!(ListProjectReviewSummaries (cursor: Option<u64>, limit: u32) -> super::ProjectReviewPage);
         sails_rs::io_struct_impl!(ListReviewers () -> Vec<ActorId>);
     }
@@ -1096,6 +1158,18 @@ pub mod review {
             ReviewerRemoved {
                 admin: ActorId,
                 reviewer: ActorId,
+                season_id: u32,
+                ts: u64,
+            },
+            CoachAdded {
+                admin: ActorId,
+                coach: ActorId,
+                season_id: u32,
+                ts: u64,
+            },
+            CoachRemoved {
+                admin: ActorId,
+                coach: ActorId,
                 season_id: u32,
                 ts: u64,
             },
@@ -1148,6 +1222,23 @@ pub mod review {
                 submitted_at: u64,
                 season_id: u32,
             },
+            ProjectReviewSubmissionApproved {
+                approval_id: u64,
+                applicant: ActorId,
+                coach: ActorId,
+                request_message_id: u64,
+                approved_at: u64,
+                season_id: u32,
+            },
+            ProjectReviewApprovalConsumed {
+                approval_id: u64,
+                project_review_id: u64,
+                applicant: ActorId,
+                coach: ActorId,
+                request_message_id: u64,
+                consumed_at: u64,
+                season_id: u32,
+            },
             ProjectReviewCommentPosted {
                 project_review_id: u64,
                 author: ActorId,
@@ -1176,11 +1267,15 @@ pub mod review {
             const EVENT_NAMES: &'static [Route] = &[
                 "ReviewerAdded",
                 "ReviewerRemoved",
+                "CoachAdded",
+                "CoachRemoved",
                 "ReviewRequested",
                 "ReviewCommentPosted",
                 "ReviewDecisionRecorded",
                 "PublishDecisionRecorded",
                 "ProjectReviewSubmitted",
+                "ProjectReviewSubmissionApproved",
+                "ProjectReviewApprovalConsumed",
                 "ProjectReviewCommentPosted",
                 "ProjectReviewGuidanceRecorded",
                 "ProjectReviewLinked",
@@ -1320,6 +1415,7 @@ pub struct Config {
     pub allow_chat: bool,
     pub allow_board_updates: bool,
     pub allow_review: bool,
+    pub require_project_review_approval: bool,
     pub max_chat_body: u32,
     pub max_review_body_bytes: u32,
     pub max_mentions_per_post: u32,

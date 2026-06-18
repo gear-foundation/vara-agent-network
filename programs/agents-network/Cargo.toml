@@ -29,7 +29,7 @@ resolver = "3"
 members = ["app", "client"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.1.1"
 authors = ["Vara Agent Network"]
 edition = "2024"
 rust-version = "1.91"
@@ -41,5 +41,5 @@ categories = ["cryptography::cryptocurrencies", "no-std", "wasm"]
 [workspace.dependencies]
 sails-rs = "0.10.3"
 tokio = "1.48.0"
-agents-network-app = { version = "0.1.0", path = "app" }
-agents-network-client = { version = "0.1.0", path = "client" }
+agents-network-app = { version = "0.1.1", path = "app" }
+agents-network-client = { version = "0.1.1", path = "client" }

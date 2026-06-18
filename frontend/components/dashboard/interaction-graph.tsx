@@ -150,8 +150,6 @@ export function InteractionGraph() {
     }
     resize()
 
-    const getNode = (id: string) => nodesRef.current.find((n) => n.id === id)
-
     const draw = () => {
       if (!ctx || W === 0 || H === 0) {
         animRef.current = requestAnimationFrame(draw)
@@ -161,6 +159,7 @@ export function InteractionGraph() {
 
       const nodes = nodesRef.current
       const hovered = hoveredRef.current
+      const nodeById = new Map(nodes.map((node) => [node.id, node]))
 
       // --- Physics ---
       nodes.forEach((n) => {
@@ -216,7 +215,7 @@ export function InteractionGraph() {
       // --- Draw edges ---
       nodes.forEach((n) => {
         n.connections.forEach((cid) => {
-          const m = getNode(cid)
+          const m = nodeById.get(cid)
           if (!m) return
           const isHighlighted = hovered && (n.id === hovered || m.id === hovered)
           ctx.beginPath()

@@ -320,6 +320,28 @@
   line-height: 1.6;
 }
 
+.review-approval-state {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin: 14px 0 12px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: oklch(0.13 0 0 / 0.64);
+  padding: 10px 12px;
+}
+
+.review-approval-state span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--foreground);
+  font-family: var(--font-mono);
+  font-size: 12px;
+}
+
 .review-dossier__meta,
 .review-dossier__links,
 .review-actions__split {
@@ -630,6 +652,16 @@
   display: grid;
   gap: 10px;
   padding: 12px;
+}
+
+.review-reviewer-admin__body + .review-reviewer-admin__body {
+  border-top: 1px solid var(--border);
+}
+
+.review-reviewer-admin__body h3 {
+  color: var(--foreground);
+  font-size: 14px;
+  font-weight: 700;
 }
 
 .review-reviewer-admin__form,
@@ -3307,6 +3339,9 @@
 }
 
 .chat-msg__status {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   border: 1px solid color-mix(in oklch, var(--primary) 34%, transparent);
   border-radius: 999px;
   background: color-mix(in oklch, var(--primary) 9%, transparent);
@@ -3319,9 +3354,28 @@
 }
 
 .chat-msg__status--coach {
-  border-color: color-mix(in oklch, var(--track-services) 42%, transparent);
-  background: color-mix(in oklch, var(--track-services) 10%, transparent);
-  color: var(--track-services);
+  border-color: oklch(0.82 0.21 145 / 0.35);
+  background: oklch(0.82 0.21 145 / 0.1);
+  color: var(--primary);
+}
+
+.chat-msg__approve {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid oklch(0.82 0.21 145 / 0.35);
+  border-radius: 999px;
+  background: oklch(0.82 0.21 145 / 0.08);
+  padding: 2px 8px;
+  color: var(--primary);
+  font-family: var(--font-mono);
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.chat-msg__approve:disabled {
+  opacity: 0.55;
 }
 
 .chat-msg__body {

@@ -302,6 +302,19 @@ export async function listReviewers(address?: string) {
   return (Array.isArray(result) ? result : []) as string[]
 }
 
+export async function isCoach(address: string) {
+  const actorId = await addressToActorId(address)
+  const sails = await getSailsClient()
+  return Boolean(await sails.services.Review.queries.IsCoach(actorId).withAddress(address).call())
+}
+
+export async function listCoaches(address?: string) {
+  const sails = await getSailsClient()
+  const query = sails.services.Review.queries.ListCoaches()
+  const result = address ? await query.withAddress(address).call() : await query.call()
+  return (Array.isArray(result) ? result : []) as string[]
+}
+
 export async function addReviewer(account: WalletAccount, reviewer: string) {
   const actorId = reviewer.startsWith('0x') ? reviewer : await addressToActorId(reviewer)
   const sails = await getSailsClient()
@@ -314,6 +327,20 @@ export async function removeReviewer(account: WalletAccount, reviewer: string) {
   const sails = await getSailsClient()
   const tx = sails.services.Review.functions.RemoveReviewer(actorId)
   return sendTx(account, 'review.tx.RemoveReviewer', tx)
+}
+
+export async function addCoach(account: WalletAccount, coach: string) {
+  const actorId = coach.startsWith('0x') ? coach : await addressToActorId(coach)
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.AddCoach(actorId)
+  return sendTx(account, 'review.tx.AddCoach', tx)
+}
+
+export async function removeCoach(account: WalletAccount, coach: string) {
+  const actorId = coach.startsWith('0x') ? coach : await addressToActorId(coach)
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.RemoveCoach(actorId)
+  return sendTx(account, 'review.tx.RemoveCoach', tx)
 }
 
 export async function submitApplication(account: WalletAccount, programId: string) {
@@ -430,6 +457,41 @@ export async function submitProjectReview(
     idea: idea.trim(),
   })
   return sendTx(account, 'review.tx.SubmitProjectReview', tx)
+}
+
+export async function approveProjectReviewSubmission(
+  account: WalletAccount,
+  applicant: string,
+  requestMessageId: string | number,
+) {
+  const actorId = applicant.startsWith('0x') ? applicant : await addressToActorId(applicant)
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.ApproveProjectReviewSubmission(
+    actorId,
+    BigInt(requestMessageId),
+  )
+  return sendTx(account, 'review.tx.ApproveProjectReviewSubmission', tx)
+}
+
+export async function submitApprovedProjectReview(
+  account: WalletAccount,
+  githubUrl: string,
+  idea: string,
+  approvalId: string | number,
+) {
+  const normalizedGithub = githubUrl.trim()
+  if (!isGithubUrl(normalizedGithub)) {
+    throw new Error(`GitHub URL must start with ${GITHUB_URL_PREFIX}`)
+  }
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.SubmitApprovedProjectReview(
+    {
+      github_url: normalizedGithub,
+      idea: idea.trim(),
+    },
+    BigInt(approvalId),
+  )
+  return sendTx(account, 'review.tx.SubmitApprovedProjectReview', tx)
 }
 
 export async function postProjectReviewerComment(

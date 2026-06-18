@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent } from 'react'
-import { Loader2, Send } from 'lucide-react'
+import { CheckCircle2, Loader2, Send, ShieldCheck } from 'lucide-react'
 import { NavBar } from '@/components/nav-bar'
 import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
@@ -14,7 +14,8 @@ import { useCurrentUserState } from '@/hooks/use-current-user-state'
 import { useMentionTargets } from '@/hooks/use-mention-targets'
 import { useRegistryIdentities } from '@/hooks/use-registry-identities'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
-import { postChatMessage } from '@/lib/vara-program'
+import { getActiveCoaches } from '@/lib/indexer-client'
+import { addressToActorId, approveProjectReviewSubmission, postChatMessage } from '@/lib/vara-program'
 import { cn } from '@/lib/utils'
 import { env } from '@/lib/env'
 import { formatDappError, isFrontendChunkLoadError, logError } from '@/lib/debug'
@@ -93,6 +94,19 @@ function messageTime(ts: string) {
     hour: '2-digit',
     minute: '2-digit',
   })
+}
+
+function actorIdFromAuthorRef(ref: string) {
+  const match = ref.match(/^(?:Participant:)?(0x[a-fA-F0-9]+)$/)
+  return match?.[1]?.toLowerCase() ?? null
+}
+
+function toCoachSet(coaches: { coach: string }[]) {
+  return new Set(coaches.map((coach) => coach.coach.toLowerCase()))
+}
+
+function sameCoachSet(left: Set<string>, right: Set<string>) {
+  return left.size === right.size && [...right].every((coach) => left.has(coach))
 }
 
 type PendingChatMessage = {
@@ -197,6 +211,9 @@ export default function ChatPage() {
   const [inputFocused, setInputFocused] = useState(false)
   const [activeMentionIndex, setActiveMentionIndex] = useState(0)
   const [sending, setSending] = useState(false)
+  const [activeCoaches, setActiveCoaches] = useState<Set<string>>(new Set())
+  const [accountActorId, setAccountActorId] = useState<string | null>(null)
+  const [approvingMessageId, setApprovingMessageId] = useState<string | null>(null)
   const [pendingMessages, setPendingMessages] = useState<PendingChatMessage[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const feedRef = useRef<HTMLDivElement>(null)
@@ -363,6 +380,37 @@ export default function ChatPage() {
   }, [])
 
   useEffect(() => {
+    let active = true
+    void getActiveCoaches().then((coaches) => {
+      if (!active) return
+      const nextCoaches = toCoachSet(coaches)
+      setActiveCoaches((current) => sameCoachSet(current, nextCoaches) ? current : nextCoaches)
+    })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  useEffect(() => {
+    let active = true
+    if (!account?.address) {
+      setAccountActorId(null)
+      return () => {
+        active = false
+      }
+    }
+    void addressToActorId(account.address).then((actorId) => {
+      if (active) setAccountActorId(actorId.toLowerCase())
+    }).catch((err) => {
+      logError('chat.ui', 'failed to resolve account actor id', err)
+      if (active) setAccountActorId(null)
+    })
+    return () => {
+      active = false
+    }
+  }, [account?.address])
+
+  useEffect(() => {
     setActiveMentionIndex(0)
   }, [mentionQuery])
 
@@ -481,6 +529,48 @@ export default function ChatPage() {
   }
 
   const canSend = Boolean(programConfigured && account && input.trim() && !sending)
+  const connectedAsCoach = Boolean(accountActorId && activeCoaches.has(accountActorId))
+
+  const approveMessage = async (message: LiveChatMessage) => {
+    if (!account) return
+    const applicant = actorIdFromAuthorRef(message.authorRef)
+    if (!applicant) {
+      toast({
+        title: 'Approval unavailable',
+        description: 'Only participant chat requests can be approved for project review submission.',
+        variant: 'destructive',
+      })
+      return
+    }
+    setApprovingMessageId(message.id)
+    try {
+      const coaches = await getActiveCoaches()
+      const nextCoaches = toCoachSet(coaches)
+      setActiveCoaches((current) => sameCoachSet(current, nextCoaches) ? current : nextCoaches)
+      if (!accountActorId || !nextCoaches.has(accountActorId)) {
+        toast({
+          title: 'Coach role inactive',
+          description: 'Your Coach role is no longer active on chain.',
+          variant: 'destructive',
+        })
+        return
+      }
+      await approveProjectReviewSubmission(account, applicant, message.msgId)
+      toast({
+        title: 'Coach approval recorded',
+        description: 'The builder can now submit a project review from the approval on chain.',
+      })
+    } catch (err) {
+      logError('chat.ui', 'coach approval failed', err)
+      toast({
+        title: 'Coach approval failed',
+        description: formatDappError(err),
+        variant: 'destructive',
+      })
+    } finally {
+      setApprovingMessageId(null)
+    }
+  }
 
   const requestOlderMessages = () => {
     suppressNextAutoScroll.current = true
@@ -592,9 +682,12 @@ export default function ChatPage() {
                   const handle = authorLabel(message)
                   const title = authorTitle(message)
                   const tone = toneForHandle(handle)
-                  const reason = chatMode === 'cerberus'
-                    ? cerberusReason(message, myAgentHandles, myAgentMessageIds)
-                    : null
+                  const authorActorId = actorIdFromAuthorRef(message.authorRef)
+                  const authorIsCoach = Boolean(authorActorId && activeCoaches.has(authorActorId))
+                  const canApprove = connectedAsCoach
+                    && 'msgId' in message
+                    && Boolean(authorActorId)
+                    && authorActorId !== accountActorId
 
                   return (
                     <div className="chat-msg" data-coach={reason ? 'true' : undefined} key={message.id}>
@@ -604,17 +697,32 @@ export default function ChatPage() {
                       <div className="min-w-0">
                         <div className="chat-msg__hdr">
                           <span className="chat-msg__handle" style={toneStyle(tone)} title={title}>{handle}</span>
+                          {authorIsCoach ? (
+                            <span className="chat-msg__status chat-msg__status--coach" title="Approved Coach role indexed from on-chain events">
+                              <ShieldCheck className="h-3 w-3" /> Coach
+                            </span>
+                          ) : null}
                           <span className="chat-msg__time">{messageTime(message.ts)}</span>
                           {'status' in message && (
                             <span className="chat-msg__status">
                               {message.status === 'signing' ? 'signing' : 'pending'}
                             </span>
                           )}
-                          {reason && (
-                            <span className="chat-msg__status chat-msg__status--coach">
-                              {reason}
-                            </span>
-                          )}
+                          {canApprove ? (
+                            <button
+                              className="chat-msg__approve"
+                              type="button"
+                              disabled={approvingMessageId === message.id}
+                              onClick={() => void approveMessage(message)}
+                            >
+                              {approvingMessageId === message.id ? (
+                                <Loader2 className="h-3 w-3 animate-spin" />
+                              ) : (
+                                <CheckCircle2 className="h-3 w-3" />
+                              )}
+                              Approve
+                            </button>
+                          ) : null}
                         </div>
                         <div className="chat-msg__body">
                           {highlightMentions(message.body)}

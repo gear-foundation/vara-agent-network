@@ -45,6 +45,199 @@ async fn link_approved_project_review(
 }
 
 #[tokio::test]
+async fn coach_role_is_admin_granted_and_publicly_queryable() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+
+    program
+        .review()
+        .add_coach(CAROL.into())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .review()
+        .add_coach(0.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap_err();
+
+    program
+        .review()
+        .add_coach(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    assert!(program.review().is_coach(CAROL.into()).await.unwrap());
+    assert_eq!(
+        program.review().list_coaches().await.unwrap(),
+        vec![CAROL.into()]
+    );
+    program
+        .review()
+        .add_coach(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap_err();
+
+    program
+        .review()
+        .remove_coach(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    assert!(!program.review().is_coach(CAROL.into()).await.unwrap());
+    assert!(program.review().list_coaches().await.unwrap().is_empty());
+}
+
+#[tokio::test]
+async fn project_review_submission_requires_active_coach_approval_by_default() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    let req = SubmitProjectReviewReq {
+        github_url: "https://github.com/alice/coach-gated-agent".to_string(),
+        idea: "agent that only opens after public coach approval".to_string(),
+    };
+
+    program
+        .review()
+        .submit_project_review(req.clone())
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+    program
+        .review()
+        .approve_project_review_submission(ALICE.into(), 7)
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap_err();
+    program
+        .review()
+        .add_coach(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .approve_project_review_submission(CAROL.into(), 8)
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap_err();
+
+    let approval_id = program
+        .review()
+        .approve_project_review_submission(ALICE.into(), 7)
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+    let project_review_id = program
+        .review()
+        .submit_approved_project_review(req.clone(), approval_id)
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    let summary = program
+        .review()
+        .get_project_review_summary(project_review_id)
+        .await
+        .unwrap()
+        .unwrap();
+    assert_eq!(summary.owner, ALICE.into());
+
+    program
+        .review()
+        .submit_approved_project_review(req.clone(), approval_id)
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn removing_coach_invalidates_unconsumed_approval() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .add_coach(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+    let approval_id = program
+        .review()
+        .approve_project_review_submission(ALICE.into(), 12)
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .remove_coach(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    program
+        .review()
+        .submit_approved_project_review(
+            SubmitProjectReviewReq {
+                github_url: "https://github.com/alice/stale-coach".to_string(),
+                idea: "approval should fail after coach removal".to_string(),
+            },
+            approval_id,
+        )
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap_err();
+}
+
+#[tokio::test]
+async fn config_can_disable_project_review_approval_gate() {
+    let system = init_system();
+    let env = GtestEnv::new(system, DEPLOYER.into());
+    let program = deploy(&env).await;
+    let mut config = program.admin().get_config().await.unwrap();
+    config.review_rate_limit_ms = 0;
+    config.require_project_review_approval = false;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
+
+    let project_review_id = program
+        .review()
+        .submit_project_review(SubmitProjectReviewReq {
+            github_url: "https://github.com/alice/legacy-open-submit".to_string(),
+            idea: "legacy open submission remains admin configurable".to_string(),
+        })
+        .with_actor_id(ALICE.into())
+        .await
+        .unwrap();
+    assert_eq!(project_review_id, 1);
+}
+
+#[tokio::test]
 async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
@@ -682,6 +875,14 @@ async fn project_review_rate_limits_repeated_builder_actions() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
+    let mut config = program.admin().get_config().await.unwrap();
+    config.require_project_review_approval = false;
+    program
+        .admin()
+        .update_config(config)
+        .with_actor_id(DEPLOYER.into())
+        .await
+        .unwrap();
 
     program
         .review()

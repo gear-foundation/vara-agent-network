@@ -146,6 +146,7 @@ pub async fn disable_review_rate_limit(
 ) {
     let mut config = program.admin().get_config().await.unwrap();
     config.review_rate_limit_ms = 0;
+    config.require_project_review_approval = false;
     program
         .admin()
         .update_config(config)

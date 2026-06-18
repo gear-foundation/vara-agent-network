@@ -92,6 +92,13 @@
       "when": 1781697600000,
       "tag": "0012_project_review_projections",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1781740800000,
+      "tag": "0013_coach_project_review_approvals",
+      "breakpoints": true
     }
   ]
 }

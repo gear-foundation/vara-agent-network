@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { readFileSync } from "node:fs";
 import test from "node:test";
 import {
   initialProjectReviewSummaryValues,
@@ -8,6 +9,9 @@ import {
   summaryStatusAfterComment,
   summaryStatusFromDecision,
 } from "../src/handlers/review.js";
+
+const reviewHandlerSource = readFileSync(new URL("../src/handlers/review.ts", import.meta.url), "utf8");
+const processorSource = readFileSync(new URL("../src/main.ts", import.meta.url), "utf8");
 
 test("review decision statuses match public summary badges", () => {
   assert.equal(summaryStatusFromDecision("ApprovedForListing"), "ApprovedForListing");
@@ -159,4 +163,18 @@ test("project review submission initializes public queue summary", () => {
       tombstoned: false,
     },
   );
+});
+
+test("coach role and project review approval events are projected", () => {
+  for (const token of [
+    "handleCoachAdded",
+    "handleCoachRemoved",
+    "handleProjectReviewSubmissionApproved",
+    "handleProjectReviewApprovalConsumed",
+  ]) {
+    assert.match(reviewHandlerSource, new RegExp(token));
+    assert.match(processorSource, new RegExp(token));
+  }
+  assert.match(reviewHandlerSource, /onConflictDoNothing\(\{ target: schema\.projectReviewApprovals\.approvalId \}\)/);
+  assert.match(reviewHandlerSource, /consumedAt\} IS NULL/);
 });
