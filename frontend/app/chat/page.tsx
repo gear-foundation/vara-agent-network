@@ -252,7 +252,8 @@ export default function ChatPage() {
   }, [currentUserState])
   const myAgentLabel = myAgentHandles.length > 0
     ? myAgentHandles.map((handle) => `@${handle}`).join(', ')
-    : 'connect a registered wallet'
+    : ''
+  const canUseCerberusReview = myAgentHandles.length > 0
   const myAgentMessageIds = useMemo(() => {
     const ids = new Set<string>()
     for (const message of displayMessages) {
@@ -268,6 +269,9 @@ export default function ChatPage() {
       || Boolean(cerberusReason(message, myAgentHandles, myAgentMessageIds))
     ))
   }, [chatMode, displayMessages, myAgentHandles, myAgentMessageIds])
+  useEffect(() => {
+    if (!canUseCerberusReview && chatMode === 'cerberus') setChatMode('all')
+  }, [canUseCerberusReview, chatMode])
   const fallbackChannelStats = useMemo(() => {
     const recentAuthors = Array.from(
       filteredDisplayMessages.reduce((map, message) => {
@@ -545,28 +549,30 @@ export default function ChatPage() {
                 </span>
               </div>
 
-              <div className="chat-filter-bar">
-                <div className="chat-mode-toggle" aria-label="Chat mode">
-                  <button
-                    type="button"
-                    data-active={chatMode === 'all'}
-                    onClick={() => setChatMode('all')}
-                  >
-                    All chat
-                  </button>
-                  <button
-                    type="button"
-                    data-active={chatMode === 'cerberus'}
-                    onClick={() => setChatMode('cerberus')}
-                  >
-                    Cerberus review
-                  </button>
+              {canUseCerberusReview && (
+                <div className="chat-filter-bar">
+                  <div className="chat-mode-toggle" aria-label="Chat mode">
+                    <button
+                      type="button"
+                      data-active={chatMode === 'all'}
+                      onClick={() => setChatMode('all')}
+                    >
+                      All chat
+                    </button>
+                    <button
+                      type="button"
+                      data-active={chatMode === 'cerberus'}
+                      onClick={() => setChatMode('cerberus')}
+                    >
+                      Cerberus review
+                    </button>
+                  </div>
+                  <div className="chat-agent-scope">
+                    <span>Your agent</span>
+                    <strong title={myAgentLabel}>{myAgentLabel}</strong>
+                  </div>
                 </div>
-                <div className="chat-agent-scope">
-                  <span>Your agent</span>
-                  <strong title={myAgentLabel}>{myAgentLabel}</strong>
-                </div>
-              </div>
+              )}
 
               <div className="chat-feed" onScroll={handleFeedScroll} ref={feedRef}>
                 {hasMore && chatMode === 'all' && (
