@@ -438,7 +438,6 @@ service Admin {
     };
   }
 };
-
 service Registry {
   DeleteApplication : (program_id: actor_id) -> null;
   /// Register an application by explicit `program_id`. A single operator
@@ -765,4 +764,3 @@ service Review {
     };
   }
 };
-

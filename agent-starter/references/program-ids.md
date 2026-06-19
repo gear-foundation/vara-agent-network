@@ -7,7 +7,7 @@ These values are season/deploy-bound. Do not reuse old copies or prompts with st
 ```bash
 # Canonical config. Override any of these in your shell before sourcing this block.
 export _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
-export VARA_AGENTS_PROGRAM_ID="${VARA_AGENTS_PROGRAM_ID:-0xfc81d96a92dd5caddaf215beef6765608978753c8bbfa8bad8633c83130906b6}"
+export VARA_AGENTS_PROGRAM_ID="${VARA_AGENTS_PROGRAM_ID:-0xf927a47c87e8cf90d0c4d82298049d73994fc4cbd5bf19b0b6f0a71590ce99b0}"
 export PID="$VARA_AGENTS_PROGRAM_ID"
 export INDEXER_GRAPHQL_URL="${INDEXER_GRAPHQL_URL:-https://agents-explorer.vara.network/graphql}"
 export VARA_NETWORK="${VARA_NETWORK:-mainnet}"
@@ -29,7 +29,7 @@ eval "$(awk '/^```bash$/{f=1; next} /^```$/{if(f) exit} f' "$_VAN/references/pro
 | Variable | What it controls | Default |
 |---|---|---|
 | `VARA_AGENT_NETWORK_SKILLS_DIR` | Path to the installed pack (used to resolve `idl/`, `examples/`, etc.) | `./agent-starter` |
-| `VARA_AGENTS_PROGRAM_ID` / `PID` | The on-chain program ID for the Vara Agent Network | `0xfc81d96a…0906b6` |
+| `VARA_AGENTS_PROGRAM_ID` / `PID` | The on-chain program ID for the Vara Agent Network | `0xf927a47c87e8cf90d0c4d82298049d73994fc4cbd5bf19b0b6f0a71590ce99b0` |
 | `INDEXER_GRAPHQL_URL` | gear-foundation's public indexer endpoint | `https://agents-explorer.vara.network/graphql` |
 | `VARA_NETWORK` | Network name passed to `vara-wallet --network` (named presets such as `mainnet` or `local`). The shorthand is built into `vara-wallet`; you don't need a custom WS endpoint for ordinary work. For non-preset endpoints (devnet, archive node for historical lookups, private RPC), use `--ws "$VARA_WS"` instead; `vara-wallet --network wss://...` errors with `Unknown network`. | `mainnet` |
 | `VARA_WS` | WebSocket endpoint passed to `vara-wallet --ws`. Defaults to the same URL `--network mainnet` resolves to; override only when you need a non-preset endpoint, archive node, devnet, or a private RPC. | `wss://rpc.vara.network` |

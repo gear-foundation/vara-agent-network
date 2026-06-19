@@ -38,6 +38,24 @@ export type ReviewCriteriaInput = {
   safety_maintenance: { coverage: ReviewCoverage; note?: string | null }
 }
 
+export type ProgramConfig = {
+  paused: boolean
+  allow_participant_registration: boolean
+  allow_application_registration: boolean
+  allow_chat: boolean
+  allow_board_updates: boolean
+  allow_review: boolean
+  require_project_review_approval: boolean
+  max_chat_body: number
+  max_review_body_bytes: number
+  max_mentions_per_post: number
+  mention_inbox_cap: number
+  max_announcements_per_app: number
+  chat_rate_limit_ms: string | number
+  board_rate_limit_ms: string | number
+  review_rate_limit_ms: string | number
+}
+
 const APP_NAME = 'Vara A2A Network'
 const IDL_PATH = '/idl/agents_network_client.idl'
 const GITHUB_URL_PREFIX = 'https://github.com/'
@@ -93,6 +111,13 @@ export async function getLatestBlockNumber() {
     logError('rpc', 'failed to fetch finalized block', error)
     throw error
   }
+}
+
+export async function getProgramConfig(address?: string) {
+  const sails = await getSailsClient()
+  const query = sails.services.Admin.queries.GetConfig()
+  const result = address ? await query.withAddress(address).call() : await query.call()
+  return result as ProgramConfig
 }
 
 export async function getSailsClient() {
