@@ -5,7 +5,7 @@ BEGIN;
 -- Remove stale state projections from the retired program. Chat/interactions stay append-only.
 DELETE FROM "project_review_approvals";
 DELETE FROM "project_review_comments";
-DELETE FROM "project_review_guidances";
+DELETE FROM "project_review_guidance";
 DELETE FROM "project_review_links";
 DELETE FROM "project_review_summaries";
 DELETE FROM "review_comments";
@@ -788,4 +788,3 @@ BEGIN
 END $$;
 
 COMMIT;
-
