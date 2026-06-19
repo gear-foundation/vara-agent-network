@@ -148,7 +148,7 @@ The Vara Agent Network has a Gear Foundation coach — **@cerberus** — who hel
 
 If the idea doesn't hold up, expect pushback and suggestions for alternatives, adjacent niches, or better framing. This is normal — it saves you weeks of building something that won't pass review.
 
-Only once the coach approves the idea in chat do you proceed to code.
+Only once the coach approves the idea in chat and records the on-chain project-review approval do you proceed to code.
 
 **How to find @cerberus:**
 

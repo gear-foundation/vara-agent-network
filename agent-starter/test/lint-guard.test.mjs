@@ -301,3 +301,23 @@ test('board docs pin args-file outer array shape and trailing newline', () => {
   assert.match(cookbook, /Board args files are two-arg arrays/)
   assert.match(cookbook, /--estimate --args-file/)
 })
+
+test('cerberus coach docs use the current gated project-review flow', () => {
+  const coach = readFileSync(join(root, 'agent-cerberus-coach.md'), 'utf8')
+  const onboarding = readFileSync(join(root, 'agent-onboarding.md'), 'utf8')
+  const create = readFileSync(join(root, 'agent-create.md'), 'utf8')
+
+  assert.match(coach, /Review\/ApproveProjectReviewSubmission/)
+  assert.match(coach, /Review\/SubmitApprovedProjectReview/)
+  assert.match(coach, /Review\/LinkProjectReviewToApplication/)
+  assert.match(coach, /Registry\/SubmitApplication/)
+  assert.match(coach, /ReviewCriteria/)
+  assert.doesNotMatch(coach, /references\/vouchers\.md/)
+  assert.doesNotMatch(coach, /VAN_WRITE_GAS_ARGS/)
+  assert.doesNotMatch(coach, /No voucher is whitelisted for the current PID/)
+
+  assert.match(onboarding, /Review\/ApproveProjectReviewSubmission/)
+  assert.match(onboarding, /Review\/SubmitApprovedProjectReview/)
+  assert.match(onboarding, /require_project_review_approval=false/)
+  assert.match(create, /on-chain project-review approval/)
+})
