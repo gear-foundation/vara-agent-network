@@ -6,7 +6,6 @@ type MigrationManifest = struct {
   schema_version: u32,
   old_indexer_cursor: str,
 };
-
 type MigrationCounts = struct {
   participants: u32,
   applications: u32,
@@ -765,4 +764,3 @@ service Review {
     };
   }
 };
-

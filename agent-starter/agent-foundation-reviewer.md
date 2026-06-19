@@ -3,17 +3,17 @@
 Use when acting as a Gear Foundation reviewer for application listing admission.
 Covers reviewer preflight, public queue triage, comments, `PublishApplication`,
 `RequestPublishChanges`, expected revision handling, named errors, and verification.
-Do not use this page for hackathon prize or winner judging.
 
-**This page is for the reviewer side. Builders interacting with @cerberus should read `agent-cerberus-coach.md` instead.**
+**Ordering: @cerberus (coach) evaluates first — business viability before any code.**
+The Foundation reviewer only reviews after the coach has approved the idea.
+If the coach has doubts, issues, or explicit requests, escalate to Foundation review.
+
+**Builders interacting with @cerberus should read `agent-cerberus-coach.md` instead.**
 
 **Prereqs**: see `SKILL.md` "Install prerequisites" and source the preamble first.
 You need `vara-wallet` 0.19+, `jq`, an account that is an active reviewer, a
-fresh `$IDL`, `allow_review=true` from `Admin/GetConfig`, and
-`VAN_WRITE_GAS_ARGS` from `references/vouchers.md` for write calls.
-If you jump straight to this page, run the `SKILL.md` preamble first. After
-`OPERATOR_HEX` is known, run `references/vouchers.md`; otherwise write examples
-using `"${VAN_WRITE_GAS_ARGS[@]}"` have no gas-args array in scope.
+fresh `$IDL`, and `allow_review=true` from `Admin/GetConfig`.
+If you jump straight to this page, run the `SKILL.md` preamble first.
 
 ## Terminology
 
@@ -48,21 +48,24 @@ Admin roster operations:
 
 ```bash
 vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
-  Review/AddReviewer --args "[\"$REVIEWER_HEX\"]" "${VAN_WRITE_GAS_ARGS[@]}" --idl "$IDL"
+  Review/AddReviewer --args "[\"$REVIEWER_HEX\"]" --idl "$IDL"
 
 vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
-  Review/RemoveReviewer --args "[\"$REVIEWER_HEX\"]" "${VAN_WRITE_GAS_ARGS[@]}" --idl "$IDL"
+  Review/RemoveReviewer --args "[\"$REVIEWER_HEX\"]" --idl "$IDL"
 ```
 
 ## How project reviews start and link
 
 Builders submit pre-deploy project reviews before an application program exists.
-`Review/SubmitProjectReview` takes `SubmitProjectReviewReq { github_url, idea }`
-and returns the durable `u64` project review id. These are builder/owner
-handoff commands; do not run them with the reviewer `ACCT`.
+The default path is coach-approved: @cerberus or another active coach first calls
+`Review/ApproveProjectReviewSubmission(applicant, request_message_id)` and gives
+the builder the returned approval id. The builder then consumes that id with
+`Review/SubmitApprovedProjectReview`. These are builder/owner handoff commands;
+do not run them with the reviewer `ACCT`.
 
 ```bash
 BUILDER_ACCT="builder-owner"
+PROJECT_REVIEW_APPROVAL_ID=1
 APP_GITHUB_URL="https://github.com/owner/project"
 APP_DESCRIPTION="One-line product idea"
 
@@ -72,13 +75,17 @@ PROJECT_REVIEW_REQ=$(jq -nc \
   '{github_url:$github, idea:$idea}')
 
 SUBMIT_IDEA_JSON=$(vara-wallet --account "$BUILDER_ACCT" --network "$VARA_NETWORK" --json call "$PID" \
-  Review/SubmitProjectReview \
-  --args "[$PROJECT_REVIEW_REQ]" \
-  "${VAN_WRITE_GAS_ARGS[@]}" \
+  Review/SubmitApprovedProjectReview \
+  --args "[$PROJECT_REVIEW_REQ,$PROJECT_REVIEW_APPROVAL_ID]" \
   --idl "$IDL")
 PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
 echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
 ```
+
+If `Admin/GetConfig.require_project_review_approval=false`, builders may use
+the legacy `Review/SubmitProjectReview --args "[$PROJECT_REVIEW_REQ]"` path.
+On the default approval-required path, direct submit returns
+`ProjectReviewApprovalRequired`.
 
 After the builder deploys and registers the application, the same owner account
 links that review to the application with `Review/LinkProjectReviewToApplication`.
@@ -89,7 +96,6 @@ the builder to run it after latest guidance is `Proceed`.
 vara-wallet --account "$BUILDER_ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/LinkProjectReviewToApplication \
   --args "[$PROJECT_REVIEW_ID,\"$APP_HEX\"]" \
-  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 
@@ -139,7 +145,6 @@ change the recommendation:
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/PostProjectReviewerComment \
   --args "[$PROJECT_REVIEW_ID,\"The project is strongest if it names a real consuming app and a callable method.\"]" \
-  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 
@@ -150,7 +155,6 @@ should act on before deployment:
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/RecordProjectGuidance \
   --args "[$PROJECT_REVIEW_ID,{\"Proceed\":null},\"Proceed if the builder proves demand with one integration partner.\"]" \
-  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 
@@ -241,7 +245,6 @@ request for that revision.
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/PostReviewerComment \
   --args "[\"$APP_HEX\",$DISPLAY_REVISION,\"Please add a runnable smoke command and clarify the error behavior for your callable method.\"]" \
-  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 
@@ -271,7 +274,6 @@ Publish:
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/PublishApplication \
   --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Ready for public publish.\",$CRITERIA]" \
-  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 
@@ -281,7 +283,6 @@ Request changes:
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/RequestPublishChanges \
   --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Please resubmit after adding live-call evidence and documenting error behavior.\",$CRITERIA]" \
-  "${VAN_WRITE_GAS_ARGS[@]}" \
   --idl "$IDL"
 ```
 

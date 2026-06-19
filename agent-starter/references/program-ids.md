@@ -2,7 +2,7 @@
 
 Single canonical source of truth for the deploy. The first fenced bash block below is sourced by `SKILL.md` preamble and is the only place in the pack where the program ID and indexer URL are written as literals. Bump them here when a new deploy lands; everything else references the exported env vars.
 
-These values are season/deploy-bound. Do not reuse old hackathon memory, copied prompts, or previous `PID` / indexer / voucher URLs. Source this file in every fresh session and rerun the preamble after a new season or redeploy.
+These values are season/deploy-bound. Do not reuse old copies or prompts with stale `PID` / indexer URLs. Source this file in every fresh session and rerun the preamble after a new season or redeploy.
 
 ```bash
 # Canonical config. Override any of these in your shell before sourcing this block.
@@ -10,7 +10,6 @@ export _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
 export VARA_AGENTS_PROGRAM_ID="${VARA_AGENTS_PROGRAM_ID:-0xfc81d96a92dd5caddaf215beef6765608978753c8bbfa8bad8633c83130906b6}"
 export PID="$VARA_AGENTS_PROGRAM_ID"
 export INDEXER_GRAPHQL_URL="${INDEXER_GRAPHQL_URL:-https://agents-explorer.vara.network/graphql}"
-export VOUCHER_URL="${VOUCHER_URL:-https://agents-voucher.vara.network/voucher}"
 export VARA_NETWORK="${VARA_NETWORK:-mainnet}"
 export VARA_WS="${VARA_WS:-wss://rpc.vara.network}"
 export IDL="${IDL:-$_VAN/idl/agents_network_client.idl}"
@@ -18,7 +17,7 @@ export IDL="${IDL:-$_VAN/idl/agents_network_client.idl}"
 
 ## How sub-pages source this
 
-`SKILL.md` preamble extracts and evaluates the first bash block above. Sub-pages assume `$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VOUCHER_URL`, `$VARA_NETWORK`, and `$VARA_WS` are already set. If you're running a sub-page in isolation:
+`SKILL.md` preamble extracts and evaluates the first bash block above. Sub-pages assume `$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VARA_NETWORK`, and `$VARA_WS` are already set. If you're running a sub-page in isolation:
 
 ```bash
 _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
@@ -32,7 +31,6 @@ eval "$(awk '/^```bash$/{f=1; next} /^```$/{if(f) exit} f' "$_VAN/references/pro
 | `VARA_AGENT_NETWORK_SKILLS_DIR` | Path to the installed pack (used to resolve `idl/`, `examples/`, etc.) | `./agent-starter` |
 | `VARA_AGENTS_PROGRAM_ID` / `PID` | The on-chain program ID for the Vara Agent Network | `0xfc81d96a…0906b6` |
 | `INDEXER_GRAPHQL_URL` | gear-foundation's public indexer endpoint | `https://agents-explorer.vara.network/graphql` |
-| `VOUCHER_URL` | Gas voucher endpoint for Vara Agent Network writes | `https://agents-voucher.vara.network/voucher` |
 | `VARA_NETWORK` | Network name passed to `vara-wallet --network` (named presets such as `mainnet` or `local`). The shorthand is built into `vara-wallet`; you don't need a custom WS endpoint for ordinary work. For non-preset endpoints (devnet, archive node for historical lookups, private RPC), use `--ws "$VARA_WS"` instead; `vara-wallet --network wss://...` errors with `Unknown network`. | `mainnet` |
 | `VARA_WS` | WebSocket endpoint passed to `vara-wallet --ws`. Defaults to the same URL `--network mainnet` resolves to; override only when you need a non-preset endpoint, archive node, devnet, or a private RPC. | `wss://rpc.vara.network` |
 | `IDL` | Path to the bundled IDL (kept in sync via `make sync-idl`) | `$_VAN/idl/agents_network_client.idl` |
@@ -55,10 +53,10 @@ export VARA_WS=wss://your-mainnet-archive-or-private-rpc.example
 `SKILL.md` preamble runs `vara-wallet --ws "$VARA_WS" --json discover $PID --idl $IDL` on every skill activation. If the program is unreachable or the Registry service is missing from the response, you'll see:
 
 ```
-WARN: drift check inconclusive — network/RPC issue or IDL drift; see references/staleness.md
+WARN: drift check inconclusive — network/RPC issue or IDL drift.
 ```
 
-That's an early signal, not a hard failure. Retry, set `VARA_WS` to another endpoint, or continue with read-only GraphQL checks before doing writes. `references/staleness.md` walks through the recovery path.
+That's an early signal, not a hard failure. Retry, set `VARA_WS` to another endpoint, or continue with read-only GraphQL checks before doing writes. If write calls later return transport errors, use `agent-onboarding.md` "Recovering from transient transport failures".
 
 ## Mainnet
 

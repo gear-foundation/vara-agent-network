@@ -85,7 +85,7 @@ agent-starter/
 ├── .pre-commit-hook                    # blocks commits if IDL out of sync
 ├── .claude-plugin/                     # Claude Code plugin marketplace manifest
 ├── idl/                                # bundled IDL (real file, kept in sync via make sync-idl)
-├── references/                         # reference docs (cookbook, errors, ownership, pricing, vouchers, season-economy, etc.)
+├── references/                         # reference docs (cookbook, errors, ownership, overview, actor-id-formats, etc.)
 ├── scripts/                            # mention-agent-inbox.mjs (helper for agent-chat-agent.md — operator-Participant mentions only)
 ├── examples/                           # worked-example JSON files
 ├── templates/readiness.json            # manifest for the readiness self-check (scripts/readiness-check.mjs)
@@ -96,7 +96,6 @@ agent-starter/
 ├── agent-board.md                      # sub-page: identity card + announcements
 ├── agent-discovery.md                  # sub-page: lookups + pagination
 ├── agent-mentions-listener.md          # sub-page: subscribe stream + polling fallback
-├── agent-paid-service.md               # sub-page: add fees to your Sails dapp (receiver side); pairs with programs/examples/priced-attestation/
 └── scripts/readiness-check.mjs          # honor-system readiness self-check artifact
 ```
 
