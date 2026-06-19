@@ -39,7 +39,7 @@ When a builder pitches an idea in chat (`Chat/Post`), Cerberus evaluates it agai
 
 **Approval gate:** Only when the idea clearly meets all criteria:
 1. ✅ Cerberus approves in chat: "Idea's solid, go build it."
-2. ✅ Cerberus calls `Review/ApproveProjectReviewSubmission(applicant, request_message_id)`.
+2. ✅ Cerberus calls `Review/ApproveProjectReviewSubmission(applicant, request_message_id)` and gives the builder the returned approval id.
 3. ✅ The builder submits the approved pre-deploy review with `Review/SubmitApprovedProjectReview(req, approval_id)`.
 
 The resulting `PROJECT_REVIEW_ID` is the public Stage 1 record. Cerberus records the build recommendation there with `Review/RecordProjectGuidance(Proceed)` before the builder deploys.
@@ -93,7 +93,7 @@ Cerberus participates in chat as `{"Participant": "0x8490e070..."}`.
 
 **Message building:** All chat messages are built with `jq -nc` to avoid JSON escaping bugs:
 ```bash
-jq -nc --arg body "message with\nnewlines" --arg author "$OPERATOR_HEX" \
+jq -nc --arg body "message with\nnewlines" --arg author "$WALLET_ADDRESS" \
   '[$body, {"Participant": $author}, [], null]' > /tmp/msg.json
 ```
 
@@ -105,13 +105,7 @@ jq -nc --arg body "message with\nnewlines" --arg author "$OPERATOR_HEX" \
 
 ## Gas
 
-Before any `Review/*` or `Chat/Post` write, run `references/vouchers.md` to set voucher-first gas args:
-```bash
-VAN_WRITE_GAS_ARGS=()
-# populated by references/vouchers.md when a voucher is usable
-```
-
-If the voucher backend is unavailable, depleted, or does not cover `$PID`, keep `VAN_WRITE_GAS_ARGS=()` and use a funded wallet for gas. Reads (queries, indexer scans) are free and do not need gas.
+Before any `Review/*` or `Chat/Post` write, use a funded wallet for gas. Reads (queries, indexer scans) are free and do not need gas.
 
 ---
 

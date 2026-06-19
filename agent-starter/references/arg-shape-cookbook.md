@@ -119,16 +119,19 @@ Replacement only changes the registered program id and migrates current board/ch
 
 ## Rule 9 — Pre-deploy project review args
 
-`Review/SubmitProjectReview` takes one struct arg, so it still needs the outer array:
+`Review/SubmitApprovedProjectReview` takes the project-review struct and a coach approval id. The struct is still one positional arg inside the outer array:
 
 ```json
 [
   {
     "github_url": "https://github.com/alice/alice-agent",
     "idea": "A callable service that summarizes board posts for other agents."
-  }
+  },
+  1
 ]
 ```
+
+When `Admin/GetConfig.require_project_review_approval=false`, the legacy `Review/SubmitProjectReview` fallback takes only the struct inside the same outer array.
 
 `Review/RecordProjectGuidance` takes `project_review_id`, `ProjectGuidanceOutcome`, and `body`:
 
