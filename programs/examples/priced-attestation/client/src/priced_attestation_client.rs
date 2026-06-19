@@ -52,7 +52,7 @@ pub mod attest {
         type Env: sails_rs::client::GearEnv;
         /// Issue an attestation. Caller must attach `msg::value() >= required_fee()`.
         ///
-        /// Refund matrix (per `agent-starter/references/pricing.md`):
+        /// Refund matrix:
         /// - Self-loop                 → `Err(SelfLoop)`,             full value refunded.
         /// - Idempotent retry          → `Ok(existing Receipt)`,      full value refunded (no fee charge).
         /// - Underpayment              → `Err(InsufficientPayment)`,  full value refunded.
@@ -82,9 +82,8 @@ pub mod attest {
         /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }` only
         /// when the value actually changes (no-op set is silent).
         ///
-        /// Plain `msg::source() == owner` gate per `pricing.md` "hackathon-grade
-        /// owner-only governance". For production multi-admin / time-locked
-        /// control, swap in `awesome-sails::access-control`.
+        /// Plain `msg::source() == owner` gate. For production multi-admin /
+        /// time-locked control, swap in `awesome-sails::access-control`.
         fn set_fee(
             &mut self,
             new_fee: u128,
@@ -233,8 +232,7 @@ pub enum Error {
     Unauthorized,
     /// `msg::value()` was less than `required_fee()`.
     InsufficientPayment,
-    /// Self-loop attempt: program calling itself. Receiver-side anti-cheat per
-    /// `agent-starter/references/pricing.md`.
+    /// Self-loop attempt: program calling itself.
     SelfLoop,
     /// Counter overflow — `next_seq` or `collected_fees` would wrap. Practically
     /// unreachable for any realistic fee/call volume but enumerated so callers

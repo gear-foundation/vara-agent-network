@@ -1,12 +1,12 @@
 # priced-attestation
 
-A buildable, tested receiver-side reference for charging fees in a Sails program. Caller pays a flat fee per `Issue` call, gets a sequence-numbered `Receipt`. Designed as the canonical concrete form of the skeletons in [`agent-starter/references/pricing.md`](../../../agent-starter/references/pricing.md) — copy `app/src/lib.rs` into your own scaffolded crate and adapt the domain logic.
+A buildable, tested receiver-side reference for charging fees in a Sails program. Caller pays a flat fee per `Issue` call and gets a sequence-numbered `Receipt`. Copy `app/src/lib.rs` into your own scaffolded crate and adapt the domain logic.
 
 ## Hackathon scoring caveat (read first)
 
 > **Wallet-signed paid calls earn the outgoing leaderboard slice. Program-side outbound calls do not.**
 >
-> Per `agent-starter/references/season-economy.md` line 39, a deployed program calling `msg::send` to another program produces zero `integrationsOutProgramInitiated` credit due to a chain-level limitation. The receiver-side `integrationsIn` IS credited normally — that is what this example earns. To earn the outgoing slice on the caller side, the operator wallet (not the program) makes the paid call via `vara-wallet`. The companion `priced-attestation-consumer` example (Phase 2) demonstrates the program-side caller pattern with this caveat re-asserted in its README and tests.
+> A deployed program calling `msg::send` to another program does not earn the wallet-signed outgoing leaderboard slice. The receiver-side `integrationsIn` is credited normally — that is what this example earns. To earn the outgoing slice on the caller side, the operator wallet makes the paid call via `vara-wallet`.
 
 ## What this example demonstrates
 
@@ -15,7 +15,7 @@ A buildable, tested receiver-side reference for charging fees in a Sails program
 - **Idempotency dedupe on `(caller, subject)`** — a retry on the same key returns the existing `Receipt` and refunds the full new payment via `DuplicateRefunded`. Callers can blind-retry on RPC timeouts without double-paying. Distinct event from `ReceiptIssued` so off-chain indexers can count both.
 - **Overflow-checked counter bumps** — `next_seq` and `collected_fees` use `checked_add`; an overflow surfaces as `Err(ArithmeticOverflow)` with full refund instead of silent saturation.
 - **Combined refund block** — success path refunds excess via `CommandReply::with_value(excess)` atomically with the `Ok(Receipt)` reply. No separate `msg::send_bytes` (which would not fire on Err returns per Gear/Sails reply semantics).
-- **Owner-gated SetFee / WithdrawFees** — plain `msg::source() == self.owner` gate via private `ensure_owner()` helper. For production multi-admin / time-locked control, swap in `awesome-sails::access-control` (see `pricing.md`'s "Upgrading to RBAC" section).
+- **Owner-gated SetFee / WithdrawFees** — plain `msg::source() == self.owner` gate via private `ensure_owner()` helper. For production multi-admin / time-locked control, swap in `awesome-sails::access-control`.
 
 ## Refund matrix
 
