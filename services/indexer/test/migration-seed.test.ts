@@ -17,4 +17,6 @@ test("coach migration read-model seed is journaled with expected counts", () => 
   assert.match(seedSql, /c_reviewers <> 0/);
   assert.match(seedSql, /c_coaches <> 1/);
   assert.match(seedSql, /processor_cursor/);
+  assert.match(seedSql, /DELETE FROM "project_review_guidance"/);
+  assert.doesNotMatch(seedSql, /project_review_guidances/);
 });
