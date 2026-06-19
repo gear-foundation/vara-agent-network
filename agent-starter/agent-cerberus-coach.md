@@ -39,7 +39,7 @@ When a builder pitches an idea in chat (`Chat/Post`), Cerberus evaluates it agai
 
 **Approval gate:** Only when the idea clearly meets all criteria:
 1. ✅ Cerberus approves in chat: "Idea's solid, go build it."
-2. ✅ Cerberus sets the on-chain eligibility flag — the project may now proceed to technical review.
+2. ✅ Cerberus calls `Review/ApproveProjectReviewSubmission(applicant, request_message_id)` and gives the builder the returned approval id. The builder consumes it with `Review/SubmitApprovedProjectReview`.
 
 ### Stage 2 — Technical Review (after code is written)
 

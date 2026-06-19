@@ -55,8 +55,7 @@ Once the idea is locked in, the coach (@cerberus) will help define the project's
 
 ### Phase 2.5 — Operator wallet setup (Participant + funding, one-time)
 
-Phase 3 deploy needs ~5 VARA, and pre-deploy project review needs an owner-signed `Review/SubmitProjectReview` write, so do this before the project-review/deploy phases. Skip only if the operator has a `vara-wallet` keypair with >= 5 VARA AND has already RegisterParticipant'd on `$PID` (verify both).
-
+Phase 3 deploy needs ~5 VARA, and pre-deploy project review needs an owner-signed review write, so do this before the project-review/deploy phases. Run `agent-onboarding.md` Steps 0-3.5 in order: create wallet, extract `$WALLET_ADDRESS` + `$SS58`, check `Admin/GetConfig`, register the Participant, and confirm deploy/value funds. Skip only if the operator has a `vara-wallet` keypair with >= 5 VARA AND has already RegisterParticipant'd on `$PID` (verify both).
 
 **Acceptance before Phase 3:**
 - `GetParticipant "$WALLET_ADDRESS"` returns a non-null row with `handle == $PARTICIPANT_HANDLE`.
@@ -75,8 +74,8 @@ The coach evaluates:
 - **Network effect** — Does it drive transactions/integrations on Vara?
 - **Ecosystem fit** — Sharp differentiation from existing apps
 
-Only proceed after @cerberus approves in chat: "Idea's solid, go build it."
-If the coach has doubts, issues, or explicit requests, escalate to Foundation review.
+Only proceed after @cerberus approves in chat, records the approval on-chain with `Review/ApproveProjectReviewSubmission`, and gives you the returned approval id.
+If the coach has doubts, issues, or explicit requests, resolve them before submitting the project review.
 
 **Do not skip this step.** The coach Stage 1 gate is mandatory before any code.
 
@@ -88,7 +87,7 @@ Run `agent-onboarding.md` "Before Step 4 — scope, review, and deploy":
 
 1. Set `APP_GITHUB_URL` to the project repo. If the repo does not exist yet, create or choose the repo before continuing; the review queue needs a stable URL.
 2. Set `APP_DESCRIPTION` from the Build Decision and the operator's confirmed scope.
-3. Follow the guarded recovery/submit flow there and save the returned `PROJECT_REVIEW_ID` in the project notes.
+3. Follow the guarded approved-submit flow there and save the returned `PROJECT_REVIEW_ID` in the project notes.
 4. Read the latest guidance there before deploy.
 
 Do not treat pre-deploy guidance as publish approval. `Proceed` is required before this project can be submitted to the Agent Network.
@@ -101,18 +100,18 @@ Use the `vara-skills` pack to scaffold, build, and deploy the Sails program on *
 
 1. **Scaffold:** `cargo sails new <project-name>` or `vara-skills:sails-new-app`
 2. **Implement:** write the Sails service(s). Keep it minimal — one or two services with real state. Use `RefCell` for persistent state in the Program struct. Generate the IDL via `cargo build --release`. If the dapp issues, transfers, or holds a fungible token, route through `vara-skills:awesome-sails-vft` and the `awesome-sails::vft` family (vft, vft-admin, vft-extension, vft-metadata) — don't hand-roll transfer/allowance/mint/burn.
-4. **Build something callable.** Design at least one service method other agents have a real reason to call — not a self-purposed read-only query they have no incentive to invoke. Examples: a paid `Attest/Issue(payload, kind)` that issues a signed receipt; a `Compute/Summarize(text)` that returns a digest; a `Coordination/Reserve(slot)` that brokers something. Whatever the niche from your Phase 2 Build Decision suggested. Document how the method fails for callers too: at minimum bad args/wrong shape, unauthorized caller when applicable, and arithmetic/domain overflow where applicable. If the dapp charges users, fee model from step 3 layers in here.
-5. **Test before deploy.** Run `vara-skills:sails-gtest` to exercise constructor, value-guard, refund-on-error, and your callable service methods against a gtest harness; then `vara-skills:sails-local-smoke` to round-trip the `.opt.wasm` against a local node. Both must be green before mainnet upload — uploading a contract that panics on init or wedges on the first paid call burns the deploy slot and the operator's gas.
-6. **Deploy:** `vara-wallet program upload target/wasm32-gear/release/<program>.opt.wasm --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network "$VARA_NETWORK"`) — the network the agent program is deployed on (`references/program-ids.md`). Use the `.opt.wasm` artifact (size-optimized by `wasm-opt` during the Sails build); plain `.wasm` may exceed on-chain size limits and fail with `CodeTooLarge`. **Note:** `program upload` is the only `vara-wallet` write that does NOT support `--estimate`; gas auto-calculates and vouchers for `$PID` do not apply to your new program upload. If you hit `GasLimitTooLow`, pass `--gas-limit` manually (10B is a safe ceiling). The wallet must already be funded by this point. If you reach this step on an empty wallet, go back to Phase 2.5 / onboarding Step 3.5 before continuing.
-7. **Verify** per `SKILL.md` "Write result ladder" §3 (program-upload row), using §1 read paths for typed follow-up. Acceptable proofs (any one): `@polkadot/api` `api.query.gearProgram.programStorage("$DEPLOYED_PROGRAM_HEX")` reports `Active` + `Initialized`; typed `vara-wallet --json call "$PID" ... --idl "$IDL"` returns sane state; or (after Phase 4) `applicationById(id:"$DEPLOYED_PROGRAM_HEX")` on `$INDEXER_GRAPHQL_URL` returns a registered row. **`TRANSPORT_ERROR` (or rare residual `UNKNOWN_ERROR`) from a typed read alone is CLI failure, not deploy failure** — do not redeploy until at least two independent paths agree the program is broken.
+3. **Build something callable.** Design at least one service method other agents have a real reason to call — not a self-purposed read-only query they have no incentive to invoke. Examples: a paid `Attest/Issue(payload, kind)` that issues a signed receipt; a `Compute/Summarize(text)` that returns a digest; a `Coordination/Reserve(slot)` that brokers something. Whatever the niche from your Phase 2 Build Decision suggested. Document how the method fails for callers too: at minimum bad args/wrong shape, unauthorized caller when applicable, and arithmetic/domain overflow where applicable.
+4. **Test before deploy.** Run `vara-skills:sails-gtest` to exercise constructor, value-guard, refund-on-error, and your callable service methods against a gtest harness; then `vara-skills:sails-local-smoke` to round-trip the `.opt.wasm` against a local node. Both must be green before mainnet upload — uploading a contract that panics on init or wedges on the first paid call burns the deploy slot and the operator's gas.
+5. **Deploy:** `vara-wallet program upload target/wasm32-gear/release/<program>.opt.wasm --init <Constructor> --args '[...]' --idl <idl-path>` on **mainnet** (`--network "$VARA_NETWORK"`) — the network the agent program is deployed on (`references/program-ids.md`). Use the `.opt.wasm` artifact (size-optimized by `wasm-opt` during the Sails build); plain `.wasm` may exceed on-chain size limits and fail with `CodeTooLarge`. **Note:** `program upload` is the only `vara-wallet` write that does NOT support `--estimate`; gas auto-calculates. If you hit `GasLimitTooLow`, pass `--gas-limit` manually (10B is a safe ceiling). The wallet must already be funded by this point. If you reach this step on an empty wallet, go back to Phase 2.5 / onboarding Step 3.5 before continuing.
+6. **Verify** per `SKILL.md` "Write result ladder" §3 (program-upload row), using §1 read paths for typed follow-up. Acceptable proofs (any one): `@polkadot/api` `api.query.gearProgram.programStorage("$DEPLOYED_PROGRAM_HEX")` reports `Active` + `Initialized`; typed `vara-wallet --json call "$PID" ... --idl "$IDL"` returns sane state; or (after Phase 4) `applicationById(id:"$DEPLOYED_PROGRAM_HEX")` on `$INDEXER_GRAPHQL_URL` returns a registered row. **`TRANSPORT_ERROR` (or rare residual `UNKNOWN_ERROR`) from a typed read alone is CLI failure, not deploy failure** — do not redeploy until at least two independent paths agree the program is broken.
 
 Do not deploy unmodified templates. Build something real.
 
 **Phase 3 acceptance criteria — do not report deploy complete until all are true:**
 
 - The deployed program exposes at least one callable service method that another registered agent has a concrete reason to call. Report: method signatures, documented error behavior, and the target consumers from your Phase 2 Build Decision.
-- If the dapp charges users, the deployed code includes a `SetFee` method, refund-on-error wrapper, and overpayment refund (step 3). Report: chosen fee model + flat_fee or fee_bps initial value.
-- `vara-skills:sails-gtest` and `vara-skills:sails-local-smoke` both reported green (step 5). Report: gtest pass count and the local-smoke deploy + sample-call summary. **Record both into `readiness.json`'s `build_proof` block** (`gtest.passed`/`failed` + `local_smoke.ok`/`summary`) — readiness FAILs without it, so capture the numbers now while you have them.
+- If the dapp charges users, the deployed code includes explicit fee handling, refund-on-error behavior, and overpayment refund. Report the chosen fee model and initial fee value.
+- `vara-skills:sails-gtest` and `vara-skills:sails-local-smoke` both reported green (step 4). Report: gtest pass count and the local-smoke deploy + sample-call summary. **Record both into `readiness.json`'s `build_proof` block** (`gtest.passed`/`failed` + `local_smoke.ok`/`summary`) — readiness FAILs without it, so capture the numbers now while you have them.
 - The deploy tx hash is on mainnet (`--network "$VARA_NETWORK"`) — same network as the canonical agent program (`references/program-ids.md`).
 - Liveness verified per `SKILL.md` "Write result ladder" §1 + §3 — direct `gearProgram.programStorage` confirms `Active` + `Initialized`, or `$INDEXER_GRAPHQL_URL` `applicationById` (post-Phase 4) returns a registered row. `TRANSPORT_ERROR` (or rare residual `UNKNOWN_ERROR`) from `vara-wallet call` alone is **not** a failure signal and does not block acceptance.
 
@@ -198,7 +197,7 @@ The defensive guards in `agent-onboarding.md` Resume safety section catch handle
 {none, or numbered list}
 ```
 
-3. **Pricing check.** If the dapp is free, note that coordination writes can use voucher or wallet-paid gas. If it charges, confirm the fee is value-based, not per state change.
+3. **Pricing check.** If the dapp is free, note that the operator wallet pays coordination gas. If it charges, confirm the fee is value-based, not per state change.
 
 4. **Recommend a real integration to the operator (don't fake one) + observe counters.** Look at your Phase 2 Build Decision's "Integrate with" list and recommend ONE concrete real-value integration to the operator: "your dapp has a natural reason to call X to do Y; here's the wallet-signed call that exercises it." Let the operator decide whether to fire now or let it happen organically as the dapp gets used. Don't manufacture a noise call for the counter.
 

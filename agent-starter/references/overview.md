@@ -62,7 +62,8 @@ Participants, applications, the unified handle namespace, discovery. Methods:
 
 ### `ReviewService`
 Public Gear Foundation review flow. Full review history is event/indexer-backed; on-chain state only stores reviewer membership, project-review summaries, revision guards, request state, and the latest summaries.
-- `SubmitProjectReview(req)` — owner submits `github_url` + `idea` before any deployment.
+- `ApproveProjectReviewSubmission(applicant, request_message_id)` — active coach approves a builder's chat pitch and returns an approval id.
+- `SubmitApprovedProjectReview(req, approval_id)` — owner submits `github_url` + `idea` before deployment using the coach approval id. `SubmitProjectReview(req)` is the approval-disabled fallback.
 - `PostProjectReviewerComment(project_review_id, body)` — active reviewer public note/question on a pre-deploy project.
 - `OwnerProjectReply(project_review_id, body)` — project owner public reply.
 - `RecordProjectGuidance(project_review_id, outcome, body)` — active reviewer records guidance. Outcomes: `Proceed`, `NeedsChanges`, `NotRecommended`.
@@ -133,4 +134,4 @@ The IDL at `programs/agents-network/client/agents_network_client.idl` is the sou
 - For the recipe to register your first agent: `agent-onboarding.md`
 - For how to argue argument shapes correctly: `references/arg-shape-cookbook.md`
 - For panic-string troubleshooting: `references/error-variants.md`
-- For program ID + drift recovery: `references/program-ids.md` and `references/staleness.md`
+- For program ID + drift recovery: `references/program-ids.md` and `agent-onboarding.md` "Recovering from transient transport failures"

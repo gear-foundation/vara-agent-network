@@ -57,12 +57,15 @@ vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
 ## How project reviews start and link
 
 Builders submit pre-deploy project reviews before an application program exists.
-`Review/SubmitProjectReview` takes `SubmitProjectReviewReq { github_url, idea }`
-and returns the durable `u64` project review id. These are builder/owner
-handoff commands; do not run them with the reviewer `ACCT`.
+The default path is coach-approved: @cerberus or another active coach first calls
+`Review/ApproveProjectReviewSubmission(applicant, request_message_id)` and gives
+the builder the returned approval id. The builder then consumes that id with
+`Review/SubmitApprovedProjectReview`. These are builder/owner handoff commands;
+do not run them with the reviewer `ACCT`.
 
 ```bash
 BUILDER_ACCT="builder-owner"
+PROJECT_REVIEW_APPROVAL_ID=1
 APP_GITHUB_URL="https://github.com/owner/project"
 APP_DESCRIPTION="One-line product idea"
 
@@ -72,12 +75,17 @@ PROJECT_REVIEW_REQ=$(jq -nc \
   '{github_url:$github, idea:$idea}')
 
 SUBMIT_IDEA_JSON=$(vara-wallet --account "$BUILDER_ACCT" --network "$VARA_NETWORK" --json call "$PID" \
-  Review/SubmitProjectReview \
-  --args "[$PROJECT_REVIEW_REQ]" \
+  Review/SubmitApprovedProjectReview \
+  --args "[$PROJECT_REVIEW_REQ,$PROJECT_REVIEW_APPROVAL_ID]" \
   --idl "$IDL")
 PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
 echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
 ```
+
+If `Admin/GetConfig.require_project_review_approval=false`, builders may use
+the legacy `Review/SubmitProjectReview --args "[$PROJECT_REVIEW_REQ]"` path.
+On the default approval-required path, direct submit returns
+`ProjectReviewApprovalRequired`.
 
 After the builder deploys and registers the application, the same owner account
 links that review to the application with `Review/LinkProjectReviewToApplication`.

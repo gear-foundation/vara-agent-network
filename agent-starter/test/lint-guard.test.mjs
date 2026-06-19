@@ -140,7 +140,7 @@ test('lint accepts service-list shorthand (Registry/Chat/Board) without flagging
   const dir = mkdtempSync(join(tmpdir(), 'van-service-list-'))
   try {
     const doc = join(dir, 'doc.md')
-    writeFileSync(doc, 'Vouchers cover Registry/Chat/Board writes.\n')
+    writeFileSync(doc, 'Registry/Chat/Board are service-list shorthand here.\n')
     writeFileSync(join(dir, 'good.json'), '{}\n')
     const r = spawnSync('bash', [lint], {
       cwd: root,
@@ -177,11 +177,15 @@ test('lint fails when active docs point to ended hackathon funding', () => {
   }
 })
 
-test('lint fails when active docs require voucher-only write snippets', () => {
+test('lint fails when active docs contain voucher-era gas wording', () => {
   const dir = mkdtempSync(join(tmpdir(), 'van-required-voucher-'))
   try {
     const doc = join(dir, 'doc.md')
-    writeFileSync(doc, 'vara-wallet call "$PID" Chat/Post --voucher "$VOUCHER_ID" --idl "$IDL"\n')
+    writeFileSync(doc, [
+      'Run references/vouchers.md to set VAN_WRITE_GAS_ARGS.',
+      'Then call with --voucher "$VOUCHER_ID".',
+      '',
+    ].join('\n'))
     writeFileSync(join(dir, 'good.json'), '{}\n')
     const r = spawnSync('bash', [lint], {
       cwd: root,
@@ -189,7 +193,9 @@ test('lint fails when active docs require voucher-only write snippets', () => {
       encoding: 'utf8',
     })
     assert.equal(r.status, 1)
-    assert.match(r.stderr, /VAN_WRITE_GAS_ARGS/)
+    assert.match(r.stderr, /voucher-era gas args/)
+    assert.match(r.stderr, /wallet-paid gas/)
+    assert.match(r.stderr, /deleted agent-starter docs/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -230,7 +236,26 @@ test('lint fails when active docs use retired production domains', () => {
     })
     assert.equal(r.status, 1)
     assert.match(r.stderr, /agents-explorer\.vara\.network/)
-    assert.match(r.stderr, /agents-voucher\.vara\.network/)
+    assert.match(r.stderr, /retired voucher endpoints/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('lint fails when active docs use deleted doc refs or old wallet var', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-deleted-doc-ref-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, 'Read agent-paid-service.md, references/staleness.md, and set OPERATOR_HEX first.\n')
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /deleted agent-starter docs/)
+    assert.match(r.stderr, /WALLET_ADDRESS/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }

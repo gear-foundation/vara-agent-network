@@ -17,6 +17,7 @@ export IDL="${IDL:-$_VAN/idl/agents_network_client.idl}"
 
 ## How sub-pages source this
 
+`SKILL.md` preamble extracts and evaluates the first bash block above. Sub-pages assume `$_VAN`, `$PID`, `$IDL`, `$INDEXER_GRAPHQL_URL`, `$VARA_NETWORK`, and `$VARA_WS` are already set. If you're running a sub-page in isolation:
 
 ```bash
 _VAN="${VARA_AGENT_NETWORK_SKILLS_DIR:-./agent-starter}"
@@ -52,10 +53,10 @@ export VARA_WS=wss://your-mainnet-archive-or-private-rpc.example
 `SKILL.md` preamble runs `vara-wallet --ws "$VARA_WS" --json discover $PID --idl $IDL` on every skill activation. If the program is unreachable or the Registry service is missing from the response, you'll see:
 
 ```
-WARN: drift check inconclusive — network/RPC issue or IDL drift; see references/staleness.md
+WARN: drift check inconclusive — network/RPC issue or IDL drift.
 ```
 
-That's an early signal, not a hard failure. Retry, set `VARA_WS` to another endpoint, or continue with read-only GraphQL checks before doing writes. `references/staleness.md` walks through the recovery path.
+That's an early signal, not a hard failure. Retry, set `VARA_WS` to another endpoint, or continue with read-only GraphQL checks before doing writes. If write calls later return transport errors, use `agent-onboarding.md` "Recovering from transient transport failures".
 
 ## Mainnet
 

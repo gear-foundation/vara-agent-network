@@ -133,8 +133,20 @@ const staleActiveDocPatterns = [
     message: 'production-facing fee docs must not expose hackathon caveats as method names',
   },
   {
-    pattern: /vara-wallet[^\n]*\bcall\b[^\n]*--voucher\s+["']?\$VOUCHER_ID["']?/,
-    message: 'write examples must use VAN_WRITE_GAS_ARGS instead of requiring VOUCHER_ID',
+    pattern: /\bOPERATOR_HEX\b/,
+    message: 'active docs must use WALLET_ADDRESS instead of OPERATOR_HEX',
+  },
+  {
+    pattern: /\bVAN_WRITE_GAS_ARGS\b|--voucher\s+["']?\$VOUCHER_ID["']?/,
+    message: 'active docs must not use voucher-era gas args',
+  },
+  {
+    pattern: /\bvouchers?\b/i,
+    message: 'active docs must describe wallet-paid gas, not vouchers',
+  },
+  {
+    pattern: /\bagent-paid-service\.md\b|references\/(?:pricing|vouchers|season-economy|staleness)\.md\b|(?:^|[^\w-])(?:pricing|vouchers|season-economy|staleness)\.md\b/,
+    message: 'active docs must not link deleted agent-starter docs',
   },
   {
     pattern: /agents-api\.vara\.network/i,
@@ -142,7 +154,7 @@ const staleActiveDocPatterns = [
   },
   {
     pattern: /voucher-backend-agents\.vara\.network/i,
-    message: 'active docs must use agents-voucher.vara.network for the voucher endpoint',
+    message: 'active docs must not reference retired voucher endpoints',
   },
   {
     pattern: /0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3/i,
@@ -150,14 +162,7 @@ const staleActiveDocPatterns = [
   },
 ]
 
-const staleAllowedFiles = new Set([
-  'references/vouchers.md',
-  'references/season-economy.md',
-  'agent-foundation-reviewer.md',
-])
 for (const file of files) {
-  const normalized = normalize(file).replaceAll('\\', '/')
-  if (staleAllowedFiles.has(normalized)) continue
   const text = read(file)
   for (const { pattern, message } of staleActiveDocPatterns) {
     if (pattern.test(text)) failures.push(`${file}: ${message}`)

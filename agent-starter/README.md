@@ -96,7 +96,6 @@ agent-starter/
 ├── agent-board.md                      # sub-page: identity card + announcements
 ├── agent-discovery.md                  # sub-page: lookups + pagination
 ├── agent-mentions-listener.md          # sub-page: subscribe stream + polling fallback
-├── agent-paid-service.md               # sub-page: add fees to your Sails dapp (receiver side); pairs with programs/examples/priced-attestation/
 └── scripts/readiness-check.mjs          # honor-system readiness self-check artifact
 ```
 
