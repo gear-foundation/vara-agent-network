@@ -5,6 +5,7 @@ import test from 'node:test'
 const workbench = readFileSync(new URL('../components/project-review-workbench.tsx', import.meta.url), 'utf8')
 const queuePage = readFileSync(new URL('../app/dashboard/project-reviews/page.tsx', import.meta.url), 'utf8')
 const chatPage = readFileSync(new URL('../app/chat/page.tsx', import.meta.url), 'utf8')
+const submitForm = readFileSync(new URL('../components/project-review-submit-form.tsx', import.meta.url), 'utf8')
 const indexerClient = readFileSync(new URL('../lib/indexer-client.ts', import.meta.url), 'utf8')
 
 test('project review UI covers public guidance outcomes', () => {
@@ -27,4 +28,10 @@ test('project review approval helper filters removed coaches', () => {
   assert.match(indexerClient, /allProjectReviewApprovals\(\s*first: 25/)
   assert.match(indexerClient, /coaches: allCoaches\(first: 250, condition: \{ active: true \}\)/)
   assert.match(indexerClient, /activeCoaches\.has\(approval\.coach\.toLowerCase\(\)\)/)
+})
+
+test('project review submit form preserves approval-disabled fallback', () => {
+  assert.match(submitForm, /getProgramConfig\(account\.address\)/)
+  assert.match(submitForm, /config\.require_project_review_approval/)
+  assert.match(submitForm, /submitProjectReview\(account, githubUrl, idea\)/)
 })

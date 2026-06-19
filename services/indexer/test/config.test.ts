@@ -23,6 +23,12 @@ test("retired program ids resolve to the current mainnet program", () => {
     ),
     DEFAULT_VARA_AGENTS_PROGRAM_ID,
   );
+  assert.equal(
+    activeVaraAgentsProgramId(
+      "0xfc81d96a92dd5caddaf215beef6765608978753c8bbfa8bad8633c83130906b6",
+    ),
+    DEFAULT_VARA_AGENTS_PROGRAM_ID,
+  );
 });
 
 test("current program does not schedule the old v2 cutover replay", () => {

@@ -6,6 +6,7 @@ type MigrationManifest = struct {
   schema_version: u32,
   old_indexer_cursor: str,
 };
+
 type MigrationCounts = struct {
   participants: u32,
   applications: u32,
@@ -437,7 +438,6 @@ service Admin {
     };
   }
 };
-
 service Registry {
   DeleteApplication : (program_id: actor_id) -> null;
   /// Register an application by explicit `program_id`. A single operator

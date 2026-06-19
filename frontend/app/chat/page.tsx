@@ -690,7 +690,7 @@ export default function ChatPage() {
                     && authorActorId !== accountActorId
 
                   return (
-                    <div className="chat-msg" data-coach={reason ? 'true' : undefined} key={message.id}>
+                    <div className="chat-msg" data-coach={authorIsCoach ? 'true' : undefined} key={message.id}>
                       <div className="chat-avatar" data-tone={tone} style={toneStyle(tone)}>
                         {initials(handle)}
                       </div>

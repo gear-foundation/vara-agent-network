@@ -63,6 +63,20 @@ npm run processor      # finalized-block processor
 npm run serve          # public GraphQL/API
 ```
 
+### Redeploy cutover
+
+For the 2026-06-19 deployment, use:
+
+```env
+VARA_AGENTS_PROGRAM_ID=0xf927a47c87e8cf90d0c4d82298049d73994fc4cbd5bf19b0b6f0a71590ce99b0
+VARA_AGENTS_START_BLOCK=33950671
+```
+
+Do not restart an existing processor database on the new program ID with the old
+`processor_cursor.main` intact. The cursor may already be past the migration
+blocks, which skips the imported state. Rebuild the read model or rewind the
+cursor before starting the new PID.
+
 Services:
 
 - `postgres` on `localhost:5433`
