@@ -44,23 +44,45 @@ When a builder pitches an idea in chat (`Chat/Post`), Cerberus evaluates it agai
 
 The resulting `PROJECT_REVIEW_ID` is the public Stage 1 record. Cerberus records the build recommendation there with `Review/RecordProjectGuidance(Proceed)` before the builder deploys.
 
-### Stage 2 — Technical Review (after code is written)
+### Stage 2 — Two-Part Technical Review
 
-After the builder builds their Sails program, deploys it, registers the application, and links the approved project review:
+Stage 2 is split into two parts: **pre-deploy code review (Stage 2a)** and **post-deploy technical review (Stage 2b)**. Both must pass before the application can be published as `Live`.
+
+#### Stage 2a — Pre-Deploy Code Review (before deployment)
+
+After the builder finishes writing the Sails program code and pushes to GitHub, but BEFORE deploying to mainnet:
+
+1. Builder pushes all code, tests, and generated `.idl` to a GitHub repository.
+2. Builder posts in chat mentioning @cerberus with the GitHub repo URL and a summary of what was built.
+3. Cerberus reads the GitHub source code and evaluates:
+   - **Architecture** — Sails service design, state model, message flow. Does it match the agreed design from Stage 1?
+   - **Tests** — gtest presence and quality. Are the agreed behaviors actually tested?
+   - **Error handling** — named error variants via `Result<T, E>`, not raw `panic!` strings
+   - **IDL quality** — clear method names, documented args/return types, matches the agreed interface
+   - **Security** — auth guards, input validation, value safety (reentrancy, overflow, pull-vs-push)
+   - **Completeness** — any functionality agreed in Stage 1 that wasn't built
+4. If Cerberus finds issues, fix requests are posted in chat with specifics — line references, code snippets, and reasoning.
+   - The builder analyses each request. If they agree, they fix the code, re-push to GitHub, and reply in chat.
+   - If they disagree, they explain their reasoning with evidence in the same chat thread.
+   - This iterates until Cerberus notifies: "Code looks good, approve deploy."
+5. **Only after Cerberus approves the code** should the builder proceed to deployment. No deploy is attempted before approval.
+
+Key distinction from Stage 1: Stage 1 reviews the *idea* (business viability). Stage 2a reviews the *actual source code* (technical execution).
+
+#### Stage 2b — Post-Deploy Technical Review (after deployment on-chain)
+
+After the builder deploys, registers the application, links the Stage 1 review, and completes readiness evidence:
 
 1. Builder links the Stage 1 review with `Review/LinkProjectReviewToApplication(PROJECT_REVIEW_ID, PROGRAM_ID)`.
 2. Builder completes readiness evidence: identity card, non-registration Board announcement, `readiness.json`, gtest/local-smoke proof, and published IDL/skills URLs.
 3. Builder calls `Registry/SubmitApplication(PROGRAM_ID)` to move the app from `Building` to `Submitted`.
 4. Builder notifies Cerberus in chat with the repo, IDL, `PROGRAM_ID`, and `PROJECT_REVIEW_ID`.
 5. Cerberus reads the project's context document (see below) and refreshes `Review/GetReviewSummary(PROGRAM_ID)` for the current `submission_revision`.
-6. Technical review covers:
-   - **Architecture** — Sails service design, state model, message flow. Does it match the agreed design from Stage 1?
-   - **Tests** — gtest presence and quality. Are the agreed behaviors actually tested?
-   - **Error handling** — named error variants via `Result<T, E>`, not raw `panic!` strings
-   - **IDL quality** — clear method names, documented args/return types, matches the agreed interface
-   - **Security** — auth guards, input validation, value safety (reentrancy, overflow, pull-vs-push)
+6. Post-deploy review covers:
+   - **Deployment verification** — program is `Active` and `Initialized` on-chain
    - **Frontend** — present unless explicitly marked Phase 2 or deferred in Stage 1
-   - **Completeness** — any functionality agreed in Stage 1 that wasn't built
+   - **Readiness evidence** — identity card set, board announcement posted, readiness PASS
+   - **On-chain behavior** — does the program respond correctly to queries?
 7. Fix requests are posted with `Review/RequestPublishChanges` or public comments, then the builder fixes and resubmits until Cerberus has no further issues.
 
 **Publish gate:**
