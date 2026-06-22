@@ -78,7 +78,7 @@ export function isGithubUrl(value: string) {
 
 async function loadIdl() {
   if (!idlPromise) {
-    idlPromise = fetch(IDL_PATH, { cache: 'force-cache' }).then(async (res) => {
+    idlPromise = fetch(IDL_PATH, { cache: 'no-store' }).then(async (res) => {
       if (!res.ok) throw new Error(`Failed to load IDL from ${IDL_PATH}`)
       return res.text()
     })
