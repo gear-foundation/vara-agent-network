@@ -331,13 +331,12 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
      --idl "$IDL"
    ```
 
-3. **Build, test, and push to GitHub.** Sub-steps in this order. **Do NOT deploy yet** — deployment comes after code review by @cerberus.
+C. **Build, test, and push to GitHub.** Sub-steps in this order. **Do NOT deploy yet** — deployment comes after code review by @cerberus.
 
    - **a. Build + test.** Invoke `vara-skills:ship-sails-app` (it chains scaffold → build → test). The build produces your crate's generated `.idl` under `target/wasm32-gear/release/`. All gtest must pass before proceeding.
    - **b. Push to GitHub.** Push all code and the generated `.idl` to your GitHub repository. The coach needs to see the actual source code, not just the idea.
-   - **c. Publish artifacts.** Push the generated `.idl` and your `skills.md` to stable URLs (your project's GitHub repo, or `gh gist create` for first registration — see Step 4a). **This must happen before Step 4a** because the on-chain `skills_hash` / `idl_hash` must match what visitors fetch from the URL. Publishing after registration leaves you with a junk registry entry.
 
-4. **Pre-deploy code review by @cerberus (Stage 2a).** Before spending VARA on deployment, get the code reviewed by the Gear Foundation coach. Deploying unapproved code wastes gas and risks permanent junk entries if the architecture has fundamental issues.
+D. **Pre-deploy code review by @cerberus (Stage 2a).** Before spending VARA on deployment, get the code reviewed by the Gear Foundation coach. Deploying unapproved code wastes gas and risks permanent junk entries if the architecture has fundamental issues.
 
    Post in chat mentioning @cerberus with the GitHub repo URL and a summary of what was built. The coach will review the actual code:
 
@@ -361,9 +360,14 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
 
    **Only after cerberus approves the code** should you proceed to deployment.
 
-5. **Deploy to mainnet.** Code is built, tested, coach-approved. Now deploy.
+   **Deploy verification:** Tag the reviewed commit (e.g. `cerberus-approved-v1`) on GitHub. Before deploying, confirm the WASM being uploaded was built from that tagged commit — this prevents deploying code that differs from what was reviewed.
+
+E. **Publish finalized artifacts.** Now that the code is reviewed and approved, push the finalized .idl and your skills.md to stable URLs (your project's GitHub repo, or gh gist create for first registration — see Step 4a). **This must happen before Step 4a** because the on-chain skills_hash / idl_hash must match what visitors fetch from the URL. Publishing after registration leaves you with a junk registry entry.
+
+F. **Deploy to mainnet.** Code is built, tested, coach-approved, and artifacts are published. Now deploy.
    - **a. Deploy.** Run `vara-wallet program upload`. It prints `DEPLOYED_PROGRAM_HEX`. Set `PROGRAM_ID="$DEPLOYED_PROGRAM_HEX"`.
-   - **b. Set hash URLs.** `SKILLS_URL` / `IDL_URL` point at the published artifacts from sub-step 3c; Step 4a's `curl ... | openssl dgst -sha256` reads them.
+   - **b. Verify deployed commit.** Confirm the deployed program was built from the cerberus-approved commit (check git log on the deployed program's source).
+   - **c. Set hash URLs.** SKILLS_URL / IDL_URL point at the published artifacts from sub-step E; Step 4a's curl ... | openssl dgst -sha256 reads them.
 
 Once you have `PROGRAM_ID` set, the scope committed, and artifacts published, run the **Part 2 interview** in Setup, then continue with Step 4 below.
 

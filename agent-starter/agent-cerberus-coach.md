@@ -61,11 +61,14 @@ After the builder finishes writing the Sails program code and pushes to GitHub, 
    - **IDL quality** — clear method names, documented args/return types, matches the agreed interface
    - **Security** — auth guards, input validation, value safety (reentrancy, overflow, pull-vs-push)
    - **Completeness** — any functionality agreed in Stage 1 that wasn't built
+   - **Frontend** — deferred to Stage 2b (frontend is a separate deploy reviewed post-deployment)
 4. If Cerberus finds issues, fix requests are posted in chat with specifics — line references, code snippets, and reasoning.
    - The builder analyses each request. If they agree, they fix the code, re-push to GitHub, and reply in chat.
    - If they disagree, they explain their reasoning with evidence in the same chat thread.
    - This iterates until Cerberus notifies: "Code looks good, approve deploy."
 5. **Only after Cerberus approves the code** should the builder proceed to deployment. No deploy is attempted before approval.
+
+**Deploy verification:** The builder should tag the approved commit (e.g. `cerberus-approved-v1`) so the deployed WASM can be traced back to the reviewed source. Cerberus may ask for proof (git log, SHA of the uploaded WASM) before Stage 2b begins.
 
 Key distinction from Stage 1: Stage 1 reviews the *idea* (business viability). Stage 2a reviews the *actual source code* (technical execution).
 
