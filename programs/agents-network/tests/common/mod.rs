@@ -4,8 +4,10 @@
 #![allow(dead_code)]
 
 use agents_network_client::{
-    AgentsNetworkClient, AgentsNetworkClientCtors, CriterionAssessment, CriterionCoverage,
-    ProjectGuidanceOutcome, ReviewCriteria, SubmitProjectReviewReq, admin::Admin, review::Review,
+    AgentsNetworkClient, AgentsNetworkClientCtors, ApplicationPermitDetails,
+    ApplicationPermitPurpose, CriterionAssessment, CriterionCoverage, ProjectGuidanceOutcome,
+    RegisterApplicationWithApprovalReq, ReviewCriteria, SubmitProjectReviewReq, admin::Admin,
+    registry::Registry, review::Review,
 };
 use sails_rs::client::*;
 use sails_rs::gtest::*;
@@ -26,7 +28,7 @@ pub const STUB_PROGRAM_ALPHA: u64 = 200;
 pub const STUB_PROGRAM_BETA: u64 = 201;
 pub const STUB_PROGRAM_GAMMA: u64 = 202;
 
-pub const FUND: ValueUnit = 100_000_000_000_000;
+pub const FUND: ValueUnit = 10_000_000_000_000_000;
 
 pub fn init_system() -> System {
     let system = System::new();
@@ -63,12 +65,8 @@ pub async fn deploy(
         .unwrap()
 }
 
-/// Convenience helper: build a `RegisterAppReq` with harmless defaults.
-pub fn mk_register_req(
-    handle: &str,
-    operator: u64,
-    program_id: u64,
-) -> agents_network_client::ApplicationPermitDetails {
+/// Convenience helper: build application permit details with harmless defaults.
+pub fn mk_register_req(handle: &str, operator: u64, program_id: u64) -> ApplicationPermitDetails {
     use agents_network_client::{ApplicationPermitDetails, Track};
     ApplicationPermitDetails {
         handle: handle.to_string(),
@@ -155,19 +153,256 @@ pub async fn disable_review_rate_limit(
         .unwrap();
 }
 
+pub async fn ensure_test_review_roles(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+) {
+    disable_review_rate_limit(program).await;
+    let _ = program
+        .review()
+        .add_reviewer(MALLORY.into())
+        .with_actor_id(DEPLOYER.into())
+        .await;
+    let _ = program
+        .review()
+        .add_coach(CAROL.into())
+        .with_actor_id(DEPLOYER.into())
+        .await;
+    let _ = program
+        .review()
+        .add_coach(MALLORY.into())
+        .with_actor_id(DEPLOYER.into())
+        .await;
+}
+
+pub async fn linked_project_review_id(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    program_id: u64,
+) -> Option<u64> {
+    program
+        .review()
+        .list_project_review_summaries(None, 100)
+        .await
+        .unwrap()
+        .items
+        .into_iter()
+        .find(|summary| summary.linked_program_id == Some(program_id.into()))
+        .map(|summary| summary.project_review_id)
+}
+
+pub async fn approved_register_req_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    details: ApplicationPermitDetails,
+) -> (RegisterApplicationWithApprovalReq, u64) {
+    ensure_test_review_roles(program).await;
+    let project_review_id = program
+        .review()
+        .submit_project_review(SubmitProjectReviewReq {
+            github_url: details.github_url.clone(),
+            idea: format!("{} provides useful network value", details.handle),
+        })
+        .with_actor_id(details.operator)
+        .await
+        .unwrap();
+    program
+        .review()
+        .record_project_guidance(
+            project_review_id,
+            ProjectGuidanceOutcome::Proceed,
+            "ready to build".to_string(),
+        )
+        .with_actor_id(MALLORY.into())
+        .await
+        .unwrap();
+    let approval_id = approve_application_permit_for_test(
+        program,
+        project_review_id,
+        ApplicationPermitPurpose::Register,
+        details.clone(),
+    )
+    .await;
+    (
+        RegisterApplicationWithApprovalReq {
+            approval_id,
+            details,
+        },
+        project_review_id,
+    )
+}
+
+pub async fn expect_register_permit_rejected_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    details: ApplicationPermitDetails,
+) {
+    ensure_test_review_roles(program).await;
+    let github_url = if details.github_url.starts_with("https://github.com/") {
+        details.github_url.clone()
+    } else {
+        format!("https://github.com/alice/{}", details.handle)
+    };
+    let project_review_id = program
+        .review()
+        .submit_project_review(SubmitProjectReviewReq {
+            github_url,
+            idea: format!("{} provides useful network value", details.handle),
+        })
+        .with_actor_id(details.operator)
+        .await
+        .unwrap();
+    program
+        .review()
+        .record_project_guidance(
+            project_review_id,
+            ProjectGuidanceOutcome::Proceed,
+            "ready to build".to_string(),
+        )
+        .with_actor_id(MALLORY.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .approve_application_permit(
+            project_review_id,
+            ApplicationPermitPurpose::Register,
+            details,
+            77,
+        )
+        .with_actor_id(CAROL.into())
+        .await
+        .unwrap_err();
+}
+
+pub async fn approve_application_permit_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    project_review_id: u64,
+    purpose: ApplicationPermitPurpose,
+    details: ApplicationPermitDetails,
+) -> u64 {
+    ensure_test_review_roles(program).await;
+    let coach = if details.operator == CAROL.into() {
+        MALLORY
+    } else {
+        CAROL
+    };
+    program
+        .review()
+        .approve_application_permit(project_review_id, purpose, details, 77)
+        .with_actor_id(coach.into())
+        .await
+        .unwrap()
+}
+
+pub async fn register_application_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    details: ApplicationPermitDetails,
+    caller: u64,
+) -> u64 {
+    let (req, project_review_id) = approved_register_req_for_test(program, details).await;
+    program
+        .registry()
+        .register_application(req)
+        .with_actor_id(caller.into())
+        .await
+        .unwrap();
+    project_review_id
+}
+
+pub async fn update_application_with_approval_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    program_id: u64,
+    details: ApplicationPermitDetails,
+    caller: u64,
+) {
+    let project_review_id = linked_project_review_id(program, program_id)
+        .await
+        .expect("application should have linked project review");
+    let approval_id = approve_application_permit_for_test(
+        program,
+        project_review_id,
+        ApplicationPermitPurpose::UpdateMetadata,
+        details.clone(),
+    )
+    .await;
+    program
+        .registry()
+        .update_application_with_approval(program_id.into(), approval_id, details)
+        .with_actor_id(caller.into())
+        .await
+        .unwrap();
+}
+
+pub async fn replace_application_program_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    current_program_id: u64,
+    details: ApplicationPermitDetails,
+    caller: u64,
+    reason: &str,
+) {
+    let project_review_id = linked_project_review_id(program, current_program_id)
+        .await
+        .expect("application should have linked project review");
+    let approval_id = approve_application_permit_for_test(
+        program,
+        project_review_id,
+        ApplicationPermitPurpose::ReplaceProgram,
+        details.clone(),
+    )
+    .await;
+    program
+        .registry()
+        .apply_approved_application_transition(
+            current_program_id.into(),
+            approval_id,
+            details,
+            reason.to_string(),
+        )
+        .with_actor_id(caller.into())
+        .await
+        .unwrap();
+}
+
+pub async fn expect_replace_application_program_rejected_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    current_program_id: u64,
+    details: ApplicationPermitDetails,
+    caller: u64,
+    reason: &str,
+) {
+    let project_review_id = linked_project_review_id(program, current_program_id)
+        .await
+        .expect("application should have linked project review");
+    let approval_id = approve_application_permit_for_test(
+        program,
+        project_review_id,
+        ApplicationPermitPurpose::ReplaceProgram,
+        details.clone(),
+    )
+    .await;
+    program
+        .registry()
+        .apply_approved_application_transition(
+            current_program_id.into(),
+            approval_id,
+            details,
+            reason.to_string(),
+        )
+        .with_actor_id(caller.into())
+        .await
+        .unwrap_err();
+}
+
 pub async fn link_ready_project_review(
     program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
     owner: u64,
     handle: &str,
     program_id: u64,
 ) {
-    disable_review_rate_limit(program).await;
-    program
-        .review()
-        .add_reviewer(MALLORY.into())
-        .with_actor_id(DEPLOYER.into())
+    if linked_project_review_id(program, program_id)
         .await
-        .unwrap();
+        .is_some()
+    {
+        return;
+    }
+    ensure_test_review_roles(program).await;
     let project_review_id = program
         .review()
         .submit_project_review(SubmitProjectReviewReq {

@@ -5,7 +5,7 @@ mod common;
 
 use agents_network_client::{
     AgentsNetworkClient, AppStatus, ContactLinks, HandleRef, admin::Admin, chat::Chat,
-    registry::Registry,
+    registry::Registry, review::Review,
 };
 use common::*;
 use sails_rs::client::*;
@@ -39,12 +39,12 @@ async fn happy_path_end_to_end() {
         .unwrap();
 
     // bob's agent program self-registers (msg::source == program ActorId).
-    program
-        .registry()
-        .register_application(mk_register_req("nft", BOB, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("nft", BOB, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
     // Verify state.
     let app = program
@@ -104,51 +104,50 @@ async fn update_application_by_owner_only() {
     let program = deploy(&env).await;
 
     // Stub program registers with ALICE as operator.
-    program
-        .registry()
-        .register_application(mk_register_req("foo", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("foo", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
-    // Alice (operator) can update editable metadata, but not lifecycle status.
+    // Alice (operator) can update protected metadata with a coach permit.
+    let mut approved = mk_register_req("foo", ALICE, STUB_PROGRAM_ALPHA);
+    approved.description = "operator updated".to_string();
+    update_application_with_approval_for_test(&program, STUB_PROGRAM_ALPHA, approved, ALICE).await;
+
+    // Legacy metadata edits reject before auth because protected fields need a permit.
     let mut patch = empty_patch();
-    patch.description = Some("operator updated".to_string());
+    patch.description = Some("updated".to_string());
     program
         .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch.clone())
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
-
-    // Program self-call cannot update registry metadata; only owner can.
-    let mut patch2 = empty_patch();
-    patch2.description = Some("updated".to_string());
-    program
-        .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch2)
+        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
         .with_actor_id(STUB_PROGRAM_ALPHA.into())
         .await
         .unwrap_err();
 
-    // IDL URL patches keep the same validation as registration.
-    let mut bad_idl_patch = empty_patch();
-    bad_idl_patch.idl_url = Some("https://example.com/agent.json".to_string());
+    // IDL URL updates keep the same validation as registration.
+    let mut bad_idl = mk_register_req("foo", ALICE, STUB_PROGRAM_ALPHA);
+    bad_idl.idl_url = "https://example.com/agent.json".to_string();
+    let project_review_id = linked_project_review_id(&program, STUB_PROGRAM_ALPHA)
+        .await
+        .expect("application should have linked project review");
     program
-        .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), bad_idl_patch)
-        .with_actor_id(ALICE.into())
+        .review()
+        .approve_application_permit(
+            project_review_id,
+            agents_network_client::ApplicationPermitPurpose::UpdateMetadata,
+            bad_idl,
+            77,
+        )
+        .with_actor_id(CAROL.into())
         .await
         .unwrap_err();
 
-    let mut good_idl_patch = empty_patch();
-    good_idl_patch.idl_url = Some("https://example.com/agent-updated.idl".to_string());
-    program
-        .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), good_idl_patch)
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    let mut good_idl = mk_register_req("foo", ALICE, STUB_PROGRAM_ALPHA);
+    good_idl.description = "operator updated".to_string();
+    good_idl.idl_url = "https://example.com/agent-updated.idl".to_string();
+    update_application_with_approval_for_test(&program, STUB_PROGRAM_ALPHA, good_idl, ALICE).await;
 
     // Mallory (not owner) cannot update.
     let mut patch3 = empty_patch();
@@ -167,12 +166,12 @@ async fn application_lifecycle_owner_submits_admin_sets_trusted_status() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("lifecycle", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("lifecycle", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
     let app = program
         .registry()
@@ -234,12 +233,12 @@ async fn update_application_contacts_can_change_and_clear() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("contacts", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("contacts", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
     let mut patch = empty_patch();
     patch.contacts = Some(Some(ContactLinks {

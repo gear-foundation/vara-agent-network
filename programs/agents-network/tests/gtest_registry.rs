@@ -56,12 +56,11 @@ async fn cross_namespace_handle_collision() {
         .await
         .unwrap();
 
-    program
-        .registry()
-        .register_application(mk_register_req("foo", BOB, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap_err();
+    expect_register_permit_rejected_for_test(
+        &program,
+        mk_register_req("foo", BOB, STUB_PROGRAM_ALPHA),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -110,12 +109,7 @@ async fn github_url_must_be_https_github() {
 
     let mut req = mk_register_req("bad-github", ALICE, STUB_PROGRAM_ALPHA);
     req.github_url = "https://gitlab.com/alice/project".to_string();
-    program
-        .registry()
-        .register_application(req)
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap_err();
+    expect_register_permit_rejected_for_test(&program, req).await;
 }
 
 #[tokio::test]
@@ -132,22 +126,12 @@ async fn idl_url_must_end_with_idl_extension() {
     ] {
         let mut req = mk_register_req("bad-idl", ALICE, STUB_PROGRAM_ALPHA);
         req.idl_url = bad.to_string();
-        program
-            .registry()
-            .register_application(req)
-            .with_actor_id(STUB_PROGRAM_ALPHA.into())
-            .await
-            .unwrap_err();
+        expect_register_permit_rejected_for_test(&program, req).await;
     }
 
     let mut req = mk_register_req("ipfs-idl", ALICE, STUB_PROGRAM_ALPHA);
     req.idl_url = "ipfs://bafybeibot/agent.idl".to_string();
-    program
-        .registry()
-        .register_application(req)
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(&program, req, STUB_PROGRAM_ALPHA).await;
 }
 
 #[tokio::test]
@@ -158,21 +142,11 @@ async fn application_hashes_must_be_non_zero() {
 
     let mut req = mk_register_req("zero-skills", ALICE, STUB_PROGRAM_ALPHA);
     req.skills_hash = [0u8; 32];
-    program
-        .registry()
-        .register_application(req)
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap_err();
+    expect_register_permit_rejected_for_test(&program, req).await;
 
     let mut req = mk_register_req("zero-idl", ALICE, STUB_PROGRAM_ALPHA);
     req.idl_hash = [0u8; 32];
-    program
-        .registry()
-        .register_application(req)
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap_err();
+    expect_register_permit_rejected_for_test(&program, req).await;
 }
 
 #[tokio::test]
@@ -190,12 +164,8 @@ async fn operator_slot_griefing_resistant() {
     // 21 registrations all attesting BOB as operator — none should fail.
     for i in 0..21u64 {
         let handle = format!("app-{i:02}");
-        program
-            .registry()
-            .register_application(mk_register_req(&handle, BOB, 300 + i))
-            .with_actor_id((300 + i).into())
-            .await
-            .unwrap();
+        register_application_for_test(&program, mk_register_req(&handle, BOB, 300 + i), (300 + i))
+            .await;
     }
 }
 
@@ -205,12 +175,12 @@ async fn program_id_is_globally_unique() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("openai", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("openai", ALICE, STUB_PROGRAM_ALPHA),
+        ALICE,
+    )
+    .await;
 
     let resolved = program
         .registry()
@@ -224,12 +194,11 @@ async fn program_id_is_globally_unique() {
 
     // Same program id cannot be registered twice, even under a different
     // handle/operator.
-    program
-        .registry()
-        .register_application(mk_register_req("openai-two", BOB, STUB_PROGRAM_ALPHA))
-        .with_actor_id(BOB.into())
-        .await
-        .unwrap_err();
+    expect_register_permit_rejected_for_test(
+        &program,
+        mk_register_req("openai-two", BOB, STUB_PROGRAM_ALPHA),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -238,18 +207,18 @@ async fn one_wallet_can_register_multiple_applications() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("alice-one", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
-    program
-        .registry()
-        .register_application(mk_register_req("alice-two", ALICE, STUB_PROGRAM_BETA))
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("alice-one", ALICE, STUB_PROGRAM_ALPHA),
+        ALICE,
+    )
+    .await;
+    register_application_for_test(
+        &program,
+        mk_register_req("alice-two", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+    )
+    .await;
 
     let page = program
         .registry()
@@ -269,12 +238,8 @@ async fn wallet_agent_archetype_is_legitimate() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("alice-bot", ALICE, ALICE))
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    register_application_for_test(&program, mk_register_req("alice-bot", ALICE, ALICE), ALICE)
+        .await;
 
     let app = program
         .registry()
@@ -293,29 +258,22 @@ async fn building_application_can_patch_all_mutable_metadata_and_handle() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("draft-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("draft-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
-    let mut patch = empty_patch();
-    patch.handle = Some("renamed-app".to_string());
-    patch.description = Some("renamed description".to_string());
-    patch.track = Some(Track::Open);
-    patch.github_url = Some("https://github.com/renamed/app".to_string());
-    patch.skills_hash = Some([3u8; 32]);
-    patch.skills_url = Some("https://example.com/renamed/skills.json".to_string());
-    patch.idl_hash = Some([4u8; 32]);
-    patch.idl_url = Some("https://example.com/renamed/agent.idl".to_string());
-
-    program
-        .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    let mut details = mk_register_req("renamed-app", ALICE, STUB_PROGRAM_ALPHA);
+    details.description = "renamed description".to_string();
+    details.track = Track::Open;
+    details.github_url = "https://github.com/alice/draft-app".to_string();
+    details.skills_hash = [3u8; 32];
+    details.skills_url = "https://example.com/renamed/skills.json".to_string();
+    details.idl_hash = [4u8; 32];
+    details.idl_url = "https://example.com/renamed/agent.idl".to_string();
+    update_application_with_approval_for_test(&program, STUB_PROGRAM_ALPHA, details, ALICE).await;
 
     let app = program
         .registry()
@@ -326,7 +284,7 @@ async fn building_application_can_patch_all_mutable_metadata_and_handle() {
     assert_eq!(app.handle, "renamed-app");
     assert_eq!(app.description, "renamed description");
     assert_eq!(app.track, Track::Open);
-    assert_eq!(app.github_url, "https://github.com/renamed/app");
+    assert_eq!(app.github_url, "https://github.com/alice/draft-app");
     assert_eq!(app.skills_hash, [3u8; 32]);
     assert_eq!(app.idl_hash, [4u8; 32]);
 
@@ -354,12 +312,12 @@ async fn submitted_application_cannot_be_patched_but_owner_can_delete() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("submitted-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("submitted-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_ready_project_review(&program, ALICE, "submitted-app", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
@@ -378,8 +336,8 @@ async fn submitted_application_cannot_be_patched_but_owner_can_delete() {
         .unwrap_err();
     program
         .registry()
-        .delete_application(STUB_PROGRAM_ALPHA.into())
-        .with_actor_id(ALICE.into())
+        .admin_force_delete_application(STUB_PROGRAM_ALPHA.into(), "submitted cleanup".to_string())
+        .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
 
@@ -397,12 +355,12 @@ async fn owner_delete_removes_registry_and_handle() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("delete-me", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("delete-me", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     program
         .registry()
         .delete_application(STUB_PROGRAM_ALPHA.into())
@@ -432,12 +390,12 @@ async fn admin_can_delete_submitted_application() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("admin-delete", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("admin-delete", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_ready_project_review(&program, ALICE, "admin-delete", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
@@ -448,7 +406,7 @@ async fn admin_can_delete_submitted_application() {
 
     program
         .registry()
-        .delete_application(STUB_PROGRAM_ALPHA.into())
+        .admin_force_delete_application(STUB_PROGRAM_ALPHA.into(), "admin cleanup".to_string())
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
@@ -467,23 +425,21 @@ async fn owner_can_replace_program_id_while_building() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("replace-me", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("replace-me", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "redeployed with fixed metadata".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    replace_application_program_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("replace-me", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "redeployed with fixed metadata",
+    )
+    .await;
 
     assert_eq!(
         program
@@ -541,12 +497,12 @@ async fn replacement_moves_board_chat_and_review_current_state() {
     let program = deploy(&env).await;
     disable_review_rate_limit(&program).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("move-state", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("move-state", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     program
         .board()
         .set_identity_card(STUB_PROGRAM_ALPHA.into(), mk_identity_card_req())
@@ -577,16 +533,14 @@ async fn replacement_moves_board_chat_and_review_current_state() {
         .await
         .unwrap();
 
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "redeployed under a new program id".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    replace_application_program_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("move-state", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "redeployed under a new program id",
+    )
+    .await;
 
     let cards = program.board().list_identity_cards(None, 10).await.unwrap();
     assert_eq!(cards.items.len(), 1);
@@ -654,16 +608,12 @@ async fn owner_can_replace_after_revision_request_returns_to_building() {
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
-    program
-        .registry()
-        .register_application(mk_register_req(
-            "revision-replace",
-            ALICE,
-            STUB_PROGRAM_ALPHA,
-        ))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("revision-replace", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_ready_project_review(&program, ALICE, "revision-replace", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
@@ -691,16 +641,14 @@ async fn owner_can_replace_after_revision_request_returns_to_building() {
         .unwrap();
     assert_eq!(app.status, AppStatus::Building);
 
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "replacement after reviewer revision request".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    replace_application_program_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("revision-replace", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "replacement after reviewer revision request",
+    )
+    .await;
 
     let summary = program
         .review()
@@ -718,22 +666,20 @@ async fn stale_program_id_mutations_are_rejected() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("stale-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "new deployment".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("stale-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
+    replace_application_program_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("stale-app", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "new deployment",
+    )
+    .await;
 
     let mut patch = empty_patch();
     patch.description = Some("stale update".to_string());
@@ -791,22 +737,20 @@ async fn program_ids_remain_reserved_after_replacement_and_delete() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("reserved-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "reserve both ids".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("reserved-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
+    replace_application_program_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("reserved-app", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "reserve both ids",
+    )
+    .await;
     program
         .registry()
         .delete_application(STUB_PROGRAM_BETA.into())
@@ -814,18 +758,16 @@ async fn program_ids_remain_reserved_after_replacement_and_delete() {
         .await
         .unwrap();
 
-    program
-        .registry()
-        .register_application(mk_register_req("reuse-old", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
-    program
-        .registry()
-        .register_application(mk_register_req("reuse-new", ALICE, STUB_PROGRAM_BETA))
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
+    expect_register_permit_rejected_for_test(
+        &program,
+        mk_register_req("reuse-old", ALICE, STUB_PROGRAM_ALPHA),
+    )
+    .await;
+    expect_register_permit_rejected_for_test(
+        &program,
+        mk_register_req("reuse-new", ALICE, STUB_PROGRAM_BETA),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -834,12 +776,12 @@ async fn replacement_reason_is_required_and_capped() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("reason-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("reason-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     program
         .registry()
         .replace_application_program(
@@ -868,21 +810,23 @@ async fn replacement_limit_is_eight_per_lineage() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("limit-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("limit-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
     let mut current = STUB_PROGRAM_ALPHA;
     for next in 300..308u64 {
-        program
-            .registry()
-            .replace_application_program(current.into(), next.into(), format!("replacement {next}"))
-            .with_actor_id(ALICE.into())
-            .await
-            .unwrap();
+        replace_application_program_for_test(
+            &program,
+            current,
+            mk_register_req("limit-app", ALICE, next),
+            ALICE,
+            &format!("replacement {next}"),
+        )
+        .await;
         assert_eq!(
             program
                 .registry()
@@ -894,12 +838,14 @@ async fn replacement_limit_is_eight_per_lineage() {
         current = next;
     }
 
-    program
-        .registry()
-        .replace_application_program(current.into(), 308u64.into(), "one too many".to_string())
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
+    expect_replace_application_program_rejected_for_test(
+        &program,
+        current,
+        mk_register_req("limit-app", ALICE, 308),
+        ALICE,
+        "one too many",
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -908,16 +854,12 @@ async fn replacement_rejects_submitted_live_and_award_statuses() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req(
-            "submitted-reject",
-            ALICE,
-            STUB_PROGRAM_ALPHA,
-        ))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("submitted-reject", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_ready_project_review(&program, ALICE, "submitted-reject", STUB_PROGRAM_ALPHA).await;
     program
         .registry()
@@ -943,12 +885,7 @@ async fn replacement_rejects_submitted_live_and_award_statuses() {
         let old = 400u64 + idx as u64 * 2;
         let new = old + 1;
         let handle = format!("status-reject-{idx}");
-        program
-            .registry()
-            .register_application(mk_register_req(&handle, ALICE, old))
-            .with_actor_id(old.into())
-            .await
-            .unwrap();
+        register_application_for_test(&program, mk_register_req(&handle, ALICE, old), old).await;
         program
             .admin()
             .set_application_status(old.into(), status)
@@ -974,12 +911,12 @@ async fn program_self_call_and_non_owner_cannot_delete_application() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("delete-auth", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("delete-auth", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
     program
         .registry()
@@ -1015,12 +952,7 @@ async fn register_application_validates_contact_lengths() {
         x: None,
     });
 
-    program
-        .registry()
-        .register_application(req)
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap_err();
+    expect_register_permit_rejected_for_test(&program, req).await;
 
     let mut req = mk_register_req("contact-ok", ALICE, STUB_PROGRAM_ALPHA);
     req.contacts = Some(ContactLinks {
@@ -1029,12 +961,7 @@ async fn register_application_validates_contact_lengths() {
         x: Some("@x_user".to_string()),
     });
 
-    program
-        .registry()
-        .register_application(req)
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(&program, req, STUB_PROGRAM_ALPHA).await;
 
     let app = program
         .registry()
@@ -1066,12 +993,12 @@ async fn discover_clamps_limit_to_50() {
             1 => BOB,
             _ => CAROL,
         };
-        program
-            .registry()
-            .register_application(mk_register_req(&handle, operator, 400 + i))
-            .with_actor_id(operator.into())
-            .await
-            .unwrap();
+        register_application_for_test(
+            &program,
+            mk_register_req(&handle, operator, 400 + i),
+            operator,
+        )
+        .await;
     }
 
     let page = program
@@ -1108,12 +1035,7 @@ async fn discover_track_filter() {
         let handle = format!("app-{i}");
         let mut req = mk_register_req(&handle, ALICE, 500 + i as u64);
         req.track = track;
-        program
-            .registry()
-            .register_application(req)
-            .with_actor_id(ALICE.into())
-            .await
-            .unwrap();
+        register_application_for_test(&program, req, ALICE).await;
     }
 
     let page = program
@@ -1140,21 +1062,16 @@ async fn discover_track_filter_updates_after_patch() {
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
 
-    program
-        .registry()
-        .register_application(mk_register_req("indexed-track", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("indexed-track", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
-    let mut patch = empty_patch();
-    patch.track = Some(Track::Open);
-    program
-        .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    let mut details = mk_register_req("indexed-track", ALICE, STUB_PROGRAM_ALPHA);
+    details.track = Track::Open;
+    update_application_with_approval_for_test(&program, STUB_PROGRAM_ALPHA, details, ALICE).await;
 
     let services = program
         .registry()
@@ -1199,12 +1116,12 @@ async fn discover_status_filter_tracks_review_and_admin_changes() {
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
-    program
-        .registry()
-        .register_application(mk_register_req("indexed-status", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("indexed-status", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_ready_project_review(&program, ALICE, "indexed-status", STUB_PROGRAM_ALPHA).await;
 
     program

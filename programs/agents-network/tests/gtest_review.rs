@@ -16,6 +16,9 @@ async fn link_approved_project_review(
     handle: &str,
     program_id: u64,
 ) -> u64 {
+    if let Some(project_review_id) = linked_project_review_id(program, program_id).await {
+        return project_review_id;
+    }
     let project_review_id = program
         .review()
         .submit_project_review(SubmitProjectReviewReq {
@@ -251,12 +254,12 @@ async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions()
         .await
         .unwrap();
 
-    program
-        .registry()
-        .register_application(mk_register_req("reviewed-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("reviewed-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_approved_project_review(&program, ALICE, CAROL, "reviewed-app", STUB_PROGRAM_ALPHA).await;
 
     let summary = program
@@ -428,12 +431,12 @@ async fn review_guards_reject_self_review_and_stale_revision() {
         .await
         .unwrap();
 
-    program
-        .registry()
-        .register_application(mk_register_req("guarded-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("guarded-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_approved_project_review(&program, ALICE, CAROL, "guarded-app", STUB_PROGRAM_ALPHA).await;
 
     program
@@ -496,12 +499,12 @@ async fn manual_reopen_to_building_submits_next_revision() {
         .await
         .unwrap();
 
-    program
-        .registry()
-        .register_application(mk_register_req("reopened-app", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("reopened-app", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_approved_project_review(&program, ALICE, CAROL, "reopened-app", STUB_PROGRAM_ALPHA).await;
 
     program
@@ -596,16 +599,12 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
         .await
         .unwrap();
 
-    program
-        .registry()
-        .register_application(mk_register_req(
-            "reviewed-then-deleted",
-            ALICE,
-            STUB_PROGRAM_ALPHA,
-        ))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("reviewed-then-deleted", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     link_approved_project_review(
         &program,
         ALICE,
@@ -634,16 +633,19 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
 
     program
         .registry()
-        .delete_application(STUB_PROGRAM_ALPHA.into())
-        .with_actor_id(ALICE.into())
+        .admin_force_delete_application(
+            STUB_PROGRAM_ALPHA.into(),
+            "reset review fixture".to_string(),
+        )
+        .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
-    program
-        .registry()
-        .register_application(mk_register_req("reviewed-again", ALICE, STUB_PROGRAM_BETA))
-        .with_actor_id(STUB_PROGRAM_BETA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("reviewed-again", ALICE, STUB_PROGRAM_BETA),
+        STUB_PROGRAM_BETA,
+    )
+    .await;
     link_approved_project_review(&program, ALICE, CAROL, "reviewed-again", STUB_PROGRAM_BETA).await;
     program
         .registry()
@@ -764,12 +766,12 @@ async fn project_review_guidance_link_and_program_replacement_preserve_predeploy
         Some(ProjectGuidanceOutcome::Proceed)
     );
 
-    program
-        .registry()
-        .register_application(mk_register_req("idea-agent", BOB, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("idea-agent", BOB, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     program
         .review()
         .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
@@ -783,17 +785,21 @@ async fn project_review_guidance_link_and_program_replacement_preserve_predeploy
         .with_actor_id(BOB.into())
         .await
         .unwrap();
+    let details = mk_register_req("idea-agent", ALICE, STUB_PROGRAM_BETA);
+    let approval_id = approve_application_permit_for_test(
+        &program,
+        project_review_id,
+        agents_network_client::ApplicationPermitPurpose::Register,
+        details.clone(),
+    )
+    .await;
     program
         .registry()
-        .register_application(mk_register_req("idea-agent", ALICE, STUB_PROGRAM_BETA))
+        .register_application(agents_network_client::RegisterApplicationWithApprovalReq {
+            approval_id,
+            details,
+        })
         .with_actor_id(STUB_PROGRAM_BETA.into())
-        .await
-        .unwrap();
-
-    program
-        .review()
-        .link_project_review_to_application(project_review_id, STUB_PROGRAM_BETA.into())
-        .with_actor_id(ALICE.into())
         .await
         .unwrap();
 
@@ -806,16 +812,14 @@ async fn project_review_guidance_link_and_program_replacement_preserve_predeploy
     assert_eq!(linked.status, ProjectReviewStatus::Linked);
     assert_eq!(linked.linked_program_id, Some(STUB_PROGRAM_BETA.into()));
 
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_BETA.into(),
-            STUB_PROGRAM_GAMMA.into(),
-            "new deployment after review guidance".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    replace_application_program_for_test(
+        &program,
+        STUB_PROGRAM_BETA,
+        mk_register_req("idea-agent", ALICE, STUB_PROGRAM_GAMMA),
+        ALICE,
+        "new deployment after review guidance",
+    )
+    .await;
 
     let replaced = program
         .review()
@@ -970,12 +974,12 @@ async fn project_review_rejects_invalid_inputs_and_bad_links() {
         .await
         .unwrap_err();
 
-    program
-        .registry()
-        .register_application(mk_register_req("idea-agent", ALICE, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("idea-agent", ALICE, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
     program
         .review()
         .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
@@ -997,7 +1001,7 @@ async fn project_review_rejects_invalid_inputs_and_bad_links() {
         .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
         .with_actor_id(ALICE.into())
         .await
-        .unwrap();
+        .unwrap_err();
     program
         .review()
         .link_project_review_to_application(project_review_id, STUB_PROGRAM_ALPHA.into())
@@ -1014,16 +1018,14 @@ async fn project_review_rejects_invalid_inputs_and_bad_links() {
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "replacement before linking second idea".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    replace_application_program_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("idea-agent", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "replacement before linking second idea",
+    )
+    .await;
     program
         .review()
         .link_project_review_to_application(second_project_review_id, STUB_PROGRAM_ALPHA.into())
