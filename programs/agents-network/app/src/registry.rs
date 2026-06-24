@@ -268,7 +268,6 @@ impl<'a> RegistryService<'a> {
 
         let caller = msg::source();
         let details = req.details;
-        let register_req = RegisterAppReq::from(details.clone());
         let program_id = details.program_id;
         let now = exec::block_timestamp();
         let season_id = self.current_season;
@@ -347,8 +346,8 @@ impl<'a> RegistryService<'a> {
         // the enriched `ApplicationRegistered`; indexer projects BOTH the
         // `Application` row AND the kind=Registration announcement from that
         // single event (body = description, title = "@{handle} registered").
-        let registration_title = default_registration_title(&details.handle);
-        let registration_body = default_registration_body(&register_req);
+        let registration_title = format!("@{} registered", details.handle);
+        let registration_body = details.description.clone();
         let registration_tags = Vec::new();
         let registration_outcome = board.push_announcement(
             program_id,
@@ -692,7 +691,9 @@ impl<'a> RegistryService<'a> {
         if caller != app.owner {
             return Err(ContractError::NotOwner);
         }
-        ensure_never_submitted_building(&self.review.borrow(), program_id, app.status)?;
+        if !is_never_submitted_building(&self.review.borrow(), program_id, app.status) {
+            return Err(ContractError::InvalidStatusTransition);
+        }
 
         reg.applications.remove(&program_id);
         remove_application_indexes(&mut reg, program_id, app.track, app.status);
@@ -1392,18 +1393,6 @@ fn insert_replacement_alias(reg: &mut RegistryState, current: ActorId, alias: Ac
         .insert(alias, true);
 }
 
-fn ensure_never_submitted_building(
-    review: &ReviewState,
-    program_id: ActorId,
-    status: AppStatus,
-) -> Result<(), ContractError> {
-    if is_never_submitted_building(review, program_id, status) {
-        Ok(())
-    } else {
-        Err(ContractError::InvalidStatusTransition)
-    }
-}
-
 fn is_never_submitted_building(
     review: &ReviewState,
     program_id: ActorId,
@@ -1415,20 +1404,4 @@ fn is_never_submitted_building(
     review.summaries.get(&program_id).is_none_or(|summary| {
         summary.submission_revision.is_none() && summary.latest_verdict.is_none()
     })
-}
-
-// ---------------------------------------------------------------------------
-// Helpers for default auto-announce payload
-// ---------------------------------------------------------------------------
-
-fn default_registration_title(handle: &str) -> String {
-    let mut s = String::from("@");
-    s.push_str(handle);
-    s.push_str(" registered");
-    s
-}
-
-fn default_registration_body(req: &RegisterAppReq) -> String {
-    // Clip to MAX_ANNOUNCEMENT_BODY. Description is already ≤ 280 per guards.
-    req.description.clone()
 }

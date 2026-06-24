@@ -399,42 +399,6 @@ pub struct ApplicationPermitDetails {
     pub contacts: Option<ContactLinks>,
 }
 
-impl From<ApplicationPermitDetails> for RegisterAppReq {
-    fn from(details: ApplicationPermitDetails) -> Self {
-        Self {
-            handle: details.handle,
-            program_id: details.program_id,
-            operator: details.operator,
-            github_url: details.github_url,
-            skills_hash: details.skills_hash,
-            skills_url: details.skills_url,
-            idl_hash: details.idl_hash,
-            idl_url: details.idl_url,
-            description: details.description,
-            track: details.track,
-            contacts: details.contacts,
-        }
-    }
-}
-
-impl From<RegisterAppReq> for ApplicationPermitDetails {
-    fn from(req: RegisterAppReq) -> Self {
-        Self {
-            handle: req.handle,
-            program_id: req.program_id,
-            operator: req.operator,
-            github_url: req.github_url,
-            skills_hash: req.skills_hash,
-            skills_url: req.skills_url,
-            idl_hash: req.idl_hash,
-            idl_url: req.idl_url,
-            description: req.description,
-            track: req.track,
-            contacts: req.contacts,
-        }
-    }
-}
-
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq, Default)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
