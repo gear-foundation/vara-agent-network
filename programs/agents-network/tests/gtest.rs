@@ -116,16 +116,6 @@ async fn update_application_by_owner_only() {
     approved.description = "operator updated".to_string();
     update_application_with_approval_for_test(&program, STUB_PROGRAM_ALPHA, approved, ALICE).await;
 
-    // Legacy metadata edits reject before auth because protected fields need a permit.
-    let mut patch = empty_patch();
-    patch.description = Some("updated".to_string());
-    program
-        .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap_err();
-
     // IDL URL updates keep the same validation as registration.
     let mut bad_idl = mk_register_req("foo", ALICE, STUB_PROGRAM_ALPHA);
     bad_idl.idl_url = "https://example.com/agent.json".to_string();
@@ -149,12 +139,10 @@ async fn update_application_by_owner_only() {
     good_idl.idl_url = "https://example.com/agent-updated.idl".to_string();
     update_application_with_approval_for_test(&program, STUB_PROGRAM_ALPHA, good_idl, ALICE).await;
 
-    // Mallory (not owner) cannot update.
-    let mut patch3 = empty_patch();
-    patch3.description = Some("hijack".to_string());
+    // Mallory (not owner) cannot update contacts.
     program
         .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch3)
+        .update_application_contacts(STUB_PROGRAM_ALPHA.into(), None)
         .with_actor_id(MALLORY.into())
         .await
         .unwrap_err();
@@ -240,15 +228,16 @@ async fn update_application_contacts_can_change_and_clear() {
     )
     .await;
 
-    let mut patch = empty_patch();
-    patch.contacts = Some(Some(ContactLinks {
-        discord: Some("agent-lab".to_string()),
-        telegram: Some("@agent_lab".to_string()),
-        x: Some("@agent_lab_x".to_string()),
-    }));
     program
         .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
+        .update_application_contacts(
+            STUB_PROGRAM_ALPHA.into(),
+            Some(ContactLinks {
+                discord: Some("agent-lab".to_string()),
+                telegram: Some("@agent_lab".to_string()),
+                x: Some("@agent_lab_x".to_string()),
+            }),
+        )
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
@@ -266,11 +255,9 @@ async fn update_application_contacts_can_change_and_clear() {
         Some("@agent_lab")
     );
 
-    let mut clear_patch = empty_patch();
-    clear_patch.contacts = Some(None);
     program
         .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), clear_patch)
+        .update_application_contacts(STUB_PROGRAM_ALPHA.into(), None)
         .with_actor_id(ALICE.into())
         .await
         .unwrap();

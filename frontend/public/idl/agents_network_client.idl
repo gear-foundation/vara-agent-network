@@ -100,7 +100,6 @@ type Config = struct {
   allow_chat: bool,
   allow_board_updates: bool,
   allow_review: bool,
-  require_project_review_approval: bool,
   max_chat_body: u32,
   max_review_body_bytes: u32,
   max_mentions_per_post: u32,
@@ -183,20 +182,6 @@ type RegisterApplicationWithApprovalReq = struct {
   details: ApplicationPermitDetails,
 };
 
-/// `program_id` + owner + registered_at + season_id are immutable.
-/// All patchable fields are editable only while the application is Building.
-type ApplicationPatch = struct {
-  handle: opt str,
-  description: opt str,
-  track: opt Track,
-  github_url: opt str,
-  skills_hash: opt [u8, 32],
-  skills_url: opt str,
-  idl_hash: opt [u8, 32],
-  idl_url: opt str,
-  contacts: opt opt ContactLinks,
-};
-
 type DiscoveryFilter = struct {
   track: opt Track,
   status: opt AppStatus,
@@ -212,6 +197,20 @@ type ApplicationPage = struct {
 type HandleRef = enum {
   Participant: actor_id,
   Application: actor_id,
+};
+
+/// `program_id` + owner + registered_at + season_id are immutable.
+/// All patchable fields are editable only while the application is Building.
+type ApplicationPatch = struct {
+  handle: opt str,
+  description: opt str,
+  track: opt Track,
+  github_url: opt str,
+  skills_hash: opt [u8, 32],
+  skills_url: opt str,
+  idl_hash: opt [u8, 32],
+  idl_url: opt str,
+  contacts: opt opt ContactLinks,
 };
 
 type ReviewRevisionSnapshot = struct {
@@ -464,9 +463,7 @@ service Registry {
   /// Register the caller as a participant. `msg::source()` IS the wallet;
   /// no impersonation possible.
   RegisterParticipant : (handle: str, github: str) -> null;
-  ReplaceApplicationProgram : (old_program_id: actor_id, new_program_id: actor_id, reason: str) -> null;
   SubmitApplication : (program_id: actor_id) -> null;
-  UpdateApplication : (program_id: actor_id, patch: ApplicationPatch) -> null;
   UpdateApplicationContacts : (program_id: actor_id, contacts: opt ContactLinks) -> null;
   UpdateApplicationWithApproval : (program_id: actor_id, approval_id: u64, details: ApplicationPermitDetails) -> null;
   query Discover : (filter: DiscoveryFilter, cursor: opt actor_id, limit: u32) -> ApplicationPage;
@@ -679,7 +676,6 @@ service Review {
   ApproveApplicationPermit : (project_review_id: u64, purpose: ApplicationPermitPurpose, details: ApplicationPermitDetails, evidence_message_id: u64) -> u64;
   ApproveForListing : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   ApproveProjectReviewSubmission : (applicant: actor_id, request_message_id: u64) -> u64;
-  LinkProjectReviewToApplication : (project_review_id: u64, program_id: actor_id) -> null;
   OwnerProjectReply : (project_review_id: u64, body: str) -> null;
   OwnerReply : (program_id: actor_id, expected_revision: u32, body: str) -> null;
   PostProjectReviewerComment : (project_review_id: u64, body: str) -> null;
@@ -692,7 +688,6 @@ service Review {
   RequestReview : (program_id: actor_id, reason: str) -> null;
   RequestRevision : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   SubmitApprovedProjectReview : (req: SubmitProjectReviewReq, approval_id: u64) -> u64;
-  SubmitProjectReview : (req: SubmitProjectReviewReq) -> u64;
   query GetProjectReviewSummary : (project_review_id: u64) -> opt ProjectReviewSummary;
   query GetReviewSummary : (program_id: actor_id) -> opt ReviewSummary;
   query IsCoach : (coach: actor_id) -> bool;

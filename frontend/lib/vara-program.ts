@@ -60,7 +60,6 @@ export type ProgramConfig = {
   allow_chat: boolean
   allow_board_updates: boolean
   allow_review: boolean
-  require_project_review_approval: boolean
   max_chat_body: number
   max_review_body_bytes: number
   max_mentions_per_post: number
@@ -406,19 +405,6 @@ export async function assertProgramIsDeployed(programId: string) {
   return normalized
 }
 
-export async function replaceApplicationProgram(
-  account: WalletAccount,
-  oldProgramId: string,
-  newProgramId: string,
-  reason: string,
-) {
-  void account
-  void oldProgramId
-  void newProgramId
-  void reason
-  throw new Error('Program replacement now requires a coach-issued ReplaceProgram application permit.')
-}
-
 export async function applyApprovedApplicationTransition(
   account: WalletAccount,
   currentProgramId: string,
@@ -552,23 +538,6 @@ export async function decidePublish(
   return sendTx(account, `review.tx.${outcome}`, tx)
 }
 
-export async function submitProjectReview(
-  account: WalletAccount,
-  githubUrl: string,
-  idea: string,
-) {
-  const normalizedGithub = githubUrl.trim()
-  if (!isGithubUrl(normalizedGithub)) {
-    throw new Error(`GitHub URL must start with ${GITHUB_URL_PREFIX}`)
-  }
-  const sails = await getSailsClient()
-  const tx = sails.services.Review.functions.SubmitProjectReview({
-    github_url: normalizedGithub,
-    idea: idea.trim(),
-  })
-  return sendTx(account, 'review.tx.SubmitProjectReview', tx)
-}
-
 export async function approveProjectReviewSubmission(
   account: WalletAccount,
   applicant: string,
@@ -633,14 +602,4 @@ export async function recordProjectGuidance(
   const sails = await getSailsClient()
   const tx = sails.services.Review.functions.RecordProjectGuidance(BigInt(projectReviewId), outcome, body)
   return sendTx(account, 'review.tx.RecordProjectGuidance', tx)
-}
-
-export async function linkProjectReviewToApplication(
-  account: WalletAccount,
-  projectReviewId: string | number,
-  programId: string,
-) {
-  const sails = await getSailsClient()
-  const tx = sails.services.Review.functions.LinkProjectReviewToApplication(BigInt(projectReviewId), programId.trim())
-  return sendTx(account, 'review.tx.LinkProjectReviewToApplication', tx)
 }

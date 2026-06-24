@@ -543,20 +543,6 @@ impl<'a> ReviewService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn submit_project_review(
-        &mut self,
-        req: SubmitProjectReviewReq,
-    ) -> Result<ProjectReviewId, ContractError> {
-        let config = self.admin.borrow().config.clone();
-        guards::ensure_user_mutations_allowed(&config)?;
-        guards::ensure_review_enabled(&config)?;
-        if config.require_project_review_approval {
-            return Err(ContractError::ProjectReviewApprovalRequired);
-        }
-        self.submit_project_review_state(req, None)
-    }
-
-    #[export(unwrap_result)]
     pub fn approve_project_review_submission(
         &mut self,
         applicant: ActorId,
@@ -703,7 +689,7 @@ impl<'a> ReviewService<'a> {
         req: SubmitProjectReviewReq,
         approval_id: ProjectReviewApprovalId,
     ) -> Result<ProjectReviewId, ContractError> {
-        self.submit_project_review_state(req, Some(approval_id))
+        self.submit_project_review_state(req, approval_id)
     }
 
     #[export(unwrap_result)]
@@ -741,74 +727,6 @@ impl<'a> ReviewService<'a> {
             season_id: result.season_id,
         })
         .expect("emit ProjectReviewGuidanceRecorded failed");
-        Ok(())
-    }
-
-    #[export(unwrap_result)]
-    pub fn link_project_review_to_application(
-        &mut self,
-        project_review_id: ProjectReviewId,
-        program_id: ActorId,
-    ) -> Result<(), ContractError> {
-        let config = self.admin.borrow().config.clone();
-        guards::ensure_user_mutations_allowed(&config)?;
-        guards::ensure_review_enabled(&config)?;
-
-        let caller = msg::source();
-        let now = exec::block_timestamp();
-        let season_id = self.current_season;
-        let app_github = {
-            let reg = self.registry.borrow();
-            registry::ensure_current_program_id(&reg, program_id)?;
-            let app = reg
-                .applications
-                .get(&program_id)
-                .ok_or(ContractError::UnknownApplication)?;
-            if caller != app.owner {
-                return Err(ContractError::NotOwner);
-            }
-            app.github_url.clone()
-        };
-        {
-            let mut review = self.review.borrow_mut();
-            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
-            if review.project_review_by_program.contains_key(&program_id) {
-                return Err(ContractError::ProgramAlreadyHasProjectReview);
-            }
-            {
-                let summary = review
-                    .project_summaries
-                    .get_mut(&project_review_id)
-                    .ok_or(ContractError::UnknownProjectReview)?;
-                if summary.owner != caller {
-                    return Err(ContractError::NotOwner);
-                }
-                if summary.linked_program_id.is_some() {
-                    return Err(ContractError::ProjectReviewAlreadyLinked);
-                }
-                if summary.latest_guidance_outcome != Some(ProjectGuidanceOutcome::Proceed) {
-                    return Err(ContractError::ProjectReviewNotApproved);
-                }
-                if !github_repo_matches(&summary.github_url, &app_github)? {
-                    return Err(ContractError::ProjectReviewGithubMismatch);
-                }
-                summary.linked_program_id = Some(program_id);
-                summary.status = ProjectReviewStatus::Linked;
-                summary.updated_at = now;
-            }
-            review
-                .project_review_by_program
-                .insert(program_id, project_review_id);
-        }
-
-        self.emit_event(ReviewEvent::ProjectReviewLinked {
-            project_review_id,
-            owner: caller,
-            program_id,
-            linked_at: now,
-            season_id,
-        })
-        .expect("emit ProjectReviewLinked failed");
         Ok(())
     }
 
@@ -863,7 +781,7 @@ impl<'a> ReviewService<'a> {
     fn submit_project_review_state(
         &mut self,
         req: SubmitProjectReviewReq,
-        approval_id: Option<ProjectReviewApprovalId>,
+        approval_id: ProjectReviewApprovalId,
     ) -> Result<ProjectReviewId, ContractError> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_user_mutations_allowed(&config)?;
@@ -876,30 +794,20 @@ impl<'a> ReviewService<'a> {
         let consumed_approval = {
             let mut review = self.review.borrow_mut();
             ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
-            match approval_id {
-                Some(approval_id) => {
-                    let approval = review
-                        .project_review_approvals
-                        .get(&approval_id)
-                        .ok_or(ContractError::UnknownProjectReviewApproval)?;
-                    if approval.applicant != caller || approval.season_id != season_id {
-                        return Err(ContractError::ProjectReviewApprovalRequired);
-                    }
-                    if approval.consumed_project_review_id.is_some() {
-                        return Err(ContractError::ProjectReviewApprovalUsed);
-                    }
-                    if !is_active_coach(&review, season_id, approval.coach) {
-                        return Err(ContractError::NotCoach);
-                    }
-                    Some(approval.clone())
-                }
-                None => {
-                    if config.require_project_review_approval {
-                        return Err(ContractError::ProjectReviewApprovalRequired);
-                    }
-                    None
-                }
+            let approval = review
+                .project_review_approvals
+                .get(&approval_id)
+                .ok_or(ContractError::UnknownProjectReviewApproval)?;
+            if approval.applicant != caller || approval.season_id != season_id {
+                return Err(ContractError::ProjectReviewApprovalRequired);
             }
+            if approval.consumed_project_review_id.is_some() {
+                return Err(ContractError::ProjectReviewApprovalUsed);
+            }
+            if !is_active_coach(&review, season_id, approval.coach) {
+                return Err(ContractError::NotCoach);
+            }
+            approval.clone()
         };
 
         let project_review_id = {
@@ -924,14 +832,12 @@ impl<'a> ReviewService<'a> {
                     updated_at: now,
                 },
             );
-            if let Some(approval) = &consumed_approval {
-                if let Some(stored) = review
-                    .project_review_approvals
-                    .get_mut(&approval.approval_id)
-                {
-                    stored.consumed_project_review_id = Some(project_review_id);
-                    stored.consumed_at = Some(now);
-                }
+            if let Some(stored) = review
+                .project_review_approvals
+                .get_mut(&consumed_approval.approval_id)
+            {
+                stored.consumed_project_review_id = Some(project_review_id);
+                stored.consumed_at = Some(now);
             }
             project_review_id
         };
@@ -946,18 +852,16 @@ impl<'a> ReviewService<'a> {
         })
         .expect("emit ProjectReviewSubmitted failed");
 
-        if let Some(approval) = consumed_approval {
-            self.emit_event(ReviewEvent::ProjectReviewApprovalConsumed {
-                approval_id: approval.approval_id,
-                project_review_id,
-                applicant: caller,
-                coach: approval.coach,
-                request_message_id: approval.request_message_id,
-                consumed_at: now,
-                season_id,
-            })
-            .expect("emit ProjectReviewApprovalConsumed failed");
-        }
+        self.emit_event(ReviewEvent::ProjectReviewApprovalConsumed {
+            approval_id: consumed_approval.approval_id,
+            project_review_id,
+            applicant: caller,
+            coach: consumed_approval.coach,
+            request_message_id: consumed_approval.request_message_id,
+            consumed_at: now,
+            season_id,
+        })
+        .expect("emit ProjectReviewApprovalConsumed failed");
 
         Ok(project_review_id)
     }

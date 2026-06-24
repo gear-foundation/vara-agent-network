@@ -144,7 +144,6 @@ pub async fn disable_review_rate_limit(
 ) {
     let mut config = program.admin().get_config().await.unwrap();
     config.review_rate_limit_ms = 0;
-    config.require_project_review_approval = false;
     program
         .admin()
         .update_config(config)
@@ -174,6 +173,42 @@ pub async fn ensure_test_review_roles(
         .await;
 }
 
+fn test_actor_u64(actor: ActorId) -> u64 {
+    if actor == ALICE.into() {
+        ALICE
+    } else if actor == BOB.into() {
+        BOB
+    } else if actor == CAROL.into() {
+        CAROL
+    } else if actor == MALLORY.into() {
+        MALLORY
+    } else {
+        std::panic!("unknown test actor: {actor:?}");
+    }
+}
+
+pub async fn submit_approved_project_review_for_test(
+    program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
+    owner: u64,
+    github_url: String,
+    idea: String,
+) -> u64 {
+    ensure_test_review_roles(program).await;
+    let coach = if owner == CAROL { MALLORY } else { CAROL };
+    let approval_id = program
+        .review()
+        .approve_project_review_submission(owner.into(), 77)
+        .with_actor_id(coach.into())
+        .await
+        .unwrap();
+    program
+        .review()
+        .submit_approved_project_review(SubmitProjectReviewReq { github_url, idea }, approval_id)
+        .with_actor_id(owner.into())
+        .await
+        .unwrap()
+}
+
 pub async fn linked_project_review_id(
     program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
     program_id: u64,
@@ -193,16 +228,13 @@ pub async fn approved_register_req_for_test(
     program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
     details: ApplicationPermitDetails,
 ) -> (RegisterApplicationWithApprovalReq, u64) {
-    ensure_test_review_roles(program).await;
-    let project_review_id = program
-        .review()
-        .submit_project_review(SubmitProjectReviewReq {
-            github_url: details.github_url.clone(),
-            idea: format!("{} provides useful network value", details.handle),
-        })
-        .with_actor_id(details.operator)
-        .await
-        .unwrap();
+    let project_review_id = submit_approved_project_review_for_test(
+        program,
+        test_actor_u64(details.operator),
+        details.github_url.clone(),
+        format!("{} provides useful network value", details.handle),
+    )
+    .await;
     program
         .review()
         .record_project_guidance(
@@ -233,21 +265,18 @@ pub async fn expect_register_permit_rejected_for_test(
     program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
     details: ApplicationPermitDetails,
 ) {
-    ensure_test_review_roles(program).await;
     let github_url = if details.github_url.starts_with("https://github.com/") {
         details.github_url.clone()
     } else {
         format!("https://github.com/alice/{}", details.handle)
     };
-    let project_review_id = program
-        .review()
-        .submit_project_review(SubmitProjectReviewReq {
-            github_url,
-            idea: format!("{} provides useful network value", details.handle),
-        })
-        .with_actor_id(details.operator)
-        .await
-        .unwrap();
+    let project_review_id = submit_approved_project_review_for_test(
+        program,
+        test_actor_u64(details.operator),
+        github_url,
+        format!("{} provides useful network value", details.handle),
+    )
+    .await;
     program
         .review()
         .record_project_guidance(
@@ -370,13 +399,25 @@ pub async fn expect_replace_application_program_rejected_for_test(
     let project_review_id = linked_project_review_id(program, current_program_id)
         .await
         .expect("application should have linked project review");
-    let approval_id = approve_application_permit_for_test(
-        program,
-        project_review_id,
-        ApplicationPermitPurpose::ReplaceProgram,
-        details.clone(),
-    )
-    .await;
+    ensure_test_review_roles(program).await;
+    let coach = if details.operator == CAROL.into() {
+        MALLORY
+    } else {
+        CAROL
+    };
+    let approval = program
+        .review()
+        .approve_application_permit(
+            project_review_id,
+            ApplicationPermitPurpose::ReplaceProgram,
+            details.clone(),
+            77,
+        )
+        .with_actor_id(coach.into())
+        .await;
+    let Ok(approval_id) = approval else {
+        return;
+    };
     program
         .registry()
         .apply_approved_application_transition(
@@ -402,30 +443,8 @@ pub async fn link_ready_project_review(
     {
         return;
     }
-    ensure_test_review_roles(program).await;
-    let project_review_id = program
-        .review()
-        .submit_project_review(SubmitProjectReviewReq {
-            github_url: format!("https://github.com/alice/{handle}"),
-            idea: format!("{handle} provides useful network value"),
-        })
-        .with_actor_id(owner.into())
-        .await
-        .unwrap();
-    program
-        .review()
-        .record_project_guidance(
-            project_review_id,
-            ProjectGuidanceOutcome::Proceed,
-            "ready to build".to_string(),
-        )
-        .with_actor_id(MALLORY.into())
-        .await
-        .unwrap();
-    program
-        .review()
-        .link_project_review_to_application(project_review_id, program_id.into())
-        .with_actor_id(owner.into())
-        .await
-        .unwrap();
+    let _ = (program, owner, handle);
+    std::panic!(
+        "application {program_id} has no linked project review; register through the permit flow so registration auto-links it"
+    );
 }

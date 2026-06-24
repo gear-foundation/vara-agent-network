@@ -31,36 +31,20 @@ async fn ready_project_review(
     program: &Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
     details: &ApplicationPermitDetails,
 ) -> u64 {
-    let mut config = program.admin().get_config().await.unwrap();
-    config.review_rate_limit_ms = 0;
-    config.require_project_review_approval = false;
-    program
-        .admin()
-        .update_config(config)
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-    program
-        .review()
-        .add_reviewer(MALLORY.into())
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-    program
-        .review()
-        .add_coach(CAROL.into())
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-    let project_review_id = program
-        .review()
-        .submit_project_review(agents_network_client::SubmitProjectReviewReq {
-            github_url: details.github_url.clone(),
-            idea: "coach-reviewed app".to_string(),
-        })
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    let owner = if details.operator == BOB.into() {
+        BOB
+    } else if details.operator == CAROL.into() {
+        CAROL
+    } else {
+        ALICE
+    };
+    let project_review_id = submit_approved_project_review_for_test(
+        program,
+        owner,
+        details.github_url.clone(),
+        "coach-reviewed app".to_string(),
+    )
+    .await;
     program
         .review()
         .record_project_guidance(
@@ -214,7 +198,7 @@ async fn permit_details_mismatch_leaves_no_registration_state() {
 }
 
 #[tokio::test]
-async fn empty_legacy_update_does_not_clear_contacts() {
+async fn contacts_update_can_clear_contacts() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -238,7 +222,7 @@ async fn empty_legacy_update_does_not_clear_contacts() {
 
     program
         .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), empty_patch())
+        .update_application_contacts(STUB_PROGRAM_ALPHA.into(), None)
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
@@ -249,7 +233,7 @@ async fn empty_legacy_update_does_not_clear_contacts() {
         .await
         .unwrap()
         .expect("registered app");
-    assert_eq!(app.contacts.unwrap().discord.as_deref(), Some("alice#0001"));
+    assert!(app.contacts.is_none());
 }
 
 #[tokio::test]
@@ -269,15 +253,6 @@ async fn protected_metadata_update_requires_matching_permit() {
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
-
-    let mut patch = empty_patch();
-    patch.description = Some("unapproved metadata".to_string());
-    program
-        .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
 
     let mut approved = details;
     approved.description = "approved metadata".to_string();
@@ -414,21 +389,19 @@ async fn admin_prune_releases_program_reservation() {
         .unwrap();
 
     let details = permit_details("force-app", ALICE, STUB_PROGRAM_ALPHA);
-    let project_review_id = program
-        .review()
-        .submit_project_review(agents_network_client::SubmitProjectReviewReq {
-            github_url: details.github_url.clone(),
-            idea: "reused after prune".to_string(),
-        })
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    let project_review_id = submit_approved_project_review_for_test(
+        &program,
+        ALICE,
+        details.github_url.clone(),
+        "reused after prune".to_string(),
+    )
+    .await;
     program
         .review()
         .record_project_guidance(
             project_review_id,
             ProjectGuidanceOutcome::Proceed,
-            "still good".to_string(),
+            "ready to build".to_string(),
         )
         .with_actor_id(MALLORY.into())
         .await
@@ -470,21 +443,19 @@ async fn admin_force_delete_preserves_program_reservation() {
         .unwrap();
 
     let blocked = permit_details("reserved-app", ALICE, STUB_PROGRAM_ALPHA);
-    let project_review_id = program
-        .review()
-        .submit_project_review(agents_network_client::SubmitProjectReviewReq {
-            github_url: blocked.github_url.clone(),
-            idea: "should remain reserved".to_string(),
-        })
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
+    let project_review_id = submit_approved_project_review_for_test(
+        &program,
+        ALICE,
+        blocked.github_url.clone(),
+        "should remain reserved".to_string(),
+    )
+    .await;
     program
         .review()
         .record_project_guidance(
             project_review_id,
             ProjectGuidanceOutcome::Proceed,
-            "still good".to_string(),
+            "ready to build".to_string(),
         )
         .with_actor_id(MALLORY.into())
         .await

@@ -318,6 +318,7 @@ test('cerberus coach docs use the current gated project-review flow', () => {
 
   assert.match(onboarding, /Review\/ApproveProjectReviewSubmission/)
   assert.match(onboarding, /Review\/SubmitApprovedProjectReview/)
-  assert.match(onboarding, /require_project_review_approval=false/)
+  assert.doesNotMatch(onboarding, /Review\/SubmitProjectReview/)
+  assert.doesNotMatch(onboarding, /require_project_review_approval/)
   assert.match(create, /on-chain project-review approval/)
 })

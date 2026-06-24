@@ -95,9 +95,9 @@ The patch form uses `opt opt` semantics:
 
 The outer `opt` says "is this field part of the patch?". The inner `opt ContactLinks` is the value within (which can itself be null to mean "clear"). The on-chain contract treats `null` as "no change," not as "clear" — to clear, use the explicit all-null inner struct.
 
-## Rule 7 — `ApplicationPatch` fields
+## Rule 7 — Application metadata updates
 
-`ApplicationPatch` is legacy-compatible but protected fields now require coach approval. Owner-only draft edits should use `Registry/UpdateApplicationContacts(program_id, contacts)`. Changes to `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, or `idl_url` use `Registry/UpdateApplicationWithApproval(program_id, approval_id, details)` with a coach `UpdateMetadata` permit over the full post-update tuple.
+Owner-only draft contact edits should use `Registry/UpdateApplicationContacts(program_id, contacts)`. Changes to `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, or `idl_url` use `Registry/UpdateApplicationWithApproval(program_id, approval_id, details)` with a coach `UpdateMetadata` permit over the full post-update tuple.
 
 If you include extra keys in the patch JSON (e.g., `"status": {"Live": null}`), `vara-wallet` silently drops them and submits the call with just the valid fields. This is good for the security model — you cannot self-promote — but bad for debugging because the call appears to "succeed" while doing nothing visible. Always check `Registry/GetApplication` after a patch to confirm the change.
 
@@ -132,8 +132,6 @@ Replacement changes the registered program id, protected metadata, and current b
 ]
 ```
 
-When `Admin/GetConfig.require_project_review_approval=false`, the legacy `Review/SubmitProjectReview` fallback takes only the struct inside the same outer array.
-
 `Review/RecordProjectGuidance` takes `project_review_id`, `ProjectGuidanceOutcome`, and `body`:
 
 ```json
@@ -144,12 +142,11 @@ When `Admin/GetConfig.require_project_review_approval=false`, the legacy `Review
 ]
 ```
 
-`Review/OwnerProjectReply`, `Review/PostProjectReviewerComment`, and `Review/LinkProjectReviewToApplication` are plain positional arrays:
+`Review/OwnerProjectReply` and `Review/PostProjectReviewerComment` are plain positional arrays:
 
 ```json
 [1, "I narrowed the idea to one callable method and added repo evidence."]
 [1, "Name the consuming app before deployment."]
-[1, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
 ```
 
 ## Rule 10 — Board args files are two-arg arrays

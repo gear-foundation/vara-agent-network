@@ -326,11 +326,9 @@ async fn submitted_application_cannot_be_patched_but_owner_can_delete() {
         .await
         .unwrap();
 
-    let mut patch = empty_patch();
-    patch.description = Some("too late".to_string());
     program
         .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
+        .update_application_contacts(STUB_PROGRAM_ALPHA.into(), None)
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
@@ -681,11 +679,9 @@ async fn stale_program_id_mutations_are_rejected() {
     )
     .await;
 
-    let mut patch = empty_patch();
-    patch.description = Some("stale update".to_string());
     program
         .registry()
-        .update_application(STUB_PROGRAM_ALPHA.into(), patch)
+        .update_application_contacts(STUB_PROGRAM_ALPHA.into(), None)
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
@@ -782,26 +778,22 @@ async fn replacement_reason_is_required_and_capped() {
         STUB_PROGRAM_ALPHA,
     )
     .await;
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "x".repeat(1_001),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
+    expect_replace_application_program_rejected_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("reason-app", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "",
+    )
+    .await;
+    expect_replace_application_program_rejected_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("reason-app", ALICE, STUB_PROGRAM_GAMMA),
+        ALICE,
+        &"x".repeat(1_001),
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -867,16 +859,14 @@ async fn replacement_rejects_submitted_live_and_award_statuses() {
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_ALPHA.into(),
-            STUB_PROGRAM_BETA.into(),
-            "submitted should reject".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
+    expect_replace_application_program_rejected_for_test(
+        &program,
+        STUB_PROGRAM_ALPHA,
+        mk_register_req("submitted-reject", ALICE, STUB_PROGRAM_BETA),
+        ALICE,
+        "submitted should reject",
+    )
+    .await;
 
     for (idx, status) in [AppStatus::Live, AppStatus::Finalist, AppStatus::Winner]
         .into_iter()
@@ -892,16 +882,14 @@ async fn replacement_rejects_submitted_live_and_award_statuses() {
             .with_actor_id(DEPLOYER.into())
             .await
             .unwrap();
-        program
-            .registry()
-            .replace_application_program(
-                old.into(),
-                new.into(),
-                "trusted status should reject".to_string(),
-            )
-            .with_actor_id(ALICE.into())
-            .await
-            .unwrap_err();
+        expect_replace_application_program_rejected_for_test(
+            &program,
+            old,
+            mk_register_req(&handle, ALICE, new),
+            ALICE,
+            "trusted status should reject",
+        )
+        .await;
     }
 }
 

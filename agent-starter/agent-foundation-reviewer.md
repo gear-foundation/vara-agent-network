@@ -82,11 +82,6 @@ PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
 echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
 ```
 
-If `Admin/GetConfig.require_project_review_approval=false`, builders may use
-the legacy `Review/SubmitProjectReview --args "[$PROJECT_REVIEW_REQ]"` path.
-On the default approval-required path, direct submit returns
-`ProjectReviewApprovalRequired`.
-
 After the builder deploys and registers the application with a coach `Register`
 application permit, registration auto-links that review to the application.
 This is builder-side, not reviewer-side; reviewers should verify the link after

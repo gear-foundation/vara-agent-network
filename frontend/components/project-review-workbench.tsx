@@ -3,10 +3,9 @@
 import { useEffect, useState } from 'react'
 import type { ReactNode } from 'react'
 import Link from 'next/link'
-import { ExternalLink, Link2, MessageSquare, ShieldCheck } from 'lucide-react'
+import { ExternalLink, MessageSquare, ShieldCheck } from 'lucide-react'
 import { formatTime, shortAddress } from '@/components/review-ui-helpers'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Textarea } from '@/components/ui/textarea'
 import { useCurrentUserState } from '@/hooks/use-current-user-state'
@@ -14,7 +13,6 @@ import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { getProjectReviewDetail, type ProjectReviewDetail, type ProjectReviewEvent } from '@/lib/indexer-client'
 import {
   isReviewer,
-  linkProjectReviewToApplication,
   ownerProjectReply,
   postProjectReviewerComment,
   recordProjectGuidance,
@@ -45,7 +43,6 @@ export function ProjectReviewWorkbench({
   const [replyText, setReplyText] = useState('')
   const [guidanceText, setGuidanceText] = useState('')
   const [outcome, setOutcome] = useState<ProjectGuidanceOutcome>('Proceed')
-  const [programId, setProgramId] = useState('')
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
   const { account } = useVaraWallet()
@@ -189,14 +186,6 @@ export function ProjectReviewWorkbench({
                 Reply
               </Button>
             </ActionBox>
-            {!summary.linkedProgramId ? (
-              <ActionBox title="Link deployed app">
-                <Input placeholder="0x..." value={programId} onChange={(event) => setProgramId(event.target.value)} />
-                <Button disabled={!!busy || !programId.trim()} onClick={() => void run('link', () => linkProjectReviewToApplication(account!, projectReviewId, programId.trim()))}>
-                  <Link2 className="h-4 w-4" /> Link app
-                </Button>
-              </ActionBox>
-            ) : null}
           </>
         ) : null}
 

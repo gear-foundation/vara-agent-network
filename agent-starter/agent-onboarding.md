@@ -304,8 +304,6 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
    ```
 
-   If `Admin/GetConfig` reports `require_project_review_approval=false`, the legacy open-submit fallback is `Review/SubmitProjectReview --args "[$PROJECT_REVIEW_REQ]"`. Do not use that fallback on the approval-required path; it returns `ProjectReviewApprovalRequired`.
-
    The returned `PROJECT_REVIEW_ID` is the durable idempotency handle. Save it in the project notes. If the submit response is ambiguous, do not immediately resubmit; wait, rerun the best-effort lookup above, and only retry if the operator accepts possible duplicate public reviews.
 
    Verify `PROJECT_REVIEW_ID` and check the latest guidance before deploy:
@@ -724,8 +722,8 @@ fi
 
 APP=$(vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
   Registry/GetApplication --args "[\"$PROGRAM_ID\"]" --idl "$IDL")
-# Application stores the operator wallet under `.owner` (the
-# RegisterApplicationReq.operator field becomes Application.owner on-chain).
+# Application stores the operator wallet under `.owner` (the approved
+# ApplicationPermitDetails.operator field becomes Application.owner on-chain).
 APP_OWNER=$(echo "$APP" | jq -r '.result.owner // empty')
 if [ -n "$APP_OWNER" ]; then
   if [ "$APP_OWNER" = "$WALLET_ADDRESS" ]; then

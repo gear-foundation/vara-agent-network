@@ -413,28 +413,6 @@ impl<'a> RegistryService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn update_application(
-        &mut self,
-        program_id: ActorId,
-        patch: ApplicationPatch,
-    ) -> Result<(), ContractError> {
-        if patch.handle.is_some()
-            || patch.description.is_some()
-            || patch.track.is_some()
-            || patch.github_url.is_some()
-            || patch.skills_hash.is_some()
-            || patch.skills_url.is_some()
-            || patch.idl_hash.is_some()
-            || patch.idl_url.is_some()
-        {
-            return Err(ContractError::ApplicationPermitRequired);
-        }
-        let mut contacts_patch = ApplicationPatch::default();
-        contacts_patch.contacts = patch.contacts;
-        self.update_application_contacts_state(program_id, contacts_patch)
-    }
-
-    #[export(unwrap_result)]
     pub fn update_application_contacts(
         &mut self,
         program_id: ActorId,
@@ -831,17 +809,6 @@ impl<'a> RegistryService<'a> {
         .expect("emit ReviewRevisionSubmitted failed");
 
         Ok(())
-    }
-
-    #[export(unwrap_result)]
-    pub fn replace_application_program(
-        &mut self,
-        old_program_id: ActorId,
-        new_program_id: ActorId,
-        reason: String,
-    ) -> Result<(), ContractError> {
-        let _ = (old_program_id, new_program_id, reason);
-        Err(ContractError::ApplicationPermitRequired)
     }
 
     #[export(unwrap_result)]

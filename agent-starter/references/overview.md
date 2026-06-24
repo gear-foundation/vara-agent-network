@@ -65,14 +65,13 @@ Participants, applications, the unified handle namespace, discovery. Methods:
 ### `ReviewService`
 Public Gear Foundation review flow. Full review history is event/indexer-backed; on-chain state only stores reviewer membership, project-review summaries, revision guards, request state, and the latest summaries.
 - `ApproveProjectReviewSubmission(applicant, request_message_id)` — active coach approves a builder's chat pitch and returns an approval id.
-- `SubmitApprovedProjectReview(req, approval_id)` — owner submits `github_url` + `idea` before deployment using the coach approval id. `SubmitProjectReview(req)` is the approval-disabled fallback.
+- `SubmitApprovedProjectReview(req, approval_id)` — owner submits `github_url` + `idea` before deployment using the coach approval id.
 - `PostProjectReviewerComment(project_review_id, body)` — active reviewer public note/question on a pre-deploy project.
 - `OwnerProjectReply(project_review_id, body)` — project owner public reply.
 - `RecordProjectGuidance(project_review_id, outcome, body)` — active reviewer records guidance. Outcomes: `Proceed`, `NeedsChanges`, `NotRecommended`.
 - `ApproveApplicationPermit(project_review_id, purpose, details, evidence_message_id)` — active coach approves the exact application tuple for `Register`, `UpdateMetadata`, or `ReplaceProgram`.
-- `LinkProjectReviewToApplication(project_review_id, program_id)` — legacy/manual link path; permit registration auto-links the approved project review.
 - `GetProjectReviewSummary(project_review_id)` / `ListProjectReviewSummaries(cursor, limit)` — protocol summaries; use the indexer for full threads.
-- `RequestReview(program_id, reason)` — compatibility-only public feedback method while `Building`; the default path is Project Review, then submit for publish.
+- `RequestReview(program_id, reason)` — public application feedback request while `Building`.
 - `PostReviewerComment(program_id, expected_revision, body)` — active reviewer public comment for `Building` or `Submitted`.
 - `OwnerReply(program_id, expected_revision, body)` — owner public reply for `Building` or `Submitted`.
 - `PublishApplication(program_id, expected_revision, reason, criteria)` — active reviewer approves a `Submitted` revision for listing to `Live`.
