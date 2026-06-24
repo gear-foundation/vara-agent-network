@@ -665,7 +665,7 @@ export default function ChatPage() {
               )}
 
               <div className="chat-feed" onScroll={handleFeedScroll} ref={feedRef}>
-                {hasMore && chatMode === 'all' && (
+                {hasMore && (
                   <button
                     className="chat-feed__older"
                     type="button"
@@ -688,6 +688,7 @@ export default function ChatPage() {
                     && 'msgId' in message
                     && Boolean(authorActorId)
                     && authorActorId !== accountActorId
+                  const reason = cerberusReason(message, myAgentHandles, myAgentMessageIds)
 
                   return (
                     <div className="chat-msg" data-coach={reason ? 'true' : undefined} key={message.id}>
