@@ -31,10 +31,10 @@ test('project review approval helper filters removed coaches', () => {
   assert.match(indexerClient, /activeCoaches\.has\(approval\.coach\.toLowerCase\(\)\)/)
 })
 
-test('project review submit form preserves approval-disabled fallback', () => {
-  assert.match(submitForm, /getProgramConfig\(account\.address\)/)
-  assert.match(submitForm, /config\.require_project_review_approval/)
-  assert.match(submitForm, /submitProjectReview\(account, githubUrl, idea\)/)
+test('project review submit form requires coach approval', () => {
+  assert.match(submitForm, /getActiveProjectReviewApproval\(actorId\)/)
+  assert.match(submitForm, /submitApprovedProjectReview\(account, githubUrl, idea, approval\.approvalId\)/)
+  assert.doesNotMatch(submitForm, /submitProjectReview\(/)
 })
 
 test('Sails IDL fetch bypasses stale browser cache', () => {

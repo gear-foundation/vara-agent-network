@@ -80,7 +80,6 @@ pub struct Config {
     pub allow_chat: bool,
     pub allow_board_updates: bool,
     pub allow_review: bool,
-    pub require_project_review_approval: bool,
     pub max_chat_body: u32,
     pub max_review_body_bytes: u32,
     pub max_mentions_per_post: u32,
@@ -100,7 +99,6 @@ impl Default for Config {
             allow_chat: true,
             allow_board_updates: true,
             allow_review: true,
-            require_project_review_approval: true,
             max_chat_body: 2048,
             max_review_body_bytes: 1_000,
             max_mentions_per_post: 8,
@@ -165,6 +163,10 @@ pub enum ContractError {
     ProjectReviewRequired,
     ProjectReviewNotApproved,
     ProjectReviewGithubMismatch,
+    UnknownApplicationPermit,
+    ApplicationPermitUsed,
+    ApplicationPermitMismatch,
+    DuplicateApplicationPermit,
     StaleProgramId,
     ProgramIdUnchanged,
     ProgramIdAlreadyRegistered,
@@ -192,6 +194,7 @@ pub type PostId = u64;
 pub type Hash32 = [u8; 32];
 pub type ProjectReviewId = u64;
 pub type ProjectReviewApprovalId = u64;
+pub type ApplicationPermitId = u64;
 
 // ---------------------------------------------------------------------------
 // Migration DTOs
@@ -348,6 +351,43 @@ pub struct RegisterAppReq {
     pub program_id: ActorId,
     /// The wallet the program attests as its human operator. Chat/board auth
     /// for `author = Application(a)` passes for this wallet.
+    pub operator: ActorId,
+    pub github_url: String,
+    pub skills_hash: Hash32,
+    pub skills_url: String,
+    pub idl_hash: Hash32,
+    pub idl_url: String,
+    pub description: String,
+    pub track: Track,
+    pub contacts: Option<ContactLinks>,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct RegisterApplicationWithApprovalReq {
+    pub approval_id: ApplicationPermitId,
+    pub details: ApplicationPermitDetails,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Copy, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ApplicationPermitPurpose {
+    Register,
+    UpdateMetadata,
+    ReplaceProgram,
+}
+
+/// Full post-state tuple approved by a coach. For `Register`, it is the new
+/// application. For `UpdateMetadata`, it is the complete application tuple
+/// after the update. For `ReplaceProgram`, `program_id` is the new program id.
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ApplicationPermitDetails {
+    pub handle: Handle,
+    pub program_id: ActorId,
     pub operator: ActorId,
     pub github_url: String,
     pub skills_hash: Hash32,
@@ -543,6 +583,24 @@ pub struct ProjectReviewApproval {
     pub coach: ActorId,
     pub request_message_id: ChatMsgId,
     pub consumed_project_review_id: Option<ProjectReviewId>,
+    pub season_id: u32,
+    pub approved_at: u64,
+    pub consumed_at: Option<u64>,
+}
+
+#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct ApplicationPermit {
+    pub approval_id: ApplicationPermitId,
+    pub project_review_id: ProjectReviewId,
+    pub purpose: ApplicationPermitPurpose,
+    pub details_hash: Hash32,
+    pub pending_details: Option<ApplicationPermitDetails>,
+    pub applicant: ActorId,
+    pub coach: ActorId,
+    pub evidence_message_id: ChatMsgId,
+    pub consumed_program_id: Option<ActorId>,
     pub season_id: u32,
     pub approved_at: u64,
     pub consumed_at: Option<u64>,

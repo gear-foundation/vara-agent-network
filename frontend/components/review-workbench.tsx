@@ -10,12 +10,13 @@ import {
   type ApplicationReviewEvent,
 } from '@/lib/indexer-client'
 import {
+  applyApprovedApplicationTransition,
   decidePublish,
   isReviewer,
   ownerReply,
   postReviewerComment,
-  replaceApplicationProgram,
   submitApplication,
+  type ApplicationPermitDetails,
   type ReviewCoverage,
   type ReviewCriteriaInput,
 } from '@/lib/vara-program'
@@ -79,6 +80,8 @@ export function ReviewWorkbench({
   const [replyText, setReplyText] = useState('')
   const [decisionText, setDecisionText] = useState('')
   const [replacementProgramId, setReplacementProgramId] = useState('')
+  const [replacementApprovalId, setReplacementApprovalId] = useState('')
+  const [replacementDetailsJson, setReplacementDetailsJson] = useState('')
   const [replacementReason, setReplacementReason] = useState('')
   const [criteriaDraft, setCriteriaDraft] = useState<CriteriaDraft>(INITIAL_CRITERIA)
   const [busy, setBusy] = useState<string | null>(null)
@@ -98,6 +101,11 @@ export function ReviewWorkbench({
     [detail.events],
   )
   const decisionCriteria = useMemo(() => buildCriteria(criteriaDraft), [criteriaDraft])
+  const defaultReplacementDetailsJson = useMemo(() => {
+    if (!app || !replacementProgramId.trim()) return ''
+    return JSON.stringify(replacementDetailsForApp(app, replacementProgramId.trim()), null, 2)
+  }, [app, replacementProgramId])
+  const replacementDetailsInput = replacementDetailsJson || defaultReplacementDetailsJson
 
   function updateCriterion(key: CriteriaKey, patch: Partial<CriteriaDraft[CriteriaKey]>) {
     setCriteriaDraft((current) => ({
@@ -287,17 +295,28 @@ export function ReviewWorkbench({
               value={replacementProgramId}
               onChange={(event) => setReplacementProgramId(event.target.value)}
             />
+            <Input
+              placeholder="Approval id"
+              value={replacementApprovalId}
+              onChange={(event) => setReplacementApprovalId(event.target.value)}
+            />
+            <Textarea
+              placeholder="Approved details JSON"
+              value={replacementDetailsInput}
+              onChange={(event) => setReplacementDetailsJson(event.target.value)}
+            />
             <Textarea
               placeholder="Reason"
               value={replacementReason}
               onChange={(event) => setReplacementReason(event.target.value)}
             />
             <Button
-              disabled={!!busy || !replacementProgramId.trim() || !replacementReason.trim()}
-              onClick={() => void run('replace-program', () => replaceApplicationProgram(
+              disabled={!!busy || !replacementProgramId.trim() || !replacementApprovalId.trim() || !replacementDetailsInput.trim() || !replacementReason.trim()}
+              onClick={() => void run('replace-program', () => applyApprovedApplicationTransition(
                 account!,
                 app.id,
-                replacementProgramId.trim(),
+                replacementApprovalId.trim(),
+                parsePermitDetails(replacementDetailsInput),
                 replacementReason.trim(),
               ))}
             >
@@ -413,6 +432,40 @@ function criterionInput(field: CriteriaDraft[CriteriaKey]): ReviewCriteriaInput[
   if (!field.coverage) return null
   const note = field.note.trim()
   return { coverage: field.coverage, note: note ? note : null }
+}
+
+function replacementDetailsForApp(
+  app: NonNullable<ApplicationReviewDetail['application']>,
+  programId: string,
+): ApplicationPermitDetails {
+  return {
+    handle: app.handle.replace(/^@/, ''),
+    program_id: programId,
+    operator: app.owner,
+    github_url: app.githubUrl,
+    skills_hash: app.skillsHash,
+    skills_url: app.skillsUrl,
+    idl_hash: app.idlHash,
+    idl_url: app.idlUrl,
+    description: app.description,
+    track: app.trackKey as ApplicationPermitDetails['track'],
+    contacts: {
+      discord: app.discordAccount,
+      telegram: app.telegramAccount,
+      x: app.xAccount,
+    },
+  }
+}
+
+function parsePermitDetails(raw: string): ApplicationPermitDetails {
+  const parsed = JSON.parse(raw) as Partial<ApplicationPermitDetails>
+  const required = ['handle', 'program_id', 'operator', 'github_url', 'skills_hash', 'skills_url', 'idl_hash', 'idl_url', 'description', 'track'] as const
+  for (const key of required) {
+    if (typeof parsed[key] !== 'string' || !parsed[key]) {
+      throw new Error(`Approved details JSON is missing ${key}.`)
+    }
+  }
+  return parsed as ApplicationPermitDetails
 }
 
 function ActionBox({ title, children }: { title: string, children: ReactNode }) {

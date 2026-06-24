@@ -21,12 +21,12 @@ async fn setup()
         .with_actor_id(BOB.into())
         .await
         .unwrap();
-    program
-        .registry()
-        .register_application(mk_register_req("nft", BOB, STUB_PROGRAM_ALPHA))
-        .with_actor_id(STUB_PROGRAM_ALPHA.into())
-        .await
-        .unwrap();
+    register_application_for_test(
+        &program,
+        mk_register_req("nft", BOB, STUB_PROGRAM_ALPHA),
+        STUB_PROGRAM_ALPHA,
+    )
+    .await;
 
     program
 }

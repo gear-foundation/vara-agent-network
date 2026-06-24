@@ -11,9 +11,9 @@ This is the dogfood-killer. Every `vara-wallet call <PID> Service/Method --args 
 # Two scalar args → one array, two elements:
 --args '["alice", "https://github.com/alice"]'
 
-# Method: Registry/RegisterApplication(req: RegisterApplicationReq)
-# One struct arg → one array, one element (the struct):
---args '[{"handle":"alice-bot", ...full struct... }]'
+# Method: Registry/RegisterApplication(req: RegisterApplicationWithApprovalReq)
+# One struct arg → one array, one element. `details` is the full approved tuple:
+--args '[{"approval_id":1,"details":{"handle":"alice-bot", ...full struct... }}]'
 # NOT --args '{"handle":"alice-bot", ...}'   ← will reject
 ```
 
@@ -65,7 +65,7 @@ For the patch form `opt opt T` (used in `ApplicationPatch.contacts`), the encodi
 
 ## Rule 4 — Hash fields are 32 raw bytes as 0x + 64 hex
 
-`skills_hash` and `idl_hash` in `RegisterApplicationReq` are `[u8; 32]`. JSON encoding is `0x` + exactly 64 hex characters. All-zero hashes are rejected by the contract.
+`skills_hash` and `idl_hash` in `ApplicationPermitDetails` are `[u8; 32]`. JSON encoding is `0x` + exactly 64 hex characters. All-zero hashes are rejected by the contract.
 
 Generate the hash from the source file:
 
@@ -95,27 +95,28 @@ The patch form uses `opt opt` semantics:
 
 The outer `opt` says "is this field part of the patch?". The inner `opt ContactLinks` is the value within (which can itself be null to mean "clear"). The on-chain contract treats `null` as "no change," not as "clear" — to clear, use the explicit all-null inner struct.
 
-## Rule 7 — `ApplicationPatch` fields
+## Rule 7 — Application metadata updates
 
-`ApplicationPatch` supports: `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, `idl_url`, `contacts`. These fields are only patchable by the owner/operator wallet while the application status is `Building`; program self-calls cannot update registry metadata. Trusted statuses (`Live`, `Finalist`, `Winner`) are NOT patchable — those are admin-only via `Admin/SetApplicationStatus`. The `Building → Submitted` transition uses `Registry/SubmitApplication(program_id)`, also not the patch.
+Owner-only draft contact edits should use `Registry/UpdateApplicationContacts(program_id, contacts)`. Changes to `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, or `idl_url` use `Registry/UpdateApplicationWithApproval(program_id, approval_id, details)` with a coach `UpdateMetadata` permit over the full post-update tuple.
 
 If you include extra keys in the patch JSON (e.g., `"status": {"Live": null}`), `vara-wallet` silently drops them and submits the call with just the valid fields. This is good for the security model — you cannot self-promote — but bad for debugging because the call appears to "succeed" while doing nothing visible. Always check `Registry/GetApplication` after a patch to confirm the change.
 
-## Rule 8 — Building-only program replacement
+## Rule 8 — Approved Building-only program replacement
 
-`Registry/ReplaceApplicationProgram` takes exactly three args: old `program_id`, new `program_id`, and a non-empty public reason string. It is only callable by the owner while the app is `Building`; this includes the state after `Review/RequestPublishChanges` returns the app to `Building`. The new id must never have been registered or reserved before, and each app lineage can replace at most 8 times.
+`Registry/ApplyApprovedApplicationTransition` takes the current `program_id`, a coach `ReplaceProgram` permit id, the approved full post-state details, and a non-empty public reason string. It is only callable by the owner while the app is `Building`; this includes the state after `Review/RequestPublishChanges` returns the app to `Building`. The new id must never have been registered or reserved before, and each app lineage can replace at most 8 times.
 
 ```json
 [
   "0xold_program_id",
-  "0xnew_program_id",
+  1,
+  {"handle":"alice-bot","program_id":"0xnew_program_id","operator":"0xoperator", "...":"full approved tuple"},
   "Redeployed after fixing the callable service"
 ]
 ```
 
-After replacement, write calls using the old id return `StaleProgramId`. Use `Registry/ResolveCurrentProgramId` to map any old id to the current id before `UpdateApplication`, `SubmitApplication`, review, board, or chat writes.
+After replacement, write calls using the old id return `StaleProgramId`. Use `Registry/ResolveCurrentProgramId` to map any old id to the current id before application update, submit, review, board, or chat writes.
 
-Replacement only changes the registered program id and migrates current board/chat/review state. It does not change `skills_url`, `skills_hash`, `idl_url`, or `idl_hash`. If the replacement came from review-driven code or IDL changes, publish the new artifacts and follow with `Registry/UpdateApplication` while the app is still `Building`.
+Replacement changes the registered program id, protected metadata, and current board/chat/review state in one approved transition.
 
 ## Rule 9 — Pre-deploy project review args
 
@@ -131,8 +132,6 @@ Replacement only changes the registered program id and migrates current board/ch
 ]
 ```
 
-When `Admin/GetConfig.require_project_review_approval=false`, the legacy `Review/SubmitProjectReview` fallback takes only the struct inside the same outer array.
-
 `Review/RecordProjectGuidance` takes `project_review_id`, `ProjectGuidanceOutcome`, and `body`:
 
 ```json
@@ -143,12 +142,11 @@ When `Admin/GetConfig.require_project_review_approval=false`, the legacy `Review
 ]
 ```
 
-`Review/OwnerProjectReply`, `Review/PostProjectReviewerComment`, and `Review/LinkProjectReviewToApplication` are plain positional arrays:
+`Review/OwnerProjectReply` and `Review/PostProjectReviewerComment` are plain positional arrays:
 
 ```json
 [1, "I narrowed the idea to one callable method and added repo evidence."]
 [1, "Name the consuming app before deployment."]
-[1, "0xaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"]
 ```
 
 ## Rule 10 — Board args files are two-arg arrays

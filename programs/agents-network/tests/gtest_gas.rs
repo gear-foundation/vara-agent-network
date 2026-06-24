@@ -80,7 +80,6 @@ fn paused_config() -> Config {
         allow_chat: true,
         allow_board_updates: true,
         allow_review: true,
-        require_project_review_approval: false,
         max_chat_body: 2048,
         max_review_body_bytes: 1_000,
         max_mentions_per_post: 8,
@@ -258,20 +257,13 @@ async fn gas_gate_register_application_worst_case() {
     // executes against a non-trivial state size.
     for i in 0..19u64 {
         let handle = format!("filler-{i:02}");
-        let mut pending =
-            program
-                .registry()
-                .register_application(mk_register_req(&handle, BOB, 300 + i));
-        pending = pending.with_actor_id((300 + i).into());
-        let msg_id = pending.send_one_way().unwrap();
-        let _ = env.system().run_next_block();
-        // Drain the reply for the sent message so the queue stays clean.
-        let _ = msg_id;
+        register_application_for_test(&program, mk_register_req(&handle, BOB, 300 + i), 300 + i)
+            .await;
     }
 
     // Worst-case RegisterAppReq: all string fields at max caps.
     let mut req = mk_register_req(&"a".repeat(32), BOB, 3_000_000); // handle max len
-    req.github_url = format!("https://github.com/{}", "x".repeat(237));
+    req.github_url = format!("https://github.com/x/{}", "x".repeat(235));
     req.skills_url = "x".repeat(256);
     req.idl_url = format!("https://example.com/{}.idl", "x".repeat(228));
     req.description = "x".repeat(280);
@@ -282,6 +274,7 @@ async fn gas_gate_register_application_worst_case() {
     });
 
     env.system().mint_to(3_000_000u64, FUND);
+    let (req, _) = approved_register_req_for_test(&program, req).await;
     let mut pending = program.registry().register_application(req);
     pending = pending.with_actor_id((3_000_000u64).into());
     let msg_id = pending.send_one_way().unwrap();
@@ -302,14 +295,8 @@ async fn gas_gate_chat_post_worst_case() {
     // Pre-register 8 distinct application recipients.
     for i in 0..8u64 {
         let handle = format!("recip-{i}");
-        let mut pending =
-            program
-                .registry()
-                .register_application(mk_register_req(&handle, ALICE, 400 + i));
-        pending = pending.with_actor_id((400 + i).into());
-        let msg_id = pending.send_one_way().unwrap();
-        let _ = env.system().run_next_block();
-        let _ = msg_id;
+        register_application_for_test(&program, mk_register_req(&handle, ALICE, 400 + i), 400 + i)
+            .await;
     }
 
     // Saturate ALL 8 recipient inboxes to cap 100. Every mention on the
@@ -377,6 +364,7 @@ async fn gas_gate_discover_populated_registry() {
         let mut req = mk_register_req(&handle, ALICE, 700 + i);
         req.track = if i < 50 { Track::Services } else { Track::Open };
 
+        let (req, _) = approved_register_req_for_test(&program, req).await;
         let mut pending = program.registry().register_application(req);
         pending = pending.with_actor_id((700 + i).into());
         let _ = pending.send_one_way().unwrap();
@@ -413,13 +401,8 @@ async fn gas_gate_list_announcements_populated_board() {
     for i in 0..60u64 {
         env.system().mint_to(900 + i, FUND);
         let handle = format!("board-{i:02}");
-        let mut pending =
-            program
-                .registry()
-                .register_application(mk_register_req(&handle, BOB, 900 + i));
-        pending = pending.with_actor_id((900 + i).into());
-        let _ = pending.send_one_way().unwrap();
-        let _ = env.system().run_next_block();
+        register_application_for_test(&program, mk_register_req(&handle, BOB, 900 + i), 900 + i)
+            .await;
     }
 
     let mut pending = program.board().list_announcements(None, 50);

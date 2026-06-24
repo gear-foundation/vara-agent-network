@@ -6,7 +6,7 @@ import { useRouter } from 'next/navigation'
 import { MessageSquare, Send, ShieldCheck } from 'lucide-react'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { getActiveProjectReviewApproval, type ProjectReviewApproval } from '@/lib/indexer-client'
-import { addressToActorId, getProgramConfig, submitApprovedProjectReview, submitProjectReview } from '@/lib/vara-program'
+import { addressToActorId, submitApprovedProjectReview } from '@/lib/vara-program'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
@@ -18,7 +18,6 @@ export function ProjectReviewSubmitForm() {
   const [idea, setIdea] = useState('')
   const [busy, setBusy] = useState(false)
   const [approval, setApproval] = useState<ProjectReviewApproval | null>(null)
-  const [approvalRequired, setApprovalRequired] = useState(true)
   const [approvalLoading, setApprovalLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -30,14 +29,8 @@ export function ProjectReviewSubmitForm() {
     setApprovalLoading(true)
     setError(null)
     try {
-      const config = await getProgramConfig(account.address)
-      setApprovalRequired(config.require_project_review_approval)
-      if (config.require_project_review_approval) {
-        const actorId = await addressToActorId(account.address)
-        setApproval(await getActiveProjectReviewApproval(actorId))
-      } else {
-        setApproval(null)
-      }
+      const actorId = await addressToActorId(account.address)
+      setApproval(await getActiveProjectReviewApproval(actorId))
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err))
     } finally {
@@ -55,18 +48,14 @@ export function ProjectReviewSubmitForm() {
       setError('Connect a Vara account first.')
       return
     }
-    if (approvalRequired && !approval) {
+    if (!approval) {
       setError('A Coach approval is required before project review submission.')
       return
     }
     setBusy(true)
     setError(null)
     try {
-      if (approvalRequired) {
-        await submitApprovedProjectReview(account, githubUrl, idea, approval!.approvalId)
-      } else {
-        await submitProjectReview(account, githubUrl, idea)
-      }
+      await submitApprovedProjectReview(account, githubUrl, idea, approval.approvalId)
       router.push('/dashboard/project-reviews')
       router.refresh()
     } catch (err) {
@@ -82,9 +71,7 @@ export function ProjectReviewSubmitForm() {
       <h1>Submit a project</h1>
       <p>Submit only the GitHub URL and product idea. Review text is public and permanent.</p>
       <div className="review-approval-state">
-        {!approvalRequired ? (
-          <span>Coach approval is not required on this deployment.</span>
-        ) : approval ? (
+        {approval ? (
           <span><ShieldCheck className="h-4 w-4" /> Coach approval #{approval.approvalId}</span>
         ) : approvalLoading ? (
           <span>Checking Coach approval...</span>
@@ -95,7 +82,7 @@ export function ProjectReviewSubmitForm() {
           Refresh
         </Button>
       </div>
-      {approvalRequired && !approval && !approvalLoading ? (
+      {!approval && !approvalLoading ? (
         <Button asChild variant="outline">
           <Link href="/chat"><MessageSquare className="h-4 w-4" /> Open chat</Link>
         </Button>
@@ -111,7 +98,7 @@ export function ProjectReviewSubmitForm() {
         value={idea}
         onChange={(event) => setIdea(event.target.value)}
       />
-      <Button disabled={busy || approvalLoading || (approvalRequired && !approval) || !githubUrl.trim() || !idea.trim()} onClick={() => void submit()}>
+      <Button disabled={busy || approvalLoading || !approval || !githubUrl.trim() || !idea.trim()} onClick={() => void submit()}>
         <Send className="h-4 w-4" /> Submit project
       </Button>
     </div>

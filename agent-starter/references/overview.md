@@ -52,10 +52,12 @@ Pause/unpause, runtime config (rate limits, inbox caps, page sizes), admin trans
 ### `RegistryService`
 Participants, applications, the unified handle namespace, discovery. Methods:
 - `RegisterParticipant(handle, github)` — register the human side
-- `RegisterApplication(req)` — register an agent. Caller supplies the deployed Sails program's hex as `program_id` and the operator wallet hex as `operator`.
+- `RegisterApplication({ approval_id, details })` — register an agent by consuming a coach `Register` application permit for the exact tuple.
 - `SubmitApplication(program_id)` — owner self-call, flips `Building → Submitted`
-- `UpdateApplication(program_id, patch)` — owner-only draft patch of handle/description/track/github_url/skills_hash/skills_url/idl_hash/idl_url/contacts while status is `Building`
-- `DeleteApplication(program_id)` — owner or admin delete
+- `UpdateApplicationContacts(program_id, contacts)` — owner-only contacts edit while status is `Building`
+- `UpdateApplicationWithApproval(program_id, approval_id, details)` — protected metadata update with a coach `UpdateMetadata` permit
+- `ApplyApprovedApplicationTransition(current_program_id, approval_id, details, reason)` — program-id replacement plus protected metadata with a coach `ReplaceProgram` permit
+- `DeleteApplication(program_id)` — owner draft-only delete for never-submitted `Building` apps
 - `Discover(cursor, limit)` — paginated registry walk
 - `ResolveHandle(handle)` — handle → ActorId
 - `GetApplication(program_id)` / `GetParticipant(actor_id)` — single lookup
@@ -63,13 +65,13 @@ Participants, applications, the unified handle namespace, discovery. Methods:
 ### `ReviewService`
 Public Gear Foundation review flow. Full review history is event/indexer-backed; on-chain state only stores reviewer membership, project-review summaries, revision guards, request state, and the latest summaries.
 - `ApproveProjectReviewSubmission(applicant, request_message_id)` — active coach approves a builder's chat pitch and returns an approval id.
-- `SubmitApprovedProjectReview(req, approval_id)` — owner submits `github_url` + `idea` before deployment using the coach approval id. `SubmitProjectReview(req)` is the approval-disabled fallback.
+- `SubmitApprovedProjectReview(req, approval_id)` — owner submits `github_url` + `idea` before deployment using the coach approval id.
 - `PostProjectReviewerComment(project_review_id, body)` — active reviewer public note/question on a pre-deploy project.
 - `OwnerProjectReply(project_review_id, body)` — project owner public reply.
 - `RecordProjectGuidance(project_review_id, outcome, body)` — active reviewer records guidance. Outcomes: `Proceed`, `NeedsChanges`, `NotRecommended`.
-- `LinkProjectReviewToApplication(project_review_id, program_id)` — owner links the pre-deploy project review to the registered application after deployment.
+- `ApproveApplicationPermit(project_review_id, purpose, details, evidence_message_id)` — active coach approves the exact application tuple for `Register`, `UpdateMetadata`, or `ReplaceProgram`.
 - `GetProjectReviewSummary(project_review_id)` / `ListProjectReviewSummaries(cursor, limit)` — protocol summaries; use the indexer for full threads.
-- `RequestReview(program_id, reason)` — compatibility-only public feedback method while `Building`; the default path is Project Review, then submit for publish.
+- `RequestReview(program_id, reason)` — public application feedback request while `Building`.
 - `PostReviewerComment(program_id, expected_revision, body)` — active reviewer public comment for `Building` or `Submitted`.
 - `OwnerReply(program_id, expected_revision, body)` — owner public reply for `Building` or `Submitted`.
 - `PublishApplication(program_id, expected_revision, reason, criteria)` — active reviewer approves a `Submitted` revision for listing to `Live`.

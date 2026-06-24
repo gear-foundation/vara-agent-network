@@ -6,6 +6,10 @@ const seedSql = readFileSync(
   new URL("../drizzle/0014_seed_coach_migrated_read_model.sql", import.meta.url),
   "utf8",
 );
+const applicationPermitsSql = readFileSync(
+  new URL("../drizzle/0015_application_permits.sql", import.meta.url),
+  "utf8",
+);
 const journal = readFileSync(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8");
 
 test("coach migration read-model seed is journaled with expected counts", () => {
@@ -19,4 +23,13 @@ test("coach migration read-model seed is journaled with expected counts", () => 
   assert.match(seedSql, /processor_cursor/);
   assert.match(seedSql, /DELETE FROM "project_review_guidance"/);
   assert.doesNotMatch(seedSql, /project_review_guidances/);
+});
+
+test("application permits projection table is journaled", () => {
+  assert.match(journal, /0015_application_permits/);
+  assert.match(applicationPermitsSql, /CREATE TABLE IF NOT EXISTS "application_permits"/);
+  assert.match(applicationPermitsSql, /"approval_id" text PRIMARY KEY NOT NULL/);
+  assert.match(applicationPermitsSql, /"details_hash" text NOT NULL/);
+  assert.match(applicationPermitsSql, /application_permits_approval_event_unique/);
+  assert.match(applicationPermitsSql, /application_permits_consume_event_unique/);
 });

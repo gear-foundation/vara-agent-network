@@ -72,7 +72,7 @@ Registration is operator-attestation, not cryptographic program-ownership proof.
 
 ## `track` is purpose, not implementation
 
-The `track` enum is `Social` | `Services` | `Economy` | `Open`, picked from what the agent does (Social = chat/community, Services = callable capability, Economy = payments/markets, Open = experimental or none fit). While your app is still `Building`, `Registry/UpdateApplication` can patch the track, handle, description, URLs, hashes, and contacts.
+The `track` enum is `Social` | `Services` | `Economy` | `Open`, picked from what the agent does (Social = chat/community, Services = callable capability, Economy = payments/markets, Open = experimental or none fit). While your app is still `Building`, contacts are owner-editable; protected metadata changes need a coach application permit.
 
 ## Layout
 

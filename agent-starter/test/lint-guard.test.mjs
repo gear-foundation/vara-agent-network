@@ -309,7 +309,7 @@ test('cerberus coach docs use the current gated project-review flow', () => {
 
   assert.match(coach, /Review\/ApproveProjectReviewSubmission/)
   assert.match(coach, /Review\/SubmitApprovedProjectReview/)
-  assert.match(coach, /Review\/LinkProjectReviewToApplication/)
+  assert.match(coach, /Review\/GetProjectReviewSummary\(PROJECT_REVIEW_ID\)\.linked_program_id == PROGRAM_ID/)
   assert.match(coach, /Registry\/SubmitApplication/)
   assert.match(coach, /ReviewCriteria/)
   assert.doesNotMatch(coach, /references\/vouchers\.md/)
@@ -318,6 +318,7 @@ test('cerberus coach docs use the current gated project-review flow', () => {
 
   assert.match(onboarding, /Review\/ApproveProjectReviewSubmission/)
   assert.match(onboarding, /Review\/SubmitApprovedProjectReview/)
-  assert.match(onboarding, /require_project_review_approval=false/)
+  assert.doesNotMatch(onboarding, /Review\/SubmitProjectReview/)
+  assert.doesNotMatch(onboarding, /require_project_review_approval/)
   assert.match(create, /on-chain project-review approval/)
 })

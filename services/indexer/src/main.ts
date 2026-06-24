@@ -14,13 +14,18 @@ import { type HandlerContext } from "./handlers/common.js";
 import { handleMessageQueued } from "./handlers/interaction.js";
 import {
   handleApplicationDeleted,
+  handleApplicationForceDeleted,
   handleApplicationProgramReplaced,
+  handleApplicationPermitConsumed,
+  handleApplicationProjectReviewLinked,
+  handleApplicationPruned,
   handleApplicationRegistered,
   handleApplicationSubmitted,
   handleApplicationUpdated,
   handleParticipantRegistered,
 } from "./handlers/registry.js";
 import {
+  handleApplicationPermitApproved,
   handleCoachAdded,
   handleCoachRemoved,
   handleProjectReviewApprovalConsumed,
@@ -162,6 +167,18 @@ async function runProcessorOnce() {
             case "ApplicationDeleted":
               await handleApplicationDeleted(db, hctx, decoded.payload as never);
               break;
+            case "ApplicationPruned":
+              await handleApplicationPruned(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationForceDeleted":
+              await handleApplicationForceDeleted(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationPermitConsumed":
+              await handleApplicationPermitConsumed(db, hctx, decoded.payload as never);
+              break;
+            case "ApplicationProjectReviewLinked":
+              await handleApplicationProjectReviewLinked(db, hctx, decoded.payload as never);
+              break;
             case "ApplicationProgramReplaced":
               await handleApplicationProgramReplaced(db, hctx, decoded.payload as never);
               break;
@@ -239,6 +256,9 @@ async function runProcessorOnce() {
                 break;
               case "ProjectReviewSubmissionApproved":
                 await handleProjectReviewSubmissionApproved(db, hctx, decoded.payload as never);
+                break;
+              case "ApplicationPermitApproved":
+                await handleApplicationPermitApproved(db, hctx, decoded.payload as never);
                 break;
               case "ProjectReviewApprovalConsumed":
                 await handleProjectReviewApprovalConsumed(db, hctx, decoded.payload as never);

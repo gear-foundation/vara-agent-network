@@ -1,10 +1,10 @@
 //! Validation guards shared across services. Limits come from runtime config.
 
 use crate::types::{
-    Config, ContactLinks, ContractError, Hash32, MAX_ANNOUNCEMENT_BODY, MAX_ANNOUNCEMENT_TITLE,
-    MAX_CONTACT_LINK, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN, MAX_IDENTITY_FIELD,
-    MAX_IDL_URL, MAX_REVIEW_CRITERION_NOTE, MAX_SKILLS_URL, MAX_TAG_LEN, MAX_TAGS, MIN_HANDLE_LEN,
-    RegisterAppReq, ReviewCriteria, SubmitProjectReviewReq,
+    ApplicationPermitDetails, Config, ContactLinks, ContractError, Hash32, MAX_ANNOUNCEMENT_BODY,
+    MAX_ANNOUNCEMENT_TITLE, MAX_CONTACT_LINK, MAX_DESCRIPTION, MAX_GITHUB_URL, MAX_HANDLE_LEN,
+    MAX_IDENTITY_FIELD, MAX_IDL_URL, MAX_REVIEW_CRITERION_NOTE, MAX_SKILLS_URL, MAX_TAG_LEN,
+    MAX_TAGS, MIN_HANDLE_LEN, RegisterAppReq, ReviewCriteria, SubmitProjectReviewReq,
 };
 use sails_rs::prelude::*;
 
@@ -82,6 +82,24 @@ pub fn check_register_app_req(req: &RegisterAppReq) -> Result<(), ContractError>
     validate_idl_url(&req.idl_url)?;
     check_contact_links(req.contacts.as_ref())?;
     Ok(())
+}
+
+pub fn check_application_permit_details(
+    details: &ApplicationPermitDetails,
+) -> Result<(), ContractError> {
+    check_register_app_req(&RegisterAppReq {
+        handle: details.handle.clone(),
+        program_id: details.program_id,
+        operator: details.operator,
+        github_url: details.github_url.clone(),
+        skills_hash: details.skills_hash,
+        skills_url: details.skills_url.clone(),
+        idl_hash: details.idl_hash,
+        idl_url: details.idl_url.clone(),
+        description: details.description.clone(),
+        track: details.track,
+        contacts: details.contacts.clone(),
+    })
 }
 
 pub fn validate_hash(hash: &[u8; 32]) -> Result<(), ContractError> {

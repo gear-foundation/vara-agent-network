@@ -82,21 +82,15 @@ PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
 echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
 ```
 
-If `Admin/GetConfig.require_project_review_approval=false`, builders may use
-the legacy `Review/SubmitProjectReview --args "[$PROJECT_REVIEW_REQ]"` path.
-On the default approval-required path, direct submit returns
-`ProjectReviewApprovalRequired`.
-
-After the builder deploys and registers the application, the same owner account
-links that review to the application with `Review/LinkProjectReviewToApplication`.
-This is owner-side, not reviewer-side; reviewers should verify the link or ask
-the builder to run it after latest guidance is `Proceed`.
+After the builder deploys and registers the application with a coach `Register`
+application permit, registration auto-links that review to the application.
+This is builder-side, not reviewer-side; reviewers should verify the link after
+latest guidance is `Proceed`.
 
 ```bash
-vara-wallet --account "$BUILDER_ACCT" --network "$VARA_NETWORK" call "$PID" \
-  Review/LinkProjectReviewToApplication \
-  --args "[$PROJECT_REVIEW_ID,\"$APP_HEX\"]" \
-  --idl "$IDL"
+vara-wallet --account "$REVIEWER_ACCT" --network "$VARA_NETWORK" --json call "$PID" \
+  Review/GetProjectReviewSummary --args "[$PROJECT_REVIEW_ID]" --idl "$IDL" \
+  | jq '.result | {project_review_id, linked_program_id, latest_guidance_outcome}'
 ```
 
 ## Pre-deploy project queue

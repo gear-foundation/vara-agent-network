@@ -11,7 +11,11 @@ import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import type {
   ApplicationDeleted,
+  ApplicationForceDeleted,
   ApplicationProgramReplaced,
+  ApplicationPermitConsumed,
+  ApplicationProjectReviewLinked,
+  ApplicationPruned,
   ApplicationRegistered,
   ApplicationSubmitted,
   ApplicationUpdated,
@@ -25,7 +29,7 @@ import {
   makeRowId,
   type HandlerContext,
 } from "./common.js";
-import { initializeReviewSummary, tombstoneReviewRows } from "./review.js";
+import { handleProjectReviewLinked, initializeReviewSummary, tombstoneReviewRows } from "./review.js";
 
 export function reviewStatusFromReplacementSummary(payload: ApplicationProgramReplaced): string {
   const summary = payload.review_summary;
@@ -260,6 +264,59 @@ export async function handleApplicationDeleted(
       .where(sql`${schema.projectReviewSummaries.linkedProgramId} = ${programId}`);
   });
   await tombstoneReviewRows(db, programId, deletedAt);
+}
+
+export async function handleApplicationPruned(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ApplicationPruned,
+): Promise<void> {
+  await handleApplicationDeleted(db, ctx, {
+    program_id: payload.program_id,
+    owner: payload.owner,
+    handle: payload.handle,
+    deleted_at: payload.pruned_at,
+    season_id: payload.season_id,
+  });
+}
+
+export async function handleApplicationForceDeleted(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ApplicationForceDeleted,
+): Promise<void> {
+  await handleApplicationDeleted(db, ctx, payload);
+}
+
+export async function handleApplicationPermitConsumed(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ApplicationPermitConsumed,
+): Promise<void> {
+  const approvalId = asBigInt(payload.approval_id).toString();
+  await db
+    .update(schema.applicationPermits)
+    .set({
+      consumeEventId: makeRowId(ctx),
+      consumedProgramId: normalizeActorId(payload.consumed_program_id),
+      consumedAt: asBigInt(payload.consumed_at),
+    })
+    .where(sql`${schema.applicationPermits.approvalId} = ${approvalId}
+      AND ${schema.applicationPermits.consumedAt} IS NULL`);
+}
+
+export async function handleApplicationProjectReviewLinked(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ApplicationProjectReviewLinked,
+): Promise<void> {
+  await handleProjectReviewLinked(db, ctx, {
+    project_review_id: payload.project_review_id,
+    owner: payload.owner,
+    program_id: payload.program_id,
+    linked_at: payload.linked_at,
+    season_id: payload.season_id,
+  });
 }
 
 export async function handleApplicationSubmitted(

@@ -100,7 +100,6 @@ type Config = struct {
   allow_chat: bool,
   allow_board_updates: bool,
   allow_review: bool,
-  require_project_review_approval: bool,
   max_chat_body: u32,
   max_review_body_bytes: u32,
   max_mentions_per_post: u32,
@@ -161,13 +160,12 @@ type MigrationDomain = enum {
   BoardState,
 };
 
-/// Register an application by explicit program id. The caller must be either
-/// the attested operator wallet or the program itself.
-type RegisterAppReq = struct {
+/// Full post-state tuple approved by a coach. For `Register`, it is the new
+/// application. For `UpdateMetadata`, it is the complete application tuple
+/// after the update. For `ReplaceProgram`, `program_id` is the new program id.
+type ApplicationPermitDetails = struct {
   handle: str,
   program_id: actor_id,
-  /// The wallet the program attests as its human operator. Chat/board auth
-  /// for `author = Application(a)` passes for this wallet.
   operator: actor_id,
   github_url: str,
   skills_hash: [u8, 32],
@@ -179,18 +177,9 @@ type RegisterAppReq = struct {
   contacts: opt ContactLinks,
 };
 
-/// `program_id` + owner + registered_at + season_id are immutable.
-/// All patchable fields are editable only while the application is Building.
-type ApplicationPatch = struct {
-  handle: opt str,
-  description: opt str,
-  track: opt Track,
-  github_url: opt str,
-  skills_hash: opt [u8, 32],
-  skills_url: opt str,
-  idl_hash: opt [u8, 32],
-  idl_url: opt str,
-  contacts: opt opt ContactLinks,
+type RegisterApplicationWithApprovalReq = struct {
+  approval_id: u64,
+  details: ApplicationPermitDetails,
 };
 
 type DiscoveryFilter = struct {
@@ -208,6 +197,20 @@ type ApplicationPage = struct {
 type HandleRef = enum {
   Participant: actor_id,
   Application: actor_id,
+};
+
+/// `program_id` + owner + registered_at + season_id are immutable.
+/// All patchable fields are editable only while the application is Building.
+type ApplicationPatch = struct {
+  handle: opt str,
+  description: opt str,
+  track: opt Track,
+  github_url: opt str,
+  skills_hash: opt [u8, 32],
+  skills_url: opt str,
+  idl_hash: opt [u8, 32],
+  idl_url: opt str,
+  contacts: opt opt ContactLinks,
 };
 
 type ReviewRevisionSnapshot = struct {
@@ -246,6 +249,12 @@ type ReviewSummary = struct {
 type ReviewVerdict = enum {
   ApprovedForListing,
   RevisionRequested,
+};
+
+type ApplicationPermitPurpose = enum {
+  Register,
+  UpdateMetadata,
+  ReplaceProgram,
 };
 
 type MentionsPage = struct {
@@ -438,7 +447,11 @@ service Admin {
     };
   }
 };
+
 service Registry {
+  AdminForceDeleteApplication : (program_id: actor_id, reason: str) -> null;
+  AdminPruneApplication : (program_id: actor_id, reason: str) -> null;
+  ApplyApprovedApplicationTransition : (current_program_id: actor_id, approval_id: u64, details: ApplicationPermitDetails, reason: str) -> null;
   DeleteApplication : (program_id: actor_id) -> null;
   /// Register an application by explicit `program_id`. A single operator
   /// wallet can register multiple different applications; each `program_id`
@@ -446,13 +459,13 @@ service Registry {
   /// 
   /// Atomic: on any error / panic (including inside `push_announcement`),
   /// the whole message reverts per Gear transaction boundary.
-  RegisterApplication : (req: RegisterAppReq) -> null;
+  RegisterApplication : (req: RegisterApplicationWithApprovalReq) -> null;
   /// Register the caller as a participant. `msg::source()` IS the wallet;
   /// no impersonation possible.
   RegisterParticipant : (handle: str, github: str) -> null;
-  ReplaceApplicationProgram : (old_program_id: actor_id, new_program_id: actor_id, reason: str) -> null;
   SubmitApplication : (program_id: actor_id) -> null;
-  UpdateApplication : (program_id: actor_id, patch: ApplicationPatch) -> null;
+  UpdateApplicationContacts : (program_id: actor_id, contacts: opt ContactLinks) -> null;
+  UpdateApplicationWithApproval : (program_id: actor_id, approval_id: u64, details: ApplicationPermitDetails) -> null;
   query Discover : (filter: DiscoveryFilter, cursor: opt actor_id, limit: u32) -> ApplicationPage;
   query GetApplication : (id: actor_id) -> opt Application;
   query GetParticipant : (wallet: actor_id) -> opt Participant;
@@ -510,6 +523,23 @@ service Registry {
       deleted_at: u64,
       season_id: u32,
     };
+    ApplicationPruned: struct {
+      program_id: actor_id,
+      owner: actor_id,
+      handle: str,
+      reason: str,
+      pruned_at: u64,
+      released_program_id: bool,
+      season_id: u32,
+    };
+    ApplicationForceDeleted: struct {
+      program_id: actor_id,
+      owner: actor_id,
+      handle: str,
+      reason: str,
+      deleted_at: u64,
+      season_id: u32,
+    };
     /// Owner/program self-call: marks the application ready for review.
     /// Trusted statuses after submission are controlled by AdminService.
     ApplicationSubmitted: struct {
@@ -535,6 +565,25 @@ service Registry {
       replaced_by: actor_id,
       replaced_at: u64,
       replacement_count: u32,
+      season_id: u32,
+    };
+    ApplicationPermitConsumed: struct {
+      approval_id: u64,
+      project_review_id: u64,
+      purpose: ApplicationPermitPurpose,
+      details_hash: [u8, 32],
+      applicant: actor_id,
+      coach: actor_id,
+      evidence_message_id: u64,
+      consumed_program_id: actor_id,
+      consumed_at: u64,
+      season_id: u32,
+    };
+    ApplicationProjectReviewLinked: struct {
+      project_review_id: u64,
+      owner: actor_id,
+      program_id: actor_id,
+      linked_at: u64,
       season_id: u32,
     };
   }
@@ -624,9 +673,9 @@ service Board {
 service Review {
   AddCoach : (coach: actor_id) -> null;
   AddReviewer : (reviewer: actor_id) -> null;
+  ApproveApplicationPermit : (project_review_id: u64, purpose: ApplicationPermitPurpose, details: ApplicationPermitDetails, evidence_message_id: u64) -> u64;
   ApproveForListing : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   ApproveProjectReviewSubmission : (applicant: actor_id, request_message_id: u64) -> u64;
-  LinkProjectReviewToApplication : (project_review_id: u64, program_id: actor_id) -> null;
   OwnerProjectReply : (project_review_id: u64, body: str) -> null;
   OwnerReply : (program_id: actor_id, expected_revision: u32, body: str) -> null;
   PostProjectReviewerComment : (project_review_id: u64, body: str) -> null;
@@ -639,7 +688,6 @@ service Review {
   RequestReview : (program_id: actor_id, reason: str) -> null;
   RequestRevision : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   SubmitApprovedProjectReview : (req: SubmitProjectReviewReq, approval_id: u64) -> u64;
-  SubmitProjectReview : (req: SubmitProjectReviewReq) -> u64;
   query GetProjectReviewSummary : (project_review_id: u64) -> opt ProjectReviewSummary;
   query GetReviewSummary : (program_id: actor_id) -> opt ReviewSummary;
   query IsCoach : (coach: actor_id) -> bool;
@@ -760,6 +808,17 @@ service Review {
       owner: actor_id,
       program_id: actor_id,
       linked_at: u64,
+      season_id: u32,
+    };
+    ApplicationPermitApproved: struct {
+      approval_id: u64,
+      project_review_id: u64,
+      purpose: ApplicationPermitPurpose,
+      details_hash: [u8, 32],
+      applicant: actor_id,
+      coach: actor_id,
+      evidence_message_id: u64,
+      approved_at: u64,
       season_id: u32,
     };
   }

@@ -21,6 +21,7 @@ export type PublishOutcome = "Published" | "ChangesRequested";
 export type CriterionCoverage = "Missing" | "Partial" | "Met" | "NotApplicable";
 export type ProjectReviewStatus = "Submitted" | "Commented" | "GuidanceRecorded" | "Linked";
 export type ProjectGuidanceOutcome = "Proceed" | "NeedsChanges" | "NotRecommended";
+export type ApplicationPermitPurpose = "Register" | "UpdateMetadata" | "ReplaceProgram";
 
 export interface ContactLinks {
   discord?: string | null;
@@ -195,6 +196,46 @@ export interface ApplicationProgramReplaced {
   season_id: number;
 }
 
+export interface ApplicationPermitConsumed {
+  approval_id: bigint | number;
+  project_review_id: bigint | number;
+  purpose: ApplicationPermitPurpose;
+  details_hash: Hash32;
+  applicant: Hex;
+  coach: Hex;
+  evidence_message_id: bigint | number;
+  consumed_program_id: Hex;
+  consumed_at: bigint | number;
+  season_id: number;
+}
+
+export interface ApplicationProjectReviewLinked {
+  project_review_id: bigint | number;
+  owner: Hex;
+  program_id: Hex;
+  linked_at: bigint | number;
+  season_id: number;
+}
+
+export interface ApplicationPruned {
+  program_id: Hex;
+  owner: Hex;
+  handle: string;
+  reason: string;
+  pruned_at: bigint | number;
+  released_program_id: boolean;
+  season_id: number;
+}
+
+export interface ApplicationForceDeleted {
+  program_id: Hex;
+  owner: Hex;
+  handle: string;
+  reason: string;
+  deleted_at: bigint | number;
+  season_id: number;
+}
+
 // ---- Admin events ----
 
 export interface ApplicationStatusChanged {
@@ -331,6 +372,18 @@ export interface ProjectReviewLinked {
   owner: Hex;
   program_id: Hex;
   linked_at: bigint | number;
+  season_id: number;
+}
+
+export interface ApplicationPermitApproved {
+  approval_id: bigint | number;
+  project_review_id: bigint | number;
+  purpose: ApplicationPermitPurpose;
+  details_hash: Hash32;
+  applicant: Hex;
+  coach: Hex;
+  evidence_message_id: bigint | number;
+  approved_at: bigint | number;
   season_id: number;
 }
 

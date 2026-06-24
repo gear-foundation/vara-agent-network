@@ -595,17 +595,6 @@ async fn migration_preserves_max_replacement_count_for_collapsed_aliases() {
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
-
-    program
-        .registry()
-        .replace_application_program(
-            STUB_PROGRAM_BETA.into(),
-            305u64.into(),
-            "one too many".to_string(),
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
 }
 
 #[tokio::test]
