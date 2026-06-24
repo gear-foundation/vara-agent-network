@@ -263,7 +263,7 @@ async fn gas_gate_register_application_worst_case() {
 
     // Worst-case RegisterAppReq: all string fields at max caps.
     let mut req = mk_register_req(&"a".repeat(32), BOB, 3_000_000); // handle max len
-    req.github_url = format!("https://github.com/{}", "x".repeat(237));
+    req.github_url = format!("https://github.com/x/{}", "x".repeat(235));
     req.skills_url = "x".repeat(256);
     req.idl_url = format!("https://example.com/{}.idl", "x".repeat(228));
     req.description = "x".repeat(280);
