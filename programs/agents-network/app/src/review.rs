@@ -23,7 +23,9 @@ pub struct ReviewState {
     pub last_review_at: BTreeMap<ActorId, u64>,
     pub next_project_review_id: ProjectReviewId,
     pub next_project_review_approval_id: ProjectReviewApprovalId,
+    pub next_application_permit_id: ApplicationPermitId,
     pub project_review_approvals: BTreeMap<ProjectReviewApprovalId, ProjectReviewApproval>,
+    pub application_permits: BTreeMap<ApplicationPermitId, ApplicationPermit>,
     pub project_summaries: BTreeMap<ProjectReviewId, ProjectReviewSummary>,
     pub project_review_by_program: BTreeMap<ActorId, ProjectReviewId>,
 }
@@ -144,6 +146,17 @@ pub enum ReviewEvent {
         owner: ActorId,
         program_id: ActorId,
         linked_at: u64,
+        season_id: u32,
+    },
+    ApplicationPermitApproved {
+        approval_id: ApplicationPermitId,
+        project_review_id: ProjectReviewId,
+        purpose: ApplicationPermitPurpose,
+        details_hash: Hash32,
+        applicant: ActorId,
+        coach: ActorId,
+        evidence_message_id: ChatMsgId,
+        approved_at: u64,
         season_id: u32,
     },
 }
@@ -593,6 +606,93 @@ impl<'a> ReviewService<'a> {
             season_id,
         })
         .expect("emit ProjectReviewSubmissionApproved failed");
+
+        Ok(approval_id)
+    }
+
+    #[export(unwrap_result)]
+    pub fn approve_application_permit(
+        &mut self,
+        project_review_id: ProjectReviewId,
+        purpose: ApplicationPermitPurpose,
+        details: ApplicationPermitDetails,
+        evidence_message_id: ChatMsgId,
+    ) -> Result<ApplicationPermitId, ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::ensure_review_enabled(&config)?;
+        guards::check_application_permit_details(&details)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let details_hash = application_details_hash(&details);
+        let summary = {
+            let mut review = self.review.borrow_mut();
+            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
+            if !is_active_coach(&review, season_id, caller) {
+                return Err(ContractError::NotCoach);
+            }
+            let summary = review
+                .project_summaries
+                .get(&project_review_id)
+                .cloned()
+                .ok_or(ContractError::UnknownProjectReview)?;
+            if summary.owner == caller {
+                return Err(ContractError::SelfReviewForbidden);
+            }
+            if summary.latest_guidance_outcome != Some(ProjectGuidanceOutcome::Proceed) {
+                return Err(ContractError::ProjectReviewNotApproved);
+            }
+            if review.application_permits.values().any(|permit| {
+                permit.consumed_at.is_none()
+                    && permit.project_review_id == project_review_id
+                    && permit.purpose == purpose
+                    && permit.details_hash == details_hash
+            }) {
+                return Err(ContractError::DuplicateApplicationPermit);
+            }
+            summary
+        };
+
+        validate_application_permit_request(&self.registry.borrow(), &summary, purpose, &details)?;
+
+        let approval_id = {
+            let mut review = self.review.borrow_mut();
+            review.next_application_permit_id = review.next_application_permit_id.saturating_add(1);
+            let approval_id = review.next_application_permit_id;
+            review.application_permits.insert(
+                approval_id,
+                ApplicationPermit {
+                    approval_id,
+                    project_review_id,
+                    purpose,
+                    details_hash,
+                    pending_details: Some(details),
+                    applicant: summary.owner,
+                    coach: caller,
+                    evidence_message_id,
+                    consumed_program_id: None,
+                    season_id,
+                    approved_at: now,
+                    consumed_at: None,
+                },
+            );
+            approval_id
+        };
+
+        self.emit_event(ReviewEvent::ApplicationPermitApproved {
+            approval_id,
+            project_review_id,
+            purpose,
+            details_hash,
+            applicant: summary.owner,
+            coach: caller,
+            evidence_message_id,
+            approved_at: now,
+            season_id,
+        })
+        .expect("emit ApplicationPermitApproved failed");
 
         Ok(approval_id)
     }
@@ -1158,6 +1258,205 @@ pub fn replace_application_program(
     summary
 }
 
+pub struct ConsumedApplicationPermit {
+    pub approval_id: ApplicationPermitId,
+    pub project_review_id: ProjectReviewId,
+    pub purpose: ApplicationPermitPurpose,
+    pub details_hash: Hash32,
+    pub applicant: ActorId,
+    pub coach: ActorId,
+    pub evidence_message_id: ChatMsgId,
+    pub consumed_program_id: ActorId,
+    pub consumed_at: u64,
+    pub season_id: u32,
+}
+
+pub fn consume_application_permit(
+    review: &mut ReviewState,
+    approval_id: ApplicationPermitId,
+    purpose: ApplicationPermitPurpose,
+    details: &ApplicationPermitDetails,
+    consumed_program_id: ActorId,
+    consumed_at: u64,
+    season_id: u32,
+) -> Result<ConsumedApplicationPermit, ContractError> {
+    let details_hash = application_details_hash(details);
+    let permit = review
+        .application_permits
+        .get(&approval_id)
+        .cloned()
+        .ok_or(ContractError::UnknownApplicationPermit)?;
+    if permit.season_id != season_id || permit.purpose != purpose {
+        return Err(ContractError::ApplicationPermitMismatch);
+    }
+    if permit.consumed_at.is_some() {
+        return Err(ContractError::ApplicationPermitUsed);
+    }
+    if !is_active_coach(review, season_id, permit.coach) {
+        return Err(ContractError::NotCoach);
+    }
+    if permit.details_hash != details_hash || permit.pending_details.as_ref() != Some(details) {
+        return Err(ContractError::ApplicationPermitMismatch);
+    }
+    if let Some(stored) = review.application_permits.get_mut(&approval_id) {
+        stored.pending_details = None;
+        stored.consumed_program_id = Some(consumed_program_id);
+        stored.consumed_at = Some(consumed_at);
+    }
+    Ok(ConsumedApplicationPermit {
+        approval_id,
+        project_review_id: permit.project_review_id,
+        purpose: permit.purpose,
+        details_hash,
+        applicant: permit.applicant,
+        coach: permit.coach,
+        evidence_message_id: permit.evidence_message_id,
+        consumed_program_id,
+        consumed_at,
+        season_id,
+    })
+}
+
+pub fn link_project_review_after_registration(
+    review: &mut ReviewState,
+    project_review_id: ProjectReviewId,
+    owner: ActorId,
+    program_id: ActorId,
+    linked_at: u64,
+) -> Result<(), ContractError> {
+    if review.project_review_by_program.contains_key(&program_id) {
+        return Err(ContractError::ProgramAlreadyHasProjectReview);
+    }
+    let summary = review
+        .project_summaries
+        .get_mut(&project_review_id)
+        .ok_or(ContractError::UnknownProjectReview)?;
+    if summary.owner != owner {
+        return Err(ContractError::NotOwner);
+    }
+    if summary.linked_program_id.is_some() {
+        return Err(ContractError::ProjectReviewAlreadyLinked);
+    }
+    if summary.latest_guidance_outcome != Some(ProjectGuidanceOutcome::Proceed) {
+        return Err(ContractError::ProjectReviewNotApproved);
+    }
+    summary.linked_program_id = Some(program_id);
+    summary.status = ProjectReviewStatus::Linked;
+    summary.updated_at = linked_at;
+    review
+        .project_review_by_program
+        .insert(program_id, project_review_id);
+    Ok(())
+}
+
+pub fn application_details_hash(details: &ApplicationPermitDetails) -> Hash32 {
+    let encoded = details.encode();
+    let mut out = [0u8; 32];
+    for (idx, byte) in encoded.iter().enumerate() {
+        let slot = idx % 32;
+        out[slot] = out[slot].wrapping_add(*byte).rotate_left((idx % 8) as u32)
+            ^ ((idx as u8).wrapping_mul(31));
+    }
+    if out.iter().all(|byte| *byte == 0) {
+        out[0] = 1;
+    }
+    out
+}
+
+pub fn validate_application_permit_request(
+    reg: &RegistryState,
+    summary: &ProjectReviewSummary,
+    purpose: ApplicationPermitPurpose,
+    details: &ApplicationPermitDetails,
+) -> Result<(), ContractError> {
+    if details.operator != summary.owner {
+        return Err(ContractError::NotOwner);
+    }
+    if !github_repo_matches(&summary.github_url, &details.github_url)? {
+        return Err(ContractError::ProjectReviewGithubMismatch);
+    }
+
+    match purpose {
+        ApplicationPermitPurpose::Register => {
+            if summary.linked_program_id.is_some() {
+                return Err(ContractError::ProjectReviewAlreadyLinked);
+            }
+            ensure_handle_available(reg, &details.handle, None)?;
+            ensure_program_id_available(reg, details.program_id)?;
+        }
+        ApplicationPermitPurpose::UpdateMetadata => {
+            let current_program_id = summary
+                .linked_program_id
+                .ok_or(ContractError::ProjectReviewRequired)?;
+            if details.program_id != current_program_id {
+                return Err(ContractError::ApplicationPermitMismatch);
+            }
+            registry::ensure_current_program_id(reg, current_program_id)?;
+            let app = reg
+                .applications
+                .get(&current_program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            if app.owner != details.operator {
+                return Err(ContractError::NotOwner);
+            }
+            if app.status != AppStatus::Building {
+                return Err(ContractError::InvalidStatusTransition);
+            }
+            ensure_handle_available(reg, &details.handle, Some(current_program_id))?;
+        }
+        ApplicationPermitPurpose::ReplaceProgram => {
+            let current_program_id = summary
+                .linked_program_id
+                .ok_or(ContractError::ProjectReviewRequired)?;
+            if details.program_id == current_program_id {
+                return Err(ContractError::ProgramIdUnchanged);
+            }
+            registry::ensure_current_program_id(reg, current_program_id)?;
+            let app = reg
+                .applications
+                .get(&current_program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            if app.owner != details.operator {
+                return Err(ContractError::NotOwner);
+            }
+            if app.status != AppStatus::Building {
+                return Err(ContractError::InvalidStatusTransition);
+            }
+            ensure_handle_available(reg, &details.handle, Some(current_program_id))?;
+            ensure_program_id_available(reg, details.program_id)?;
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_handle_available(
+    reg: &RegistryState,
+    handle: &str,
+    existing_application: Option<ActorId>,
+) -> Result<(), ContractError> {
+    match reg.handles.get(handle) {
+        None => Ok(()),
+        Some(HandleRef::Application(program_id)) if Some(*program_id) == existing_application => {
+            Ok(())
+        }
+        Some(_) => Err(ContractError::HandleTaken),
+    }
+}
+
+fn ensure_program_id_available(
+    reg: &RegistryState,
+    program_id: ActorId,
+) -> Result<(), ContractError> {
+    if reg.applications.contains_key(&program_id) {
+        return Err(ContractError::AlreadyRegistered);
+    }
+    if reg.reserved_program_ids.contains_key(&program_id) {
+        return Err(ContractError::ProgramIdReserved);
+    }
+    Ok(())
+}
+
 pub(crate) fn import_reviewers(
     review: &mut ReviewState,
     season_id: u32,
@@ -1359,10 +1658,7 @@ fn is_active_role_member(
     season_id: u32,
     member: ActorId,
 ) -> bool {
-    members
-        .get(&(season_id, member))
-        .copied()
-        .unwrap_or(false)
+    members.get(&(season_id, member)).copied().unwrap_or(false)
 }
 
 fn list_active_role_members(
@@ -1435,7 +1731,7 @@ fn ensure_project_review_gate(
     Ok(())
 }
 
-fn github_repo_matches(left: &str, right: &str) -> Result<bool, ContractError> {
+pub(crate) fn github_repo_matches(left: &str, right: &str) -> Result<bool, ContractError> {
     Ok(github_repo_key(left)? == github_repo_key(right)?)
 }
 

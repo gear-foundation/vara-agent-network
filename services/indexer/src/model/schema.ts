@@ -114,6 +114,32 @@ export const applicationProgramReplacements = pgTable(
   }),
 );
 
+export const applicationPermits = pgTable(
+  "application_permits",
+  {
+    approvalId: text("approval_id").primaryKey(),
+    approvalEventId: text("approval_event_id").notNull(),
+    consumeEventId: text("consume_event_id"),
+    projectReviewId: text("project_review_id").notNull(),
+    purpose: text("purpose").notNull(),
+    detailsHash: text("details_hash").notNull(),
+    applicant: text("applicant").notNull(),
+    coach: text("coach").notNull(),
+    evidenceMessageId: text("evidence_message_id").notNull(),
+    consumedProgramId: text("consumed_program_id"),
+    seasonId: integer("season_id").notNull(),
+    approvedAt: bigint("approved_at", { mode: "bigint" }).notNull(),
+    consumedAt: bigint("consumed_at", { mode: "bigint" }),
+  },
+  (t) => ({
+    approvalEventIdx: uniqueIndex("application_permits_approval_event_unique").on(t.approvalEventId),
+    consumeEventIdx: uniqueIndex("application_permits_consume_event_unique").on(t.consumeEventId),
+    projectReviewIdx: index("application_permits_project_review_idx").on(t.projectReviewId),
+    applicantIdx: index("application_permits_applicant_idx").on(t.seasonId, t.applicant, t.consumedAt),
+    coachIdx: index("application_permits_coach_idx").on(t.seasonId, t.coach),
+  }),
+);
+
 export const reviewers = pgTable(
   "reviewers",
   {

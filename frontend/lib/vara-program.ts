@@ -30,6 +30,21 @@ export type PostChatParams = {
 
 export type ReviewCoverage = 'Missing' | 'Partial' | 'Met' | 'NotApplicable'
 export type ProjectGuidanceOutcome = 'Proceed' | 'NeedsChanges' | 'NotRecommended'
+export type ApplicationPermitPurpose = 'Register' | 'UpdateMetadata' | 'ReplaceProgram'
+
+export type ApplicationPermitDetails = {
+  handle: string
+  program_id: string
+  operator: string
+  github_url: string
+  skills_hash: string
+  skills_url: string
+  idl_hash: string
+  idl_url: string
+  description: string
+  track: 'Services' | 'Social' | 'Economy' | 'Open'
+  contacts?: { discord?: string | null; telegram?: string | null; x?: string | null } | null
+}
 
 export type ReviewCriteriaInput = {
   technical_readiness: { coverage: ReviewCoverage; note?: string | null }
@@ -397,14 +412,84 @@ export async function replaceApplicationProgram(
   newProgramId: string,
   reason: string,
 ) {
-  const normalizedNewProgramId = await assertProgramIsDeployed(newProgramId)
+  void account
+  void oldProgramId
+  void newProgramId
+  void reason
+  throw new Error('Program replacement now requires a coach-issued ReplaceProgram application permit.')
+}
+
+export async function applyApprovedApplicationTransition(
+  account: WalletAccount,
+  currentProgramId: string,
+  approvalId: string | number,
+  details: ApplicationPermitDetails,
+  reason: string,
+) {
+  const normalizedNewProgramId = await assertProgramIsDeployed(details.program_id)
   const sails = await getSailsClient()
-  const tx = sails.services.Registry.functions.ReplaceApplicationProgram(
-    oldProgramId,
-    normalizedNewProgramId,
+  const tx = sails.services.Registry.functions.ApplyApprovedApplicationTransition(
+    currentProgramId,
+    BigInt(approvalId),
+    { ...details, program_id: normalizedNewProgramId },
     reason,
   )
-  return sendTx(account, 'registry.tx.ReplaceApplicationProgram', tx)
+  return sendTx(account, 'registry.tx.ApplyApprovedApplicationTransition', tx)
+}
+
+export async function registerApplicationWithApproval(
+  account: WalletAccount,
+  approvalId: string | number,
+  details: ApplicationPermitDetails,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Registry.functions.RegisterApplication({
+    approval_id: BigInt(approvalId),
+    details,
+  })
+  return sendTx(account, 'registry.tx.RegisterApplication', tx)
+}
+
+export async function updateApplicationWithApproval(
+  account: WalletAccount,
+  programId: string,
+  approvalId: string | number,
+  details: ApplicationPermitDetails,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Registry.functions.UpdateApplicationWithApproval(
+    programId,
+    BigInt(approvalId),
+    details,
+  )
+  return sendTx(account, 'registry.tx.UpdateApplicationWithApproval', tx)
+}
+
+export async function approveApplicationPermit(
+  account: WalletAccount,
+  projectReviewId: string | number,
+  purpose: ApplicationPermitPurpose,
+  details: ApplicationPermitDetails,
+  evidenceMessageId: string | number,
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Review.functions.ApproveApplicationPermit(
+    BigInt(projectReviewId),
+    purpose,
+    details,
+    BigInt(evidenceMessageId),
+  )
+  return sendTx(account, 'review.tx.ApproveApplicationPermit', tx)
+}
+
+export async function updateApplicationContacts(
+  account: WalletAccount,
+  programId: string,
+  contacts: ApplicationPermitDetails['contacts'],
+) {
+  const sails = await getSailsClient()
+  const tx = sails.services.Registry.functions.UpdateApplicationContacts(programId, contacts ?? null)
+  return sendTx(account, 'registry.tx.UpdateApplicationContacts', tx)
 }
 
 export async function requestReview(account: WalletAccount, programId: string, reason: string) {

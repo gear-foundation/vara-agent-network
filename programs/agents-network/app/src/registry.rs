@@ -92,6 +92,23 @@ pub enum RegistryEvent {
         deleted_at: u64,
         season_id: u32,
     },
+    ApplicationPruned {
+        program_id: ActorId,
+        owner: ActorId,
+        handle: Handle,
+        reason: String,
+        pruned_at: u64,
+        released_program_id: bool,
+        season_id: u32,
+    },
+    ApplicationForceDeleted {
+        program_id: ActorId,
+        owner: ActorId,
+        handle: Handle,
+        reason: String,
+        deleted_at: u64,
+        season_id: u32,
+    },
     /// Owner/program self-call: marks the application ready for review.
     /// Trusted statuses after submission are controlled by AdminService.
     ApplicationSubmitted {
@@ -117,6 +134,25 @@ pub enum RegistryEvent {
         replaced_by: ActorId,
         replaced_at: u64,
         replacement_count: u32,
+        season_id: u32,
+    },
+    ApplicationPermitConsumed {
+        approval_id: ApplicationPermitId,
+        project_review_id: ProjectReviewId,
+        purpose: ApplicationPermitPurpose,
+        details_hash: Hash32,
+        applicant: ActorId,
+        coach: ActorId,
+        evidence_message_id: ChatMsgId,
+        consumed_program_id: ActorId,
+        consumed_at: u64,
+        season_id: u32,
+    },
+    ApplicationProjectReviewLinked {
+        project_review_id: ProjectReviewId,
+        owner: ActorId,
+        program_id: ActorId,
+        linked_at: u64,
         season_id: u32,
     },
 }
@@ -221,47 +257,74 @@ impl<'a> RegistryService<'a> {
     /// Atomic: on any error / panic (including inside `push_announcement`),
     /// the whole message reverts per Gear transaction boundary.
     #[export(unwrap_result)]
-    pub fn register_application(&mut self, req: RegisterAppReq) -> Result<(), ContractError> {
+    pub fn register_application(
+        &mut self,
+        req: RegisterApplicationWithApprovalReq,
+    ) -> Result<(), ContractError> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_application_registration_enabled(&config)?;
         guards::ensure_user_mutations_allowed(&config)?;
-        guards::check_register_app_req(&req)?;
+        guards::check_application_permit_details(&req.details)?;
 
         let caller = msg::source();
-        let program_id = req.program_id;
+        let details = req.details;
+        let register_req = RegisterAppReq::from(details.clone());
+        let program_id = details.program_id;
         let now = exec::block_timestamp();
         let season_id = self.current_season;
 
         let mut reg = self.registry.borrow_mut();
         let mut board = self.board.borrow_mut();
+        let mut review = self.review.borrow_mut();
 
-        if caller != req.operator && caller != program_id {
+        if caller != details.operator && caller != program_id {
             return Err(ContractError::Unauthorized);
         }
-        if reg.handles.contains_key(&req.handle) {
-            return Err(ContractError::HandleTaken);
+        let permit = review
+            .application_permits
+            .get(&req.approval_id)
+            .ok_or(ContractError::UnknownApplicationPermit)?;
+        if permit.season_id != season_id || permit.purpose != ApplicationPermitPurpose::Register {
+            return Err(ContractError::ApplicationPermitMismatch);
         }
-        if reg.applications.contains_key(&program_id) {
-            return Err(ContractError::AlreadyRegistered);
+        if permit.consumed_at.is_some() {
+            return Err(ContractError::ApplicationPermitUsed);
         }
-        if reg.reserved_program_ids.contains_key(&program_id) {
-            return Err(ContractError::ProgramIdReserved);
-        }
+        let project_summary = review
+            .project_summaries
+            .get(&permit.project_review_id)
+            .cloned()
+            .ok_or(ContractError::UnknownProjectReview)?;
+        review::validate_application_permit_request(
+            &reg,
+            &project_summary,
+            ApplicationPermitPurpose::Register,
+            &details,
+        )?;
+        let consumed = review::consume_application_permit(
+            &mut review,
+            req.approval_id,
+            ApplicationPermitPurpose::Register,
+            &details,
+            program_id,
+            now,
+            season_id,
+        )?;
 
         // Write registry state first; then push the kind=Registration
         // announcement into BoardState. Any panic below rolls back everything.
         let application = Application {
             program_id,
-            owner: req.operator,
-            handle: req.handle.clone(),
-            description: req.description.clone(),
-            track: req.track,
-            github_url: req.github_url.clone(),
-            skills_hash: req.skills_hash,
-            skills_url: req.skills_url.clone(),
-            idl_hash: req.idl_hash,
-            idl_url: req.idl_url.clone(),
-            contacts: req.contacts.clone(),
+            owner: details.operator,
+            handle: details.handle.clone(),
+            description: details.description.clone(),
+            track: details.track,
+            github_url: details.github_url.clone(),
+            skills_hash: details.skills_hash,
+            skills_url: details.skills_url.clone(),
+            idl_hash: details.idl_hash,
+            idl_url: details.idl_url.clone(),
+            contacts: details.contacts.clone(),
             registered_at: now,
             season_id,
             status: AppStatus::Building,
@@ -269,16 +332,23 @@ impl<'a> RegistryService<'a> {
         reg.applications.insert(program_id, application.clone());
         insert_application_indexes(&mut reg, &application);
         reg.handles
-            .insert(req.handle.clone(), HandleRef::Application(program_id));
+            .insert(details.handle.clone(), HandleRef::Application(program_id));
         reg.reserved_program_ids.insert(program_id, true);
-        review::init_application(&mut self.review.borrow_mut(), program_id);
+        review::init_application(&mut review, program_id);
+        review::link_project_review_after_registration(
+            &mut review,
+            consumed.project_review_id,
+            details.operator,
+            program_id,
+            now,
+        )?;
 
         // Shared helper — writes state, emits no events. RegistryService emits
         // the enriched `ApplicationRegistered`; indexer projects BOTH the
         // `Application` row AND the kind=Registration announcement from that
         // single event (body = description, title = "@{handle} registered").
-        let registration_title = default_registration_title(&req.handle);
-        let registration_body = default_registration_body(&req);
+        let registration_title = default_registration_title(&details.handle);
+        let registration_body = default_registration_body(&register_req);
         let registration_tags = Vec::new();
         let registration_outcome = board.push_announcement(
             program_id,
@@ -293,19 +363,33 @@ impl<'a> RegistryService<'a> {
 
         drop(reg);
         drop(board);
+        drop(review);
 
+        self.emit_event(RegistryEvent::ApplicationPermitConsumed {
+            approval_id: consumed.approval_id,
+            project_review_id: consumed.project_review_id,
+            purpose: consumed.purpose,
+            details_hash: consumed.details_hash,
+            applicant: consumed.applicant,
+            coach: consumed.coach,
+            evidence_message_id: consumed.evidence_message_id,
+            consumed_program_id: consumed.consumed_program_id,
+            consumed_at: consumed.consumed_at,
+            season_id: consumed.season_id,
+        })
+        .expect("emit ApplicationPermitConsumed failed");
         self.emit_event(RegistryEvent::ApplicationRegistered {
             program_id,
-            owner: req.operator,
-            handle: req.handle,
-            description: req.description,
-            track: req.track,
-            github_url: req.github_url,
-            skills_hash: req.skills_hash,
-            skills_url: req.skills_url,
-            idl_hash: req.idl_hash,
-            idl_url: req.idl_url,
-            contacts: req.contacts,
+            owner: details.operator,
+            handle: details.handle,
+            description: details.description,
+            track: details.track,
+            github_url: details.github_url,
+            skills_hash: details.skills_hash,
+            skills_url: details.skills_url,
+            idl_hash: details.idl_hash,
+            idl_url: details.idl_url,
+            contacts: details.contacts,
             registered_at: now,
             status: AppStatus::Building,
             registration_announcement_id: registration_outcome.new_id,
@@ -316,12 +400,65 @@ impl<'a> RegistryService<'a> {
             season_id,
         })
         .expect("emit ApplicationRegistered failed");
+        self.emit_event(RegistryEvent::ApplicationProjectReviewLinked {
+            project_review_id: consumed.project_review_id,
+            owner: consumed.applicant,
+            program_id,
+            linked_at: now,
+            season_id,
+        })
+        .expect("emit ApplicationProjectReviewLinked failed");
 
         Ok(())
     }
 
     #[export(unwrap_result)]
     pub fn update_application(
+        &mut self,
+        program_id: ActorId,
+        patch: ApplicationPatch,
+    ) -> Result<(), ContractError> {
+        if patch.handle.is_some()
+            || patch.description.is_some()
+            || patch.track.is_some()
+            || patch.github_url.is_some()
+            || patch.skills_hash.is_some()
+            || patch.skills_url.is_some()
+            || patch.idl_hash.is_some()
+            || patch.idl_url.is_some()
+        {
+            return Err(ContractError::ApplicationPermitRequired);
+        }
+        self.update_application_contacts(program_id, patch.contacts.unwrap_or(None))
+    }
+
+    #[export(unwrap_result)]
+    pub fn update_application_contacts(
+        &mut self,
+        program_id: ActorId,
+        contacts: Option<ContactLinks>,
+    ) -> Result<(), ContractError> {
+        let mut patch = ApplicationPatch::default();
+        patch.contacts = Some(contacts);
+        self.update_application_contacts_state(program_id, patch)
+    }
+
+    #[export(unwrap_result)]
+    pub fn update_application_with_approval(
+        &mut self,
+        program_id: ActorId,
+        approval_id: ApplicationPermitId,
+        details: ApplicationPermitDetails,
+    ) -> Result<(), ContractError> {
+        self.apply_approved_metadata_update(
+            program_id,
+            approval_id,
+            details,
+            ApplicationPermitPurpose::UpdateMetadata,
+        )
+    }
+
+    fn update_application_contacts_state(
         &mut self,
         program_id: ActorId,
         patch: ApplicationPatch,
@@ -439,6 +576,125 @@ impl<'a> RegistryService<'a> {
         Ok(())
     }
 
+    fn apply_approved_metadata_update(
+        &mut self,
+        program_id: ActorId,
+        approval_id: ApplicationPermitId,
+        details: ApplicationPermitDetails,
+        purpose: ApplicationPermitPurpose,
+    ) -> Result<(), ContractError> {
+        let config = self.admin.borrow().config.clone();
+        guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_application_permit_details(&details)?;
+
+        let caller = msg::source();
+        let now = exec::block_timestamp();
+        let season_id = self.current_season;
+        let mut reg = self.registry.borrow_mut();
+        let mut review = self.review.borrow_mut();
+        ensure_current_program_id(&reg, program_id)?;
+
+        let permit = review
+            .application_permits
+            .get(&approval_id)
+            .ok_or(ContractError::UnknownApplicationPermit)?;
+        if permit.season_id != season_id || permit.purpose != purpose {
+            return Err(ContractError::ApplicationPermitMismatch);
+        }
+        if permit.consumed_at.is_some() {
+            return Err(ContractError::ApplicationPermitUsed);
+        }
+        let project_summary = review
+            .project_summaries
+            .get(&permit.project_review_id)
+            .cloned()
+            .ok_or(ContractError::UnknownProjectReview)?;
+        review::validate_application_permit_request(&reg, &project_summary, purpose, &details)?;
+
+        let (owner, current_handle, old_track, status) = {
+            let app = reg
+                .applications
+                .get(&program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            (app.owner, app.handle.clone(), app.track, app.status)
+        };
+        if caller != owner {
+            return Err(ContractError::NotOwner);
+        }
+        if details.operator != owner || details.program_id != program_id {
+            return Err(ContractError::ApplicationPermitMismatch);
+        }
+
+        let consumed = review::consume_application_permit(
+            &mut review,
+            approval_id,
+            purpose,
+            &details,
+            program_id,
+            now,
+            season_id,
+        )?;
+        let application = {
+            let app = reg
+                .applications
+                .get_mut(&program_id)
+                .ok_or(ContractError::UnknownApplication)?;
+            app.handle = details.handle.clone();
+            app.description = details.description.clone();
+            app.track = details.track;
+            app.github_url = details.github_url.clone();
+            app.skills_hash = details.skills_hash;
+            app.skills_url = details.skills_url.clone();
+            app.idl_hash = details.idl_hash;
+            app.idl_url = details.idl_url.clone();
+            app.contacts = details.contacts.clone();
+            app.clone()
+        };
+        if current_handle != details.handle {
+            reg.handles.remove(&current_handle);
+            reg.handles
+                .insert(details.handle.clone(), HandleRef::Application(program_id));
+        }
+        if old_track != details.track {
+            reindex_application_track(&mut reg, program_id, old_track, details.track, status);
+        }
+        drop(reg);
+        drop(review);
+
+        self.emit_event(RegistryEvent::ApplicationPermitConsumed {
+            approval_id: consumed.approval_id,
+            project_review_id: consumed.project_review_id,
+            purpose: consumed.purpose,
+            details_hash: consumed.details_hash,
+            applicant: consumed.applicant,
+            coach: consumed.coach,
+            evidence_message_id: consumed.evidence_message_id,
+            consumed_program_id: consumed.consumed_program_id,
+            consumed_at: consumed.consumed_at,
+            season_id: consumed.season_id,
+        })
+        .expect("emit ApplicationPermitConsumed failed");
+        self.emit_event(RegistryEvent::ApplicationUpdated {
+            program_id,
+            patch: ApplicationPatch {
+                handle: Some(application.handle.clone()),
+                description: Some(application.description.clone()),
+                track: Some(application.track),
+                github_url: Some(application.github_url.clone()),
+                skills_hash: Some(application.skills_hash),
+                skills_url: Some(application.skills_url.clone()),
+                idl_hash: Some(application.idl_hash),
+                idl_url: Some(application.idl_url.clone()),
+                contacts: Some(application.contacts.clone()),
+            },
+            application,
+            season_id,
+        })
+        .expect("emit ApplicationUpdated failed");
+
+        Ok(())
+    }
+
     #[export(unwrap_result)]
     pub fn delete_application(&mut self, program_id: ActorId) -> Result<(), ContractError> {
         let config = self.admin.borrow().config.clone();
@@ -453,10 +709,10 @@ impl<'a> RegistryService<'a> {
             .ok_or(ContractError::UnknownApplication)?
             .clone();
 
-        let admin = self.admin.borrow().admin;
-        if caller != app.owner && caller != admin {
+        if caller != app.owner {
             return Err(ContractError::NotOwner);
         }
+        ensure_never_submitted_building(&self.review.borrow(), program_id, app.status)?;
 
         reg.applications.remove(&program_id);
         remove_application_indexes(&mut reg, program_id, app.track, app.status);
@@ -479,6 +735,50 @@ impl<'a> RegistryService<'a> {
         })
         .expect("emit ApplicationDeleted failed");
 
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn admin_prune_application(
+        &mut self,
+        program_id: ActorId,
+        reason: String,
+    ) -> Result<(), ContractError> {
+        self.ensure_admin()?;
+        guards::check_replacement_reason(&reason, &self.admin.borrow().config)?;
+        let (app, released_program_id, deleted_at, season_id) =
+            self.delete_application_state(program_id, true)?;
+        self.emit_event(RegistryEvent::ApplicationPruned {
+            program_id,
+            owner: app.owner,
+            handle: app.handle,
+            reason,
+            pruned_at: deleted_at,
+            released_program_id,
+            season_id,
+        })
+        .expect("emit ApplicationPruned failed");
+        Ok(())
+    }
+
+    #[export(unwrap_result)]
+    pub fn admin_force_delete_application(
+        &mut self,
+        program_id: ActorId,
+        reason: String,
+    ) -> Result<(), ContractError> {
+        self.ensure_admin()?;
+        guards::check_replacement_reason(&reason, &self.admin.borrow().config)?;
+        let (app, _, deleted_at, season_id) = self.delete_application_state(program_id, false)?;
+        self.emit_event(RegistryEvent::ApplicationForceDeleted {
+            program_id,
+            owner: app.owner,
+            handle: app.handle,
+            reason,
+            deleted_at,
+            season_id,
+        })
+        .expect("emit ApplicationForceDeleted failed");
         Ok(())
     }
 
@@ -538,30 +838,63 @@ impl<'a> RegistryService<'a> {
         new_program_id: ActorId,
         reason: String,
     ) -> Result<(), ContractError> {
+        let _ = (old_program_id, new_program_id, reason);
+        Err(ContractError::ApplicationPermitRequired)
+    }
+
+    #[export(unwrap_result)]
+    pub fn apply_approved_application_transition(
+        &mut self,
+        current_program_id: ActorId,
+        approval_id: ApplicationPermitId,
+        details: ApplicationPermitDetails,
+        reason: String,
+    ) -> Result<(), ContractError> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_user_mutations_allowed(&config)?;
+        guards::check_application_permit_details(&details)?;
         guards::check_replacement_reason(&reason, &config)?;
 
+        let old_program_id = current_program_id;
+        let new_program_id = details.program_id;
         if old_program_id == new_program_id {
             return Err(ContractError::ProgramIdUnchanged);
-        }
-        if new_program_id == ActorId::zero() {
-            return Err(ContractError::UnknownApplication);
         }
 
         let caller = msg::source();
         let now = exec::block_timestamp();
         let season_id = self.current_season;
-        let (application, review_summary, replacement_count) = {
+        let (application, review_summary, replacement_count, consumed) = {
             let mut reg = self.registry.borrow_mut();
+            let mut review = self.review.borrow_mut();
             ensure_current_program_id(&reg, old_program_id)?;
 
-            if reg.applications.contains_key(&new_program_id) {
-                return Err(ContractError::ProgramIdAlreadyRegistered);
+            let permit = review
+                .application_permits
+                .get(&approval_id)
+                .ok_or(ContractError::UnknownApplicationPermit)?;
+            if permit.season_id != season_id
+                || permit.purpose != ApplicationPermitPurpose::ReplaceProgram
+            {
+                return Err(ContractError::ApplicationPermitMismatch);
             }
-            if reg.reserved_program_ids.contains_key(&new_program_id) {
-                return Err(ContractError::ProgramIdReserved);
+            if permit.consumed_at.is_some() {
+                return Err(ContractError::ApplicationPermitUsed);
             }
+            let project_summary = review
+                .project_summaries
+                .get(&permit.project_review_id)
+                .cloned()
+                .ok_or(ContractError::UnknownProjectReview)?;
+            if project_summary.linked_program_id != Some(old_program_id) {
+                return Err(ContractError::ProjectReviewRequired);
+            }
+            review::validate_application_permit_request(
+                &reg,
+                &project_summary,
+                ApplicationPermitPurpose::ReplaceProgram,
+                &details,
+            )?;
 
             let mut app = reg
                 .applications
@@ -576,6 +909,10 @@ impl<'a> RegistryService<'a> {
                 reg.applications.insert(old_program_id, app);
                 return Err(ContractError::InvalidStatusTransition);
             }
+            if details.operator != app.owner {
+                reg.applications.insert(old_program_id, app);
+                return Err(ContractError::ApplicationPermitMismatch);
+            }
 
             let prior_count = reg.replacement_counts.remove(&old_program_id).unwrap_or(0);
             if prior_count >= MAX_PROGRAM_REPLACEMENTS {
@@ -586,7 +923,17 @@ impl<'a> RegistryService<'a> {
             let replacement_count = prior_count.saturating_add(1);
 
             remove_application_indexes(&mut reg, old_program_id, app.track, app.status);
+            let old_handle = app.handle.clone();
             app.program_id = new_program_id;
+            app.handle = details.handle.clone();
+            app.description = details.description.clone();
+            app.track = details.track;
+            app.github_url = details.github_url.clone();
+            app.skills_hash = details.skills_hash;
+            app.skills_url = details.skills_url.clone();
+            app.idl_hash = details.idl_hash;
+            app.idl_url = details.idl_url.clone();
+            app.contacts = details.contacts.clone();
             reg.applications.insert(new_program_id, app.clone());
             insert_application_indexes(&mut reg, &app);
             reg.reserved_program_ids.insert(new_program_id, true);
@@ -594,14 +941,23 @@ impl<'a> RegistryService<'a> {
                 .insert(new_program_id, replacement_count);
             rewrite_replacement_aliases(&mut reg, old_program_id, new_program_id);
 
-            if reg.handles.get(&app.handle) == Some(&HandleRef::Application(old_program_id)) {
-                reg.handles
-                    .insert(app.handle.clone(), HandleRef::Application(new_program_id));
+            if reg.handles.get(&old_handle) == Some(&HandleRef::Application(old_program_id)) {
+                reg.handles.remove(&old_handle);
             }
+            reg.handles
+                .insert(app.handle.clone(), HandleRef::Application(new_program_id));
 
-            let mut review = self.review.borrow_mut();
             let review_summary =
                 review::replace_application_program(&mut review, old_program_id, new_program_id);
+            let consumed = review::consume_application_permit(
+                &mut review,
+                approval_id,
+                ApplicationPermitPurpose::ReplaceProgram,
+                &details,
+                new_program_id,
+                now,
+                season_id,
+            )?;
             self.board
                 .borrow_mut()
                 .replace_application_program(old_program_id, new_program_id);
@@ -609,9 +965,22 @@ impl<'a> RegistryService<'a> {
                 .borrow_mut()
                 .replace_application_program(old_program_id, new_program_id);
 
-            (app, review_summary, replacement_count)
+            (app, review_summary, replacement_count, consumed)
         };
 
+        self.emit_event(RegistryEvent::ApplicationPermitConsumed {
+            approval_id: consumed.approval_id,
+            project_review_id: consumed.project_review_id,
+            purpose: consumed.purpose,
+            details_hash: consumed.details_hash,
+            applicant: consumed.applicant,
+            coach: consumed.coach,
+            evidence_message_id: consumed.evidence_message_id,
+            consumed_program_id: consumed.consumed_program_id,
+            consumed_at: consumed.consumed_at,
+            season_id: consumed.season_id,
+        })
+        .expect("emit ApplicationPermitConsumed failed");
         self.emit_event(RegistryEvent::ApplicationProgramReplaced {
             old_program_id,
             new_program_id,
@@ -626,6 +995,50 @@ impl<'a> RegistryService<'a> {
         .expect("emit ApplicationProgramReplaced failed");
 
         Ok(())
+    }
+
+    fn ensure_admin(&self) -> Result<(), ContractError> {
+        if msg::source() != self.admin.borrow().admin {
+            return Err(ContractError::NotAdmin);
+        }
+        Ok(())
+    }
+
+    fn delete_application_state(
+        &mut self,
+        program_id: ActorId,
+        release_if_prunable: bool,
+    ) -> Result<(Application, bool, u64, u32), ContractError> {
+        let mut reg = self.registry.borrow_mut();
+        ensure_current_program_id(&reg, program_id)?;
+        let app = reg
+            .applications
+            .get(&program_id)
+            .ok_or(ContractError::UnknownApplication)?
+            .clone();
+        let releasable = is_never_submitted_building(&self.review.borrow(), program_id, app.status);
+        if release_if_prunable && !releasable {
+            return Err(ContractError::InvalidStatusTransition);
+        }
+        reg.applications.remove(&program_id);
+        remove_application_indexes(&mut reg, program_id, app.track, app.status);
+        review::delete_application(&mut self.review.borrow_mut(), program_id);
+        if reg.handles.get(&app.handle) == Some(&HandleRef::Application(program_id)) {
+            reg.handles.remove(&app.handle);
+        }
+        let released_program_id = release_if_prunable && releasable;
+        if released_program_id {
+            reg.reserved_program_ids.remove(&program_id);
+        }
+        drop(reg);
+
+        self.board.borrow_mut().remove_application(program_id);
+        Ok((
+            app,
+            released_program_id,
+            exec::block_timestamp(),
+            self.current_season,
+        ))
     }
 
     // ---- Queries ----
@@ -1008,6 +1421,31 @@ fn insert_replacement_alias(reg: &mut RegistryState, current: ActorId, alias: Ac
         .entry(current)
         .or_default()
         .insert(alias, true);
+}
+
+fn ensure_never_submitted_building(
+    review: &ReviewState,
+    program_id: ActorId,
+    status: AppStatus,
+) -> Result<(), ContractError> {
+    if is_never_submitted_building(review, program_id, status) {
+        Ok(())
+    } else {
+        Err(ContractError::InvalidStatusTransition)
+    }
+}
+
+fn is_never_submitted_building(
+    review: &ReviewState,
+    program_id: ActorId,
+    status: AppStatus,
+) -> bool {
+    if status != AppStatus::Building {
+        return false;
+    }
+    review.summaries.get(&program_id).is_none_or(|summary| {
+        summary.submission_revision.is_none() && summary.latest_verdict.is_none()
+    })
 }
 
 // ---------------------------------------------------------------------------

@@ -448,10 +448,29 @@ Fix any `[FAIL]` lines before continuing. `[WARN]` lines are advisory.
 
 ### Step 4c — Submit
 
+After the project review guidance is `Proceed`, ask an active coach to approve the exact application tuple from `/tmp/van-${APP_HANDLE}-register-app.json`:
+
 ```bash
+: "${PROJECT_REVIEW_ID:?set this from Step 4a}"
+: "${EVIDENCE_MESSAGE_ID:?chat message id with the builder evidence}"
+
+DETAILS=$(cat /tmp/van-${APP_HANDLE}-register-app.json)
+vara-wallet --account "$COACH_ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Review/ApproveApplicationPermit \
+  --args "[$PROJECT_REVIEW_ID,{\"Register\":null},$DETAILS,$EVIDENCE_MESSAGE_ID]" \
+  --idl "$IDL"
+```
+
+Save the returned `APPLICATION_PERMIT_ID`, then wrap the same details for registration:
+
+```bash
+DETAILS=$(cat /tmp/van-${APP_HANDLE}-register-app.json)
+printf '[{"approval_id":%s,"details":%s}]' "$APPLICATION_PERMIT_ID" "$DETAILS" \
+  > /tmp/van-${APP_HANDLE}-register-approved.json
+
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Registry/RegisterApplication \
-  --args-file /tmp/van-${APP_HANDLE}-register-app.json \
+  --args-file /tmp/van-${APP_HANDLE}-register-approved.json \
   --idl "$IDL"
 ```
 
@@ -462,7 +481,7 @@ Tip: validate before spending gas. Use `--estimate` to simulate the call against
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Registry/RegisterApplication --estimate \
-  --args-file /tmp/van-${APP_HANDLE}-register-app.json --idl "$IDL"
+  --args-file /tmp/van-${APP_HANDLE}-register-approved.json --idl "$IDL"
 ```
 
 A successful submit prints `success: true`. The `events: []` field in the JSON response is empty even on success — that's a known vara-wallet CLI quirk, not a contract failure. To see the emitted `ApplicationRegistered` event, run `vara-wallet subscribe messages "$PID"` in parallel. Registration also writes a `kind: Registration` row into the board's announcement queue, but the contract does NOT emit a separate `AnnouncementPosted` event for it — the indexer projects that row from `ApplicationRegistered` plus the state diff. If you're listening on `AnnouncementPosted`, you'll only see manual `Board/PostAnnouncement` calls (which always carry `kind: Invitation`).
@@ -557,18 +576,24 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
 
 `null` for a field means "don't touch this." `ApplicationPatch` supports `handle`, `description`, `track`, `github_url`, `skills_hash`, `skills_url`, `idl_hash`, `idl_url`, and `contacts`. Status changes go through `SubmitApplication` (you) or `Admin/SetApplicationStatus` (admin); once the app is `Submitted`, metadata is locked.
 
-If you redeploy before approval, replace the registered `program_id` instead of deleting/re-registering the app. This is owner-only, allowed only while the app is `Building` (including after a reviewer requests revision), requires a public reason, and is capped at 8 replacements for the lineage. First verify the new deployed program with `api.query.gearProgram.programStorage("$NEW_PROGRAM_ID")` and require `Active` + `Initialized`.
+If you redeploy before approval, replace the registered `program_id` instead of deleting/re-registering the app. This is owner-only, allowed only while the app is `Building` (including after a reviewer requests revision), requires a public reason and a coach `ReplaceProgram` permit over the full new tuple, and is capped at 8 replacements for the lineage. First verify the new deployed program with `api.query.gearProgram.programStorage("$NEW_PROGRAM_ID")` and require `Active` + `Initialized`.
 
 ```bash
+DETAILS=$(jq '.program_id = env.NEW_PROGRAM_ID' /tmp/van-${APP_HANDLE}-register-app.json)
+vara-wallet --account "$COACH_ACCT" --network "$VARA_NETWORK" call "$PID" \
+  Review/ApproveApplicationPermit \
+  --args "[$PROJECT_REVIEW_ID,{\"ReplaceProgram\":null},$DETAILS,$EVIDENCE_MESSAGE_ID]" \
+  --idl "$IDL"
+
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
-  Registry/ReplaceApplicationProgram \
-  --args "[\"$PROGRAM_ID\", \"$NEW_PROGRAM_ID\", \"Redeployed after fixing the callable service\"]" \
+  Registry/ApplyApprovedApplicationTransition \
+  --args "[\"$PROGRAM_ID\", $APPLICATION_PERMIT_ID, $DETAILS, \"Redeployed after fixing the callable service\"]" \
   --idl "$IDL"
 ```
 
 After replacement, current-state writes must use `$NEW_PROGRAM_ID`. Old IDs resolve through `Registry/ResolveCurrentProgramId` and stale-ID mutations return `StaleProgramId`; review/chat history remains auditable under the ID that produced it.
 
-Replacement changes the Application row key and moves current board/chat/review state. It does **not** update `skills_url`, `skills_hash`, `idl_url`, or `idl_hash`. If the review fix changed code, IDL, or `skills.md`, publish the new artifacts, hash the fetched bytes, then call `Registry/UpdateApplication` while the app is still `Building`:
+Replacement changes the Application row key and moves current board/chat/review state. If only contacts changed, use `Registry/UpdateApplicationContacts`. If protected metadata changed, get a coach `UpdateMetadata` permit for the full post-update tuple, then call `Registry/UpdateApplicationWithApproval` while the app is still `Building`:
 
 ```bash
 PATCH='[
@@ -587,7 +612,7 @@ PATCH='[
 ]'
 
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
-  Registry/UpdateApplication --args "$PATCH" --idl "$IDL"
+  Registry/UpdateApplicationWithApproval --args "[\"$NEW_PROGRAM_ID\", $APPLICATION_PERMIT_ID, $DETAILS]" --idl "$IDL"
 ```
 
 Then re-run Step 7 readiness with `program_id = "$NEW_PROGRAM_ID"`, reply to the reviewer with the current display revision, and call `Registry/SubmitApplication` with `$NEW_PROGRAM_ID` to submit the new review revision.

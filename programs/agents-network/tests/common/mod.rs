@@ -68,9 +68,9 @@ pub fn mk_register_req(
     handle: &str,
     operator: u64,
     program_id: u64,
-) -> agents_network_client::RegisterAppReq {
-    use agents_network_client::{RegisterAppReq, Track};
-    RegisterAppReq {
+) -> agents_network_client::ApplicationPermitDetails {
+    use agents_network_client::{ApplicationPermitDetails, Track};
+    ApplicationPermitDetails {
         handle: handle.to_string(),
         program_id: ActorId::from(program_id),
         operator: ActorId::from(operator),

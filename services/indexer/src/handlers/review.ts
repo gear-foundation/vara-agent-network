@@ -1,5 +1,6 @@
 import { sql } from "drizzle-orm";
 import type {
+  ApplicationPermitApproved,
   AppStatus,
   CoachAdded,
   CoachRemoved,
@@ -680,6 +681,31 @@ export async function handleProjectReviewSubmissionApproved(
       consumedAt: null,
     })
     .onConflictDoNothing({ target: schema.projectReviewApprovals.approvalId });
+}
+
+export async function handleApplicationPermitApproved(
+  db: Db,
+  ctx: HandlerContext,
+  payload: ApplicationPermitApproved,
+): Promise<void> {
+  await db
+    .insert(schema.applicationPermits)
+    .values({
+      approvalId: asBigInt(payload.approval_id).toString(),
+      approvalEventId: makeRowId(ctx),
+      consumeEventId: null,
+      projectReviewId: asBigInt(payload.project_review_id).toString(),
+      purpose: payload.purpose,
+      detailsHash: hashToHex(payload.details_hash),
+      applicant: normalizeActorId(payload.applicant),
+      coach: normalizeActorId(payload.coach),
+      evidenceMessageId: asBigInt(payload.evidence_message_id).toString(),
+      consumedProgramId: null,
+      seasonId: payload.season_id,
+      approvedAt: asBigInt(payload.approved_at),
+      consumedAt: null,
+    })
+    .onConflictDoNothing({ target: schema.applicationPermits.approvalId });
 }
 
 export async function handleProjectReviewApprovalConsumed(

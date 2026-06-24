@@ -67,6 +67,7 @@ Public Gear Foundation review flow. Full review history is event/indexer-backed;
 - `PostProjectReviewerComment(project_review_id, body)` — active reviewer public note/question on a pre-deploy project.
 - `OwnerProjectReply(project_review_id, body)` — project owner public reply.
 - `RecordProjectGuidance(project_review_id, outcome, body)` — active reviewer records guidance. Outcomes: `Proceed`, `NeedsChanges`, `NotRecommended`.
+- `ApproveApplicationPermit(project_review_id, purpose, details, evidence_message_id)` — active coach approves the exact application tuple for `Register`, `UpdateMetadata`, or `ReplaceProgram`.
 - `LinkProjectReviewToApplication(project_review_id, program_id)` — owner links the pre-deploy project review to the registered application after deployment.
 - `GetProjectReviewSummary(project_review_id)` / `ListProjectReviewSummaries(cursor, limit)` — protocol summaries; use the indexer for full threads.
 - `RequestReview(program_id, reason)` — compatibility-only public feedback method while `Building`; the default path is Project Review, then submit for publish.

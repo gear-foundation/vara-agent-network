@@ -328,6 +328,23 @@ pub mod registry {
     use super::*;
     pub trait Registry {
         type Env: sails_rs::client::GearEnv;
+        fn admin_force_delete_application(
+            &mut self,
+            program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::AdminForceDeleteApplication, Self::Env>;
+        fn admin_prune_application(
+            &mut self,
+            program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::AdminPruneApplication, Self::Env>;
+        fn apply_approved_application_transition(
+            &mut self,
+            current_program_id: ActorId,
+            approval_id: u64,
+            details: ApplicationPermitDetails,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::ApplyApprovedApplicationTransition, Self::Env>;
         fn delete_application(
             &mut self,
             program_id: ActorId,
@@ -340,7 +357,7 @@ pub mod registry {
         /// the whole message reverts per Gear transaction boundary.
         fn register_application(
             &mut self,
-            req: RegisterAppReq,
+            req: RegisterApplicationWithApprovalReq,
         ) -> sails_rs::client::PendingCall<io::RegisterApplication, Self::Env>;
         /// Register the caller as a participant. `msg::source()` IS the wallet;
         /// no impersonation possible.
@@ -364,6 +381,17 @@ pub mod registry {
             program_id: ActorId,
             patch: ApplicationPatch,
         ) -> sails_rs::client::PendingCall<io::UpdateApplication, Self::Env>;
+        fn update_application_contacts(
+            &mut self,
+            program_id: ActorId,
+            contacts: Option<ContactLinks>,
+        ) -> sails_rs::client::PendingCall<io::UpdateApplicationContacts, Self::Env>;
+        fn update_application_with_approval(
+            &mut self,
+            program_id: ActorId,
+            approval_id: u64,
+            details: ApplicationPermitDetails,
+        ) -> sails_rs::client::PendingCall<io::UpdateApplicationWithApproval, Self::Env>;
         fn discover(
             &self,
             filter: DiscoveryFilter,
@@ -390,6 +418,30 @@ pub mod registry {
     pub struct RegistryImpl;
     impl<E: sails_rs::client::GearEnv> Registry for sails_rs::client::Service<RegistryImpl, E> {
         type Env = E;
+        fn admin_force_delete_application(
+            &mut self,
+            program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::AdminForceDeleteApplication, Self::Env> {
+            self.pending_call((program_id, reason))
+        }
+        fn admin_prune_application(
+            &mut self,
+            program_id: ActorId,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::AdminPruneApplication, Self::Env> {
+            self.pending_call((program_id, reason))
+        }
+        fn apply_approved_application_transition(
+            &mut self,
+            current_program_id: ActorId,
+            approval_id: u64,
+            details: ApplicationPermitDetails,
+            reason: String,
+        ) -> sails_rs::client::PendingCall<io::ApplyApprovedApplicationTransition, Self::Env>
+        {
+            self.pending_call((current_program_id, approval_id, details, reason))
+        }
         fn delete_application(
             &mut self,
             program_id: ActorId,
@@ -398,7 +450,7 @@ pub mod registry {
         }
         fn register_application(
             &mut self,
-            req: RegisterAppReq,
+            req: RegisterApplicationWithApprovalReq,
         ) -> sails_rs::client::PendingCall<io::RegisterApplication, Self::Env> {
             self.pending_call((req,))
         }
@@ -429,6 +481,21 @@ pub mod registry {
             patch: ApplicationPatch,
         ) -> sails_rs::client::PendingCall<io::UpdateApplication, Self::Env> {
             self.pending_call((program_id, patch))
+        }
+        fn update_application_contacts(
+            &mut self,
+            program_id: ActorId,
+            contacts: Option<ContactLinks>,
+        ) -> sails_rs::client::PendingCall<io::UpdateApplicationContacts, Self::Env> {
+            self.pending_call((program_id, contacts))
+        }
+        fn update_application_with_approval(
+            &mut self,
+            program_id: ActorId,
+            approval_id: u64,
+            details: ApplicationPermitDetails,
+        ) -> sails_rs::client::PendingCall<io::UpdateApplicationWithApproval, Self::Env> {
+            self.pending_call((program_id, approval_id, details))
         }
         fn discover(
             &self,
@@ -466,12 +533,17 @@ pub mod registry {
 
     pub mod io {
         use super::*;
+        sails_rs::io_struct_impl!(AdminForceDeleteApplication (program_id: ActorId, reason: String) -> ());
+        sails_rs::io_struct_impl!(AdminPruneApplication (program_id: ActorId, reason: String) -> ());
+        sails_rs::io_struct_impl!(ApplyApprovedApplicationTransition (current_program_id: ActorId, approval_id: u64, details: super::ApplicationPermitDetails, reason: String) -> ());
         sails_rs::io_struct_impl!(DeleteApplication (program_id: ActorId) -> ());
-        sails_rs::io_struct_impl!(RegisterApplication (req: super::RegisterAppReq) -> ());
+        sails_rs::io_struct_impl!(RegisterApplication (req: super::RegisterApplicationWithApprovalReq) -> ());
         sails_rs::io_struct_impl!(RegisterParticipant (handle: String, github: String) -> ());
         sails_rs::io_struct_impl!(ReplaceApplicationProgram (old_program_id: ActorId, new_program_id: ActorId, reason: String) -> ());
         sails_rs::io_struct_impl!(SubmitApplication (program_id: ActorId) -> ());
         sails_rs::io_struct_impl!(UpdateApplication (program_id: ActorId, patch: super::ApplicationPatch) -> ());
+        sails_rs::io_struct_impl!(UpdateApplicationContacts (program_id: ActorId, contacts: Option<super::ContactLinks>) -> ());
+        sails_rs::io_struct_impl!(UpdateApplicationWithApproval (program_id: ActorId, approval_id: u64, details: super::ApplicationPermitDetails) -> ());
         sails_rs::io_struct_impl!(Discover (filter: super::DiscoveryFilter, cursor: Option<ActorId>, limit: u32) -> super::ApplicationPage);
         sails_rs::io_struct_impl!(GetApplication (id: ActorId) -> Option<super::Application>);
         sails_rs::io_struct_impl!(GetParticipant (wallet: ActorId) -> Option<super::Participant>);
@@ -535,6 +607,23 @@ pub mod registry {
                 deleted_at: u64,
                 season_id: u32,
             },
+            ApplicationPruned {
+                program_id: ActorId,
+                owner: ActorId,
+                handle: String,
+                reason: String,
+                pruned_at: u64,
+                released_program_id: bool,
+                season_id: u32,
+            },
+            ApplicationForceDeleted {
+                program_id: ActorId,
+                owner: ActorId,
+                handle: String,
+                reason: String,
+                deleted_at: u64,
+                season_id: u32,
+            },
             /// Owner/program self-call: marks the application ready for review.
             /// Trusted statuses after submission are controlled by AdminService.
             ApplicationSubmitted {
@@ -562,6 +651,25 @@ pub mod registry {
                 replacement_count: u32,
                 season_id: u32,
             },
+            ApplicationPermitConsumed {
+                approval_id: u64,
+                project_review_id: u64,
+                purpose: ApplicationPermitPurpose,
+                details_hash: [u8; 32],
+                applicant: ActorId,
+                coach: ActorId,
+                evidence_message_id: u64,
+                consumed_program_id: ActorId,
+                consumed_at: u64,
+                season_id: u32,
+            },
+            ApplicationProjectReviewLinked {
+                project_review_id: u64,
+                owner: ActorId,
+                program_id: ActorId,
+                linked_at: u64,
+                season_id: u32,
+            },
         }
         impl sails_rs::client::Event for RegistryEvents {
             const EVENT_NAMES: &'static [Route] = &[
@@ -569,9 +677,13 @@ pub mod registry {
                 "ApplicationRegistered",
                 "ApplicationUpdated",
                 "ApplicationDeleted",
+                "ApplicationPruned",
+                "ApplicationForceDeleted",
                 "ApplicationSubmitted",
                 "ReviewRevisionSubmitted",
                 "ApplicationProgramReplaced",
+                "ApplicationPermitConsumed",
+                "ApplicationProjectReviewLinked",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for RegistryImpl {
@@ -830,6 +942,13 @@ pub mod review {
             &mut self,
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::AddReviewer, Self::Env>;
+        fn approve_application_permit(
+            &mut self,
+            project_review_id: u64,
+            purpose: ApplicationPermitPurpose,
+            details: ApplicationPermitDetails,
+            evidence_message_id: u64,
+        ) -> sails_rs::client::PendingCall<io::ApproveApplicationPermit, Self::Env>;
         fn approve_for_listing(
             &mut self,
             program_id: ActorId,
@@ -954,6 +1073,15 @@ pub mod review {
             reviewer: ActorId,
         ) -> sails_rs::client::PendingCall<io::AddReviewer, Self::Env> {
             self.pending_call((reviewer,))
+        }
+        fn approve_application_permit(
+            &mut self,
+            project_review_id: u64,
+            purpose: ApplicationPermitPurpose,
+            details: ApplicationPermitDetails,
+            evidence_message_id: u64,
+        ) -> sails_rs::client::PendingCall<io::ApproveApplicationPermit, Self::Env> {
+            self.pending_call((project_review_id, purpose, details, evidence_message_id))
         }
         fn approve_for_listing(
             &mut self,
@@ -1118,6 +1246,7 @@ pub mod review {
         use super::*;
         sails_rs::io_struct_impl!(AddCoach (coach: ActorId) -> ());
         sails_rs::io_struct_impl!(AddReviewer (reviewer: ActorId) -> ());
+        sails_rs::io_struct_impl!(ApproveApplicationPermit (project_review_id: u64, purpose: super::ApplicationPermitPurpose, details: super::ApplicationPermitDetails, evidence_message_id: u64) -> u64);
         sails_rs::io_struct_impl!(ApproveForListing (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
         sails_rs::io_struct_impl!(ApproveProjectReviewSubmission (applicant: ActorId, request_message_id: u64) -> u64);
         sails_rs::io_struct_impl!(LinkProjectReviewToApplication (project_review_id: u64, program_id: ActorId) -> ());
@@ -1262,6 +1391,17 @@ pub mod review {
                 linked_at: u64,
                 season_id: u32,
             },
+            ApplicationPermitApproved {
+                approval_id: u64,
+                project_review_id: u64,
+                purpose: ApplicationPermitPurpose,
+                details_hash: [u8; 32],
+                applicant: ActorId,
+                coach: ActorId,
+                evidence_message_id: u64,
+                approved_at: u64,
+                season_id: u32,
+            },
         }
         impl sails_rs::client::Event for ReviewEvents {
             const EVENT_NAMES: &'static [Route] = &[
@@ -1279,6 +1419,7 @@ pub mod review {
                 "ProjectReviewCommentPosted",
                 "ProjectReviewGuidanceRecorded",
                 "ProjectReviewLinked",
+                "ApplicationPermitApproved",
             ];
         }
         impl sails_rs::client::ServiceWithEvents for ReviewImpl {
@@ -1489,16 +1630,15 @@ pub enum MigrationDomain {
     ProgramReplacements,
     BoardState,
 }
-/// Register an application by explicit program id. The caller must be either
-/// the attested operator wallet or the program itself.
+/// Full post-state tuple approved by a coach. For `Register`, it is the new
+/// application. For `UpdateMetadata`, it is the complete application tuple
+/// after the update. For `ReplaceProgram`, `program_id` is the new program id.
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub struct RegisterAppReq {
+pub struct ApplicationPermitDetails {
     pub handle: String,
     pub program_id: ActorId,
-    /// The wallet the program attests as its human operator. Chat/board auth
-    /// for `author = Application(a)` passes for this wallet.
     pub operator: ActorId,
     pub github_url: String,
     pub skills_hash: [u8; 32],
@@ -1508,6 +1648,13 @@ pub struct RegisterAppReq {
     pub description: String,
     pub track: Track,
     pub contacts: Option<ContactLinks>,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub struct RegisterApplicationWithApprovalReq {
+    pub approval_id: u64,
+    pub details: ApplicationPermitDetails,
 }
 /// `program_id` + owner + registered_at + season_id are immutable.
 /// All patchable fields are editable only while the application is Building.
@@ -1591,6 +1738,14 @@ pub struct ReviewSummary {
 pub enum ReviewVerdict {
     ApprovedForListing,
     RevisionRequested,
+}
+#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
+#[codec(crate = sails_rs::scale_codec)]
+#[scale_info(crate = sails_rs::scale_info)]
+pub enum ApplicationPermitPurpose {
+    Register,
+    UpdateMetadata,
+    ReplaceProgram,
 }
 #[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
 #[codec(crate = sails_rs::scale_codec)]
