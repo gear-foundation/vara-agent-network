@@ -69,6 +69,7 @@ jobs:
       ARGOCD_TOKEN:         ${{ secrets.ARGOCD_TOKEN }}
 
   deploy_explorer:
+    needs: deploy_indexer
     uses: gear-ops/actions/.github/workflows/build-deploy.yaml@main
     with:
       argocd_server: ${{ vars.ARGOCD_SERVER }}
