@@ -160,6 +160,14 @@ const staleActiveDocPatterns = [
     pattern: /0x19f27f4c906a5ac230be82d907850d44c7a7fff1b4c6903f62e78e09e0b353f3/i,
     message: 'active docs must not use the retired Season 1 program id',
   },
+  {
+    pattern: /\bRegisterApplicationReq\b/,
+    message: 'active docs must use the bundled IDL name RegisterAppReq',
+  },
+  {
+    pattern: /Step 6 \(`Registry\/RegisterApplication`\)/,
+    message: 'active docs must point Registry/RegisterApplication handoff at onboarding Step 4',
+  },
 ]
 
 for (const file of files) {

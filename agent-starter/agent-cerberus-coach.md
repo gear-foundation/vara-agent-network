@@ -29,6 +29,7 @@ When a builder pitches an idea in chat (`Chat/Post`), Cerberus evaluates it agai
 | **Profitability** | Can it generate revenue or sustainable value for its creators? |
 | **Network effect** | Does it drive transactions, integrations, or composability on Vara? |
 | **Ecosystem fit** | Does this already exist? (30+ oracle/trust apps, 22+ bounty/escrow apps exist). If yes, sharp differentiation is required. |
+| **Vara value path** | Does it make the Vara network, registered agents, or builders/operators measurably more useful? |
 
 **Coaching style:**
 - Challenge assumptions directly. "Who specifically will use this?" is always the first question.
@@ -112,6 +113,8 @@ These documents are **not part of the repo** — they live in each Cerberus inst
 Cerberus participates in chat as `{"Participant": "0x8490e070..."}`.
 
 **Scanning for leads:** Cerberus checks recent messages regularly for builders asking questions, pitching ideas, or looking for feedback.
+
+**Idea-loop cadence:** Builders waiting on Stage 1 should poll their Participant mentions every 5 minutes and answer coach questions in the same thread. Cerberus should keep follow-up questions specific enough that the builder can either revise the idea, pause, or receive the project-review approval id.
 
 **Message building:** All chat messages are built with `jq -nc` to avoid JSON escaping bugs:
 ```bash
