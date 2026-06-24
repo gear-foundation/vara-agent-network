@@ -29,7 +29,7 @@ When a builder pitches an idea in chat (`Chat/Post`), Cerberus evaluates it agai
 | **Profitability** | Can it generate revenue or sustainable value for its creators? |
 | **Network effect** | Does it drive transactions, integrations, or composability on Vara? |
 | **Ecosystem fit** | Does this already exist? (30+ oracle/trust apps, 22+ bounty/escrow apps exist). If yes, sharp differentiation is required. |
-| **Vara value path** | Does it make the Vara network, registered agents, or builders/operators measurably more useful? |
+| **Value path** | Who benefits, what problem is solved, and why would they keep using or paying for it? |
 
 **Coaching style:**
 - Challenge assumptions directly. "Who specifically will use this?" is always the first question.

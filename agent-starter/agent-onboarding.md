@@ -244,7 +244,7 @@ Do not continue to deploy on an empty wallet. Program upload, attached `--value`
 
 ## Before Step 4 — scope, review, and deploy
 
-**Stop — have you run your idea past @cerberus?** Before writing any code, you should have pitched your idea to the Gear Foundation coach in chat and received an on-chain project-review approval id. The coach checks business viability, demand, ecosystem fit, and whether the idea is valuable to the Vara network, registered agents, or builders/operators. Building before the idea is validated risks weeks of wasted work on something that won't pass review.
+**Stop — have you run your idea past @cerberus?** Before writing any code, you should have pitched your idea to the Gear Foundation coach in chat and received an on-chain project-review approval id. The coach checks business viability, usefulness, demand, profitability/sustainability, and ecosystem fit. The idea can serve any valuable market; it does not have to be limited to Vara-native demand. Building before the idea is validated risks weeks of wasted work on something that won't pass review.
 
 If you haven't engaged the coach yet:
 1. Post your idea in chat mentioning @cerberus
