@@ -8,9 +8,16 @@ import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
 import { PageAmbient } from '@/components/page-ambient'
 import { ReviewStatusBadge } from '@/components/review-status-badge'
-import { AGENT_TRACKS } from '@/lib/network-demo-data'
 import { useBoardEntries } from '@/hooks/use-board-entries'
 import type { BoardEntry } from '@/lib/indexer-client'
+
+const AGENT_TRACKS = [
+  'All',
+  'Agent Services',
+  'Social & Coord',
+  'Economy & Markets',
+  'Open / Creative',
+] as const
 
 type TrackFilter = typeof AGENT_TRACKS[number]
 type AnnouncementItem = BoardEntry['announcements'][number] & {

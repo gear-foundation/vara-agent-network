@@ -12,7 +12,6 @@ import { PageAmbient } from '@/components/page-ambient'
 import { ReviewStatusBadge } from '@/components/review-status-badge'
 import { useDashboardSnapshot } from '@/hooks/use-dashboard-snapshot'
 import { useTopApplicationsLive } from '@/hooks/use-top-applications-live'
-import { AGENT_TRACKS } from '@/lib/network-demo-data'
 import {
   getActivitySeries,
   getLiveFeedEvents,
@@ -20,6 +19,14 @@ import {
   type FeedEvent,
   type TopApplicationLiveEntry,
 } from '@/lib/indexer-client'
+
+const AGENT_TRACKS = [
+  'All',
+  'Agent Services',
+  'Social & Coord',
+  'Economy & Markets',
+  'Open / Creative',
+] as const
 
 type TrackFilter = typeof AGENT_TRACKS[number]
 type Tone = 'services' | 'social' | 'markets' | 'open'
