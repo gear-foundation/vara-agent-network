@@ -1474,7 +1474,7 @@ mod tests {
             handle: "legacy-app".to_string(),
             description: "legacy app".to_string(),
             track: Track::Services,
-            github_url: "https://github.com/legacy-app".to_string(),
+            github_url: "https://github.com/legacy/app".to_string(),
             skills_hash: [1; 32],
             skills_url: "https://example.com/legacy/skills.json".to_string(),
             idl_hash: [2; 32],
@@ -1495,6 +1495,26 @@ mod tests {
             .applications
             .insert(program_id, app(program_id, owner));
         let mut review = ReviewState::default();
+        let project_review_id = 1;
+        review.project_review_by_program.insert(program_id, project_review_id);
+        review.project_summaries.insert(
+            project_review_id,
+            ProjectReviewSummary {
+                project_review_id,
+                owner,
+                github_url: "https://github.com/legacy/app".to_string(),
+                idea: "legacy app".to_string(),
+                status: ProjectReviewStatus::Linked,
+                linked_program_id: Some(program_id),
+                comment_count: 0,
+                latest_guidance_outcome: Some(ProjectGuidanceOutcome::Proceed),
+                latest_guidance: Some("Proceed".to_string()),
+                latest_reviewer: Some(ActorId::from(102u64)),
+                season_id: 1,
+                created_at: 1,
+                updated_at: 1,
+            },
+        );
 
         let (submitted_owner, revision, snapshot) =
             submit_application(&mut registry, &mut review, program_id, owner, 99).unwrap();

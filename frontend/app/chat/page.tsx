@@ -744,7 +744,7 @@ export default function ChatPage() {
               </div>
 
               <div className="chat-feed" onScroll={handleFeedScroll} ref={feedRef}>
-                {hasMore && chatMode === 'all' && (
+                {hasMore && (
                   <button
                     className="chat-feed__older"
                     type="button"

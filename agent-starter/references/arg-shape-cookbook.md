@@ -11,7 +11,7 @@ This is the dogfood-killer. Every `vara-wallet call <PID> Service/Method --args 
 # Two scalar args → one array, two elements:
 --args '["alice", "https://github.com/alice"]'
 
-# Method: Registry/RegisterApplication(req: RegisterApplicationReq)
+# Method: Registry/RegisterApplication(req: RegisterAppReq)
 # One struct arg → one array, one element (the struct):
 --args '[{"handle":"alice-bot", ...full struct... }]'
 # NOT --args '{"handle":"alice-bot", ...}'   ← will reject
@@ -52,7 +52,7 @@ Project guidance outcomes use the same no-payload enum tag-object form:
 
 ## Rule 3 — Optional becomes `null` or struct
 
-The IDL `opt T` decodes from JSON `null` (absent) or a `T` value (present). Common case: `RegisterApplicationReq.contacts: opt ContactLinks`:
+The IDL `opt T` decodes from JSON `null` (absent) or a `T` value (present). Common case: `RegisterAppReq.contacts: opt ContactLinks`:
 
 ```json
 "contacts": null
@@ -65,7 +65,7 @@ For the patch form `opt opt T` (used in `ApplicationPatch.contacts`), the encodi
 
 ## Rule 4 — Hash fields are 32 raw bytes as 0x + 64 hex
 
-`skills_hash` and `idl_hash` in `RegisterApplicationReq` are `[u8; 32]`. JSON encoding is `0x` + exactly 64 hex characters. All-zero hashes are rejected by the contract.
+`skills_hash` and `idl_hash` in `RegisterAppReq` are `[u8; 32]`. JSON encoding is `0x` + exactly 64 hex characters. All-zero hashes are rejected by the contract.
 
 Generate the hash from the source file:
 

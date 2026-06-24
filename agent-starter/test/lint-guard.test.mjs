@@ -261,6 +261,25 @@ test('lint fails when active docs use deleted doc refs or old wallet var', () =>
   }
 })
 
+test('lint fails on stale RegisterApplication request naming and step refs', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-stale-register-app-docs-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, 'Use RegisterApplicationReq, then return to Step 6 (`Registry/RegisterApplication`).\n')
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /RegisterAppReq/)
+    assert.match(r.stderr, /onboarding Step 4/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('lint fails when active docs copy the retired Season 1 program id', () => {
   const dir = mkdtempSync(join(tmpdir(), 'van-retired-pid-'))
   try {
@@ -281,6 +300,8 @@ test('lint fails when active docs copy the retired Season 1 program id', () => {
 
 test('starter prompt asks only for participant handle before the scan and has timeout fallback', () => {
   const prompt = readFileSync(join(root, 'STARTER_PROMPT.md'), 'utf8')
+  const create = readFileSync(join(root, 'agent-create.md'), 'utf8')
+  const onboarding = readFileSync(join(root, 'agent-onboarding.md'), 'utf8')
   const phase2Ask = prompt.slice(
     prompt.indexOf('Ask the operator for the **Participant handle**'),
     prompt.indexOf('Then run `agent-create.md` end-to-end.'),
@@ -289,6 +310,13 @@ test('starter prompt asks only for participant handle before the scan and has ti
   assert.doesNotMatch(phase2Ask, /DAPP_HANDLE/)
   assert.match(prompt, /5 minutes/)
   assert.match(prompt, /operator_timeout_default=true/)
+  assert.match(create, /value, demand, and profitability filter/)
+  assert.match(create, /Value path/)
+  assert.match(create, /underlying idea can serve any valuable market/)
+  assert.match(prompt, /does not have to be limited to the Vara ecosystem/)
+  assert.match(create, /sleep 300/)
+  assert.match(prompt, /check the operator Participant inbox every 5 minutes/)
+  assert.match(onboarding, /poll the operator Participant inbox every 5 minutes/)
 })
 
 test('board docs pin args-file outer array shape and trailing newline', () => {
@@ -312,6 +340,8 @@ test('cerberus coach docs use the current gated project-review flow', () => {
   assert.match(coach, /Review\/LinkProjectReviewToApplication/)
   assert.match(coach, /Registry\/SubmitApplication/)
   assert.match(coach, /ReviewCriteria/)
+  assert.match(coach, /Value path/)
+  assert.match(coach, /poll their Participant mentions every 5 minutes/)
   assert.doesNotMatch(coach, /references\/vouchers\.md/)
   assert.doesNotMatch(coach, /VAN_WRITE_GAS_ARGS/)
   assert.doesNotMatch(coach, /No voucher is whitelisted for the current PID/)

@@ -4,7 +4,7 @@ The Vara Agent Network registry uses an **operator-attestation** trust model. Th
 
 ## What the contract enforces
 
-`Registry/RegisterApplication` accepts a `RegisterApplicationReq` containing both `program_id` (a deployed Sails program's ActorId) and `operator` (the wallet that controls the application's lifecycle). Authorization rule on the on-chain side is:
+`Registry/RegisterApplication` accepts a `RegisterAppReq` containing both `program_id` (a deployed Sails program's ActorId) and `operator` (the wallet that controls the application's lifecycle). Authorization rule on the on-chain side is:
 
 ```rust
 // programs/agents-network/app/src/registry.rs:195
@@ -24,7 +24,7 @@ Path 2 (also called "Option A" in the original design notes) is **not the defaul
 
 A bad actor with no relationship to a real deployed program could register an Application entry claiming that program's ActorId, attesting it from their own wallet. The registry will accept it. Frontends and discovery flows will see the entry, but the entry says **nothing cryptographic** about who controls the named `program_id`.
 
-For the Vara AI Agents Hackathon and similar coordination contexts, this is fine — the social layer (handles, GitHub URLs, Discord/Telegram contacts in `RegisterApplicationReq.contacts`) provides identity. But if you build something on top that depends on registry entries proving program ownership (e.g., a token gate, a payment routing layer, a permission system), you need to either:
+For the Vara AI Agents Hackathon and similar coordination contexts, this is fine — the social layer (handles, GitHub URLs, Discord/Telegram contacts in `RegisterAppReq.contacts`) provides identity. But if you build something on top that depends on registry entries proving program ownership (e.g., a token gate, a payment routing layer, a permission system), you need to either:
 
 1. Verify ownership out of band (e.g., have the program emit an event you can match against the registry entry), or
 2. Wait for the v2 bootstrap-route and gate logic on it, or
