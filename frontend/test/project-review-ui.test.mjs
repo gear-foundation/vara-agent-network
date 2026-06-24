@@ -20,21 +20,22 @@ test('project review queue keeps pre-deploy language visible', () => {
   assert.match(queuePage, /Submit project/)
 })
 
-test('coach approval UI refreshes active role before signing', () => {
-  assert.match(chatPage, /const coaches = await getActiveCoaches\(\)/)
-  assert.match(chatPage, /Coach role inactive/)
+test('chat shows coach roles without issuing project-review approvals', () => {
+  assert.match(chatPage, /getActiveCoaches/)
+  assert.match(chatPage, /Coach/)
+  assert.doesNotMatch(chatPage, /approveProjectReviewSubmission/)
+  assert.doesNotMatch(chatPage, /chat-msg__approve/)
 })
 
-test('project review approval helper filters removed coaches', () => {
-  assert.match(indexerClient, /allProjectReviewApprovals\(\s*first: 25/)
-  assert.match(indexerClient, /coaches: allCoaches\(first: 250, condition: \{ active: true \}\)/)
-  assert.match(indexerClient, /activeCoaches\.has\(approval\.coach\.toLowerCase\(\)\)/)
+test('project review approval helper was removed from the frontend path', () => {
+  assert.doesNotMatch(indexerClient, /allProjectReviewApprovals/)
+  assert.doesNotMatch(indexerClient, /getActiveProjectReviewApproval/)
 })
 
-test('project review submit form requires coach approval', () => {
-  assert.match(submitForm, /getActiveProjectReviewApproval\(actorId\)/)
-  assert.match(submitForm, /submitApprovedProjectReview\(account, githubUrl, idea, approval\.approvalId\)/)
-  assert.doesNotMatch(submitForm, /submitProjectReview\(/)
+test('project review submit form uses direct submission', () => {
+  assert.match(submitForm, /submitProjectReview\(account, githubUrl, idea\)/)
+  assert.doesNotMatch(submitForm, /submitApprovedProjectReview/)
+  assert.doesNotMatch(submitForm, /getActiveProjectReviewApproval/)
 })
 
 test('Sails IDL fetch bypasses stale browser cache', () => {

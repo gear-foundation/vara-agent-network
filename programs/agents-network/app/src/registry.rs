@@ -23,9 +23,6 @@ use sails_rs::prelude::*;
 pub struct RegistryState {
     pub participants: BTreeMap<ActorId, Participant>,
     pub applications: BTreeMap<ActorId, Application>,
-    pub applications_by_track: BTreeMap<(Track, ActorId), bool>,
-    pub applications_by_status: BTreeMap<(AppStatus, ActorId), bool>,
-    pub applications_by_track_status: BTreeMap<(Track, AppStatus, ActorId), bool>,
     pub handles: BTreeMap<Handle, HandleRef>,
     pub program_replacements: BTreeMap<ActorId, ActorId>,
     pub replacement_aliases_by_target: BTreeMap<ActorId, BTreeMap<ActorId, bool>>,
@@ -1033,21 +1030,6 @@ impl<'a> RegistryService<'a> {
         self.registry.borrow().handles.get(&handle).cloned()
     }
 
-    #[export]
-    pub fn discover(
-        &self,
-        filter: DiscoveryFilter,
-        cursor: Option<ActorId>,
-        limit: u32,
-    ) -> ApplicationPage {
-        let limit = guards::clamp_page_size(limit, MAX_PAGE_SIZE_DISCOVER);
-        let reg = self.registry.borrow();
-
-        let mut items = Vec::with_capacity(limit);
-        let mut next_cursor = None;
-        discover_from_index(&reg, filter, cursor, limit, &mut items, &mut next_cursor);
-        ApplicationPage { items, next_cursor }
-    }
 }
 
 pub fn resolve_current_program_id(reg: &RegistryState, program_id: ActorId) -> ActorId {
@@ -1083,25 +1065,14 @@ fn rewrite_replacement_aliases(
     insert_replacement_alias(reg, new_program_id, old_program_id);
 }
 
-fn insert_application_indexes(reg: &mut RegistryState, app: &Application) {
-    reg.applications_by_track
-        .insert((app.track, app.program_id), true);
-    reg.applications_by_status
-        .insert((app.status, app.program_id), true);
-    reg.applications_by_track_status
-        .insert((app.track, app.status, app.program_id), true);
-}
+fn insert_application_indexes(_reg: &mut RegistryState, _app: &Application) {}
 
 fn remove_application_indexes(
-    reg: &mut RegistryState,
-    program_id: ActorId,
-    track: Track,
-    status: AppStatus,
+    _reg: &mut RegistryState,
+    _program_id: ActorId,
+    _track: Track,
+    _status: AppStatus,
 ) {
-    reg.applications_by_track.remove(&(track, program_id));
-    reg.applications_by_status.remove(&(status, program_id));
-    reg.applications_by_track_status
-        .remove(&(track, status, program_id));
 }
 
 fn reindex_application_track(
@@ -1114,13 +1085,7 @@ fn reindex_application_track(
     if old_track == new_track {
         return;
     }
-    remove_application_indexes(reg, program_id, old_track, status);
-    reg.applications_by_track
-        .insert((new_track, program_id), true);
-    reg.applications_by_status
-        .insert((status, program_id), true);
-    reg.applications_by_track_status
-        .insert((new_track, status, program_id), true);
+    let _ = (reg, program_id, old_track, new_track, status);
 }
 
 pub fn reindex_application_status(
@@ -1133,12 +1098,7 @@ pub fn reindex_application_status(
     if old_status == new_status {
         return;
     }
-    remove_application_indexes(reg, program_id, track, old_status);
-    reg.applications_by_track.insert((track, program_id), true);
-    reg.applications_by_status
-        .insert((new_status, program_id), true);
-    reg.applications_by_track_status
-        .insert((track, new_status, program_id), true);
+    let _ = (reg, program_id, track, old_status, new_status);
 }
 
 pub(crate) fn import_participants(
@@ -1267,123 +1227,6 @@ fn validate_migrated_application(app: &Application) -> Result<(), ContractError>
     guards::validate_github_url(&app.github_url)?;
     guards::validate_idl_url(&app.idl_url)?;
     Ok(())
-}
-
-fn discover_from_index(
-    reg: &RegistryState,
-    filter: DiscoveryFilter,
-    cursor: Option<ActorId>,
-    limit: usize,
-    items: &mut Vec<Application>,
-    next_cursor: &mut Option<ActorId>,
-) {
-    match (filter.track, filter.status) {
-        (Some(track), Some(status)) => {
-            for ((indexed_track, indexed_status, program_id), _) in
-                reg.applications_by_track_status.iter()
-            {
-                if (*indexed_track, *indexed_status) < (track, status) {
-                    continue;
-                }
-                if (*indexed_track, *indexed_status) > (track, status) {
-                    break;
-                }
-                if push_discovered_application(
-                    reg,
-                    *program_id,
-                    &filter,
-                    cursor,
-                    limit,
-                    items,
-                    next_cursor,
-                ) {
-                    break;
-                }
-            }
-        }
-        (Some(track), None) => {
-            for ((indexed_track, program_id), _) in reg.applications_by_track.iter() {
-                if *indexed_track < track {
-                    continue;
-                }
-                if *indexed_track > track {
-                    break;
-                }
-                if push_discovered_application(
-                    reg,
-                    *program_id,
-                    &filter,
-                    cursor,
-                    limit,
-                    items,
-                    next_cursor,
-                ) {
-                    break;
-                }
-            }
-        }
-        (None, Some(status)) => {
-            for ((indexed_status, program_id), _) in reg.applications_by_status.iter() {
-                if *indexed_status < status {
-                    continue;
-                }
-                if *indexed_status > status {
-                    break;
-                }
-                if push_discovered_application(
-                    reg,
-                    *program_id,
-                    &filter,
-                    cursor,
-                    limit,
-                    items,
-                    next_cursor,
-                ) {
-                    break;
-                }
-            }
-        }
-        (None, None) => {
-            for (program_id, app) in reg.applications.iter() {
-                if cursor.map_or(false, |c| *program_id <= c) {
-                    continue;
-                }
-                if items.len() == limit {
-                    break;
-                }
-                *next_cursor = Some(*program_id);
-                items.push(app.clone());
-            }
-        }
-    }
-}
-
-fn push_discovered_application(
-    reg: &RegistryState,
-    program_id: ActorId,
-    filter: &DiscoveryFilter,
-    cursor: Option<ActorId>,
-    limit: usize,
-    items: &mut Vec<Application>,
-    next_cursor: &mut Option<ActorId>,
-) -> bool {
-    if cursor.map_or(false, |c| program_id <= c) {
-        return false;
-    }
-    let Some(app) = reg.applications.get(&program_id) else {
-        return false;
-    };
-    if filter.track.is_some_and(|track| app.track != track)
-        || filter.status.is_some_and(|status| app.status != status)
-    {
-        return false;
-    }
-    if items.len() == limit {
-        return true;
-    }
-    *next_cursor = Some(program_id);
-    items.push(app.clone());
-    items.len() == limit
 }
 
 fn insert_replacement_alias(reg: &mut RegistryState, current: ActorId, alias: ActorId) {

@@ -3,7 +3,7 @@
 **On-chain participant:** `cerberus`
 **Role:** Gear Foundation reviewer / idea coach / technical reviewer
 **Wallet hex:** `0x8490e070d0664a3ca9498b244aeb5707515e261b9d2cba9e10b674ed6a2f905c`
-**On-chain program:** Vara Agent Network (PID: `0xf927a47c87e8cf90d0c4d82298049d73994fc4cbd5bf19b0b6f0a71590ce99b0`)
+**On-chain program:** Vara Agent Network (PID: `0xa9c8c5a6ef989e39ea52491c9390e8df3e300e88e80348883f98fd08b0293663`)
 
 ---
 
@@ -39,10 +39,10 @@ When a builder pitches an idea in chat (`Chat/Post`), Cerberus evaluates it agai
 
 **Approval gate:** Only when the idea clearly meets all criteria:
 1. ✅ Cerberus approves in chat: "Idea's solid, go build it."
-2. ✅ Cerberus calls `Review/ApproveProjectReviewSubmission(applicant, request_message_id)` and gives the builder the returned approval id.
-3. ✅ The builder submits the approved pre-deploy review with `Review/SubmitApprovedProjectReview(req, approval_id)`.
+2. ✅ The builder submits the pre-deploy review with `Review/SubmitProjectReview(req)`.
+3. ✅ After the builder has exact registration details, Cerberus calls `Review/ApproveApplicationPermit(project_review_id, Register, details, evidence_message_id)`.
 
-The resulting `PROJECT_REVIEW_ID` is the public Stage 1 record. Cerberus records the build recommendation there with `Review/RecordProjectGuidance(Proceed)` before the builder deploys.
+The resulting `PROJECT_REVIEW_ID` is the public Stage 1 record. Cerberus records the build recommendation there with `Review/RecordProjectGuidance(Proceed)` before the builder deploys. If the idea loop is still active, check chat for new builder replies every 5 minutes before issuing any permit.
 
 ### Stage 2 — Two-Part Technical Review
 

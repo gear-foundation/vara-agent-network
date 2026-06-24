@@ -295,19 +295,6 @@ export interface ReviewCommentPosted {
   season_id: number;
 }
 
-export interface ReviewDecisionRecorded {
-  program_id: Hex;
-  revision: number;
-  reviewer: Hex;
-  verdict: ReviewVerdict;
-  reason: string;
-  criteria: ReviewCriteria;
-  old_status: AppStatus;
-  new_status: AppStatus;
-  decided_at: bigint | number;
-  season_id: number;
-}
-
 export interface PublishDecisionRecorded {
   program_id: Hex;
   revision: number;
@@ -327,25 +314,6 @@ export interface ProjectReviewSubmitted {
   github_url: string;
   idea: string;
   submitted_at: bigint | number;
-  season_id: number;
-}
-
-export interface ProjectReviewSubmissionApproved {
-  approval_id: bigint | number;
-  applicant: Hex;
-  coach: Hex;
-  request_message_id: bigint | number;
-  approved_at: bigint | number;
-  season_id: number;
-}
-
-export interface ProjectReviewApprovalConsumed {
-  approval_id: bigint | number;
-  project_review_id: bigint | number;
-  applicant: Hex;
-  coach: Hex;
-  request_message_id: bigint | number;
-  consumed_at: bigint | number;
   season_id: number;
 }
 

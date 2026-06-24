@@ -38,7 +38,7 @@ async fn ready_project_review(
     } else {
         ALICE
     };
-    let project_review_id = submit_approved_project_review_for_test(
+    let project_review_id = submit_project_review_for_test(
         program,
         owner,
         details.github_url.clone(),
@@ -389,7 +389,7 @@ async fn admin_prune_releases_program_reservation() {
         .unwrap();
 
     let details = permit_details("force-app", ALICE, STUB_PROGRAM_ALPHA);
-    let project_review_id = submit_approved_project_review_for_test(
+    let project_review_id = submit_project_review_for_test(
         &program,
         ALICE,
         details.github_url.clone(),
@@ -443,7 +443,7 @@ async fn admin_force_delete_preserves_program_reservation() {
         .unwrap();
 
     let blocked = permit_details("reserved-app", ALICE, STUB_PROGRAM_ALPHA);
-    let project_review_id = submit_approved_project_review_for_test(
+    let project_review_id = submit_project_review_for_test(
         &program,
         ALICE,
         blocked.github_url.clone(),

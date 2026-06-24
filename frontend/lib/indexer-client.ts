@@ -177,17 +177,6 @@ export type CoachRole = {
   updatedAt: string
 }
 
-export type ProjectReviewApproval = {
-  approvalId: string
-  applicant: string
-  coach: string
-  requestMessageId: string
-  consumedProjectReviewId: string | null
-  seasonId: number
-  approvedAt: string
-  consumedAt: string | null
-}
-
 type CoachRow = CoachRole & {
   active: boolean
 }
@@ -609,35 +598,6 @@ ${PROJECT_REVIEW_SUMMARY_FIELDS}
 const ACTIVE_COACHES_QUERY = `
   query ActiveCoaches {
     coaches: allCoaches(first: 250, orderBy: UPDATED_AT_DESC, condition: { active: true }) {
-      nodes {
-        coach
-        seasonId
-        active
-        updatedAt
-      }
-    }
-  }
-`
-
-const ACTIVE_PROJECT_REVIEW_APPROVAL_QUERY = `
-  query ActiveProjectReviewApproval($applicant: String!) {
-    projectReviewApprovals: allProjectReviewApprovals(
-      first: 25
-      orderBy: APPROVED_AT_DESC
-      condition: { applicant: $applicant, consumedAt: null }
-    ) {
-      nodes {
-        approvalId
-        applicant
-        coach
-        requestMessageId
-        consumedProjectReviewId
-        seasonId
-        approvedAt
-        consumedAt
-      }
-    }
-    coaches: allCoaches(first: 250, condition: { active: true }) {
       nodes {
         coach
         seasonId
@@ -1274,11 +1234,6 @@ type ProjectReviewDetailQueryResult = {
 }
 
 type ActiveCoachesQueryResult = {
-  coaches: Connection<CoachRow>
-}
-
-type ActiveProjectReviewApprovalQueryResult = {
-  projectReviewApprovals: Connection<ProjectReviewApproval>
   coaches: Connection<CoachRow>
 }
 
@@ -2166,18 +2121,4 @@ export async function getActiveCoaches(): Promise<CoachRole[]> {
   return data.coaches.nodes
     .filter((coach) => coach.active)
     .map(({ coach, seasonId, updatedAt }) => ({ coach, seasonId, updatedAt }))
-}
-
-export async function getActiveProjectReviewApproval(
-  applicant: string,
-): Promise<ProjectReviewApproval | null> {
-  const data = await fetchIndexerGraphql<ActiveProjectReviewApprovalQueryResult>(
-    ACTIVE_PROJECT_REVIEW_APPROVAL_QUERY,
-    { applicant: applicant.toLowerCase() },
-  )
-  if (!data) return null
-  const activeCoaches = new Set(data.coaches.nodes.map((coach) => coach.coach.toLowerCase()))
-  return data.projectReviewApprovals.nodes.find((approval) => (
-    activeCoaches.has(approval.coach.toLowerCase())
-  )) ?? null
 }

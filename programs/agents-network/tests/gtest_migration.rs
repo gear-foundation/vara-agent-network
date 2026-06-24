@@ -282,23 +282,14 @@ async fn migration_imports_state_rebuilds_indexes_and_finishes_locked() {
     assert_eq!(summary.pending_submission_revision, Some(1));
     assert_eq!(summary.total_comment_count, 0);
 
-    let live_page = program
+    let migrated = program
         .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: None,
-                status: Some(AppStatus::Live),
-            },
-            None,
-            10,
-        )
+        .get_application(STUB_PROGRAM_BETA.into())
         .await
-        .unwrap();
-    assert_eq!(live_page.items.len(), 1);
-    assert_eq!(
-        live_page.items[0].program_id,
-        ActorId::from(STUB_PROGRAM_BETA)
-    );
+        .unwrap()
+        .expect("migrated app should be readable");
+    assert_eq!(migrated.program_id, ActorId::from(STUB_PROGRAM_BETA));
+    assert_eq!(migrated.status, AppStatus::Live);
 
     program
         .admin()

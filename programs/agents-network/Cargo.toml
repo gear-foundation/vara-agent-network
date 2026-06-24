@@ -43,3 +43,10 @@ sails-rs = "0.10.3"
 tokio = "1.48.0"
 agents-network-app = { version = "0.1.2", path = "app" }
 agents-network-client = { version = "0.1.2", path = "client" }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "z"
+panic = "abort"
+strip = true

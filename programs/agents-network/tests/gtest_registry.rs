@@ -220,12 +220,20 @@ async fn one_wallet_can_register_multiple_applications() {
     )
     .await;
 
-    let page = program
+    let first = program
         .registry()
-        .discover(empty_filter(), None, 10)
+        .get_application(STUB_PROGRAM_ALPHA.into())
         .await
-        .unwrap();
-    assert_eq!(page.items.len(), 2);
+        .unwrap()
+        .expect("first application should be registered");
+    let second = program
+        .registry()
+        .get_application(STUB_PROGRAM_BETA.into())
+        .await
+        .unwrap()
+        .expect("second application should be registered");
+    assert_eq!(first.owner, ALICE.into());
+    assert_eq!(second.owner, ALICE.into());
 }
 
 #[tokio::test]
@@ -472,20 +480,13 @@ async fn owner_can_replace_program_id_while_building() {
             .unwrap(),
         Some(HandleRef::Application(STUB_PROGRAM_BETA.into()))
     );
-    let page = program
+    let app = program
         .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: None,
-                status: Some(AppStatus::Building),
-            },
-            None,
-            10,
-        )
+        .get_application(STUB_PROGRAM_BETA.into())
         .await
-        .unwrap();
-    assert_eq!(page.items.len(), 1);
-    assert_eq!(page.items[0].program_id, STUB_PROGRAM_BETA.into());
+        .unwrap()
+        .expect("replacement target should remain readable");
+    assert_eq!(app.status, AppStatus::Building);
 }
 
 #[tokio::test]
@@ -621,7 +622,7 @@ async fn owner_can_replace_after_revision_request_returns_to_building() {
         .unwrap();
     program
         .review()
-        .request_revision(
+        .request_publish_changes(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "needs another deployment".to_string(),
@@ -962,237 +963,6 @@ async fn register_application_validates_contact_lengths() {
     assert_eq!(contacts.discord.as_deref(), Some("discord-user"));
     assert_eq!(contacts.telegram.as_deref(), Some("@telegram_user"));
     assert_eq!(contacts.x.as_deref(), Some("@x_user"));
-}
-
-#[tokio::test]
-async fn discover_clamps_limit_to_50() {
-    let system = init_system();
-    for i in 0..60u64 {
-        system.mint_to(400 + i, FUND);
-    }
-    let env = GtestEnv::new(system, DEPLOYER.into());
-    let program = deploy(&env).await;
-
-    // Register 60 apps (spread across 3 operators to avoid AppLimitReached).
-    for i in 0..60u64 {
-        let handle = format!("app-{i:02}");
-        let operator = match i / 20 {
-            0 => ALICE,
-            1 => BOB,
-            _ => CAROL,
-        };
-        register_application_for_test(
-            &program,
-            mk_register_req(&handle, operator, 400 + i),
-            operator,
-        )
-        .await;
-    }
-
-    let page = program
-        .registry()
-        .discover(empty_filter(), None, 1000)
-        .await
-        .unwrap();
-    assert_eq!(page.items.len(), 50, "limit must clamp to 50");
-}
-
-#[tokio::test]
-async fn discover_track_filter() {
-    let system = init_system();
-    for i in 0..10u64 {
-        system.mint_to(500 + i, FUND);
-    }
-    let env = GtestEnv::new(system, DEPLOYER.into());
-    let program = deploy(&env).await;
-
-    // 3 Services, 3 Social, 2 Economy, 2 Open.
-    let tracks = [
-        Track::Services,
-        Track::Services,
-        Track::Services,
-        Track::Social,
-        Track::Social,
-        Track::Social,
-        Track::Economy,
-        Track::Economy,
-        Track::Open,
-        Track::Open,
-    ];
-    for (i, track) in tracks.into_iter().enumerate() {
-        let handle = format!("app-{i}");
-        let mut req = mk_register_req(&handle, ALICE, 500 + i as u64);
-        req.track = track;
-        register_application_for_test(&program, req, ALICE).await;
-    }
-
-    let page = program
-        .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: Some(Track::Services),
-                status: None,
-            },
-            None,
-            100,
-        )
-        .await
-        .unwrap();
-    assert_eq!(page.items.len(), 3);
-    for app in &page.items {
-        assert_eq!(app.track, Track::Services);
-    }
-}
-
-#[tokio::test]
-async fn discover_track_filter_updates_after_patch() {
-    let system = init_system();
-    let env = GtestEnv::new(system, DEPLOYER.into());
-    let program = deploy(&env).await;
-
-    register_application_for_test(
-        &program,
-        mk_register_req("indexed-track", ALICE, STUB_PROGRAM_ALPHA),
-        STUB_PROGRAM_ALPHA,
-    )
-    .await;
-
-    let mut details = mk_register_req("indexed-track", ALICE, STUB_PROGRAM_ALPHA);
-    details.track = Track::Open;
-    update_application_with_approval_for_test(&program, STUB_PROGRAM_ALPHA, details, ALICE).await;
-
-    let services = program
-        .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: Some(Track::Services),
-                status: None,
-            },
-            None,
-            10,
-        )
-        .await
-        .unwrap();
-    assert!(services.items.is_empty());
-
-    let open = program
-        .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: Some(Track::Open),
-                status: None,
-            },
-            None,
-            10,
-        )
-        .await
-        .unwrap();
-    assert_eq!(open.items.len(), 1);
-    assert_eq!(open.items[0].program_id, STUB_PROGRAM_ALPHA.into());
-}
-
-#[tokio::test]
-async fn discover_status_filter_tracks_review_and_admin_changes() {
-    let system = init_system();
-    let env = GtestEnv::new(system, DEPLOYER.into());
-    let program = deploy(&env).await;
-    disable_review_rate_limit(&program).await;
-
-    program
-        .review()
-        .add_reviewer(CAROL.into())
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-    register_application_for_test(
-        &program,
-        mk_register_req("indexed-status", ALICE, STUB_PROGRAM_ALPHA),
-        STUB_PROGRAM_ALPHA,
-    )
-    .await;
-    link_ready_project_review(&program, ALICE, "indexed-status", STUB_PROGRAM_ALPHA).await;
-
-    program
-        .registry()
-        .submit_application(STUB_PROGRAM_ALPHA.into())
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap();
-    let submitted = program
-        .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: None,
-                status: Some(AppStatus::Submitted),
-            },
-            None,
-            10,
-        )
-        .await
-        .unwrap();
-    assert_eq!(submitted.items.len(), 1);
-    assert_eq!(submitted.items[0].program_id, STUB_PROGRAM_ALPHA.into());
-
-    let building = program
-        .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: None,
-                status: Some(AppStatus::Building),
-            },
-            None,
-            10,
-        )
-        .await
-        .unwrap();
-    assert!(building.items.is_empty());
-
-    program
-        .review()
-        .approve_for_listing(
-            STUB_PROGRAM_ALPHA.into(),
-            1,
-            "ready for indexed discovery".to_string(),
-            criteria(),
-        )
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
-    let live = program
-        .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: None,
-                status: Some(AppStatus::Live),
-            },
-            None,
-            10,
-        )
-        .await
-        .unwrap();
-    assert_eq!(live.items.len(), 1);
-    assert_eq!(live.items[0].program_id, STUB_PROGRAM_ALPHA.into());
-
-    program
-        .admin()
-        .set_application_status(STUB_PROGRAM_ALPHA.into(), AppStatus::Building)
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-    let reopened = program
-        .registry()
-        .discover(
-            agents_network_client::DiscoveryFilter {
-                track: None,
-                status: Some(AppStatus::Building),
-            },
-            None,
-            10,
-        )
-        .await
-        .unwrap();
-    assert_eq!(reopened.items.len(), 1);
-    assert_eq!(reopened.items[0].program_id, STUB_PROGRAM_ALPHA.into());
 }
 
 #[tokio::test]

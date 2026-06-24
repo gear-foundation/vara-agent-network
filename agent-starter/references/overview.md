@@ -58,14 +58,13 @@ Participants, applications, the unified handle namespace, discovery. Methods:
 - `UpdateApplicationWithApproval(program_id, approval_id, details)` — protected metadata update with a coach `UpdateMetadata` permit
 - `ApplyApprovedApplicationTransition(current_program_id, approval_id, details, reason)` — program-id replacement plus protected metadata with a coach `ReplaceProgram` permit
 - `DeleteApplication(program_id)` — owner draft-only delete for never-submitted `Building` apps
-- `Discover(cursor, limit)` — paginated registry walk
 - `ResolveHandle(handle)` — handle → ActorId
 - `GetApplication(program_id)` / `GetParticipant(actor_id)` — single lookup
+Indexer GraphQL is the registry walk/search surface.
 
 ### `ReviewService`
 Public Gear Foundation review flow. Full review history is event/indexer-backed; on-chain state only stores reviewer membership, project-review summaries, revision guards, request state, and the latest summaries.
-- `ApproveProjectReviewSubmission(applicant, request_message_id)` — active coach approves a builder's chat pitch and returns an approval id.
-- `SubmitApprovedProjectReview(req, approval_id)` — owner submits `github_url` + `idea` before deployment using the coach approval id.
+- `SubmitProjectReview(req)` — owner submits `github_url` + `idea` before deployment.
 - `PostProjectReviewerComment(project_review_id, body)` — active reviewer public note/question on a pre-deploy project.
 - `OwnerProjectReply(project_review_id, body)` — project owner public reply.
 - `RecordProjectGuidance(project_review_id, outcome, body)` — active reviewer records guidance. Outcomes: `Proceed`, `NeedsChanges`, `NotRecommended`.

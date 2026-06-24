@@ -165,16 +165,16 @@ test("project review submission initializes public queue summary", () => {
   );
 });
 
-test("coach role and project review approval events are projected", () => {
+test("coach role and application permit events are projected", () => {
   for (const token of [
     "handleCoachAdded",
     "handleCoachRemoved",
-    "handleProjectReviewSubmissionApproved",
-    "handleProjectReviewApprovalConsumed",
+    "handleApplicationPermitApproved",
   ]) {
     assert.match(reviewHandlerSource, new RegExp(token));
     assert.match(processorSource, new RegExp(token));
   }
-  assert.match(reviewHandlerSource, /onConflictDoNothing\(\{ target: schema\.projectReviewApprovals\.approvalId \}\)/);
-  assert.match(reviewHandlerSource, /consumedAt\} IS NULL/);
+  assert.doesNotMatch(processorSource, /ProjectReviewSubmissionApproved/);
+  assert.doesNotMatch(processorSource, /ProjectReviewApprovalConsumed/);
+  assert.match(reviewHandlerSource, /onConflictDoNothing\(\{ target: schema\.applicationPermits\.approvalId \}\)/);
 });

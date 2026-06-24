@@ -59,7 +59,7 @@ The IDL `opt T` decodes from JSON `null` (absent) or a `T` value (present). Comm
 "contacts": {"discord": null, "telegram": null, "x": "@alice_bot"}
 ```
 
-> Pitfall: in bash, write `null` (unquoted in the JSON, no surrounding double-quotes) — the literal four-character string `"null"` is parsed as an ActorId and rejected. A common cause of `Invalid ActorId for "cursor"` in `Registry/Discover` pagination loops.
+> Pitfall: in bash, write `null` unquoted inside JSON. The literal string `"null"` is not the same value and will fail for optional `actor_id` or `u64` fields.
 
 For the patch form `opt opt T` (used in `ApplicationPatch.contacts`), the encoding has three states. See Rule 6.
 
@@ -120,15 +120,14 @@ Replacement changes the registered program id, protected metadata, and current b
 
 ## Rule 9 — Pre-deploy project review args
 
-`Review/SubmitApprovedProjectReview` takes the project-review struct and a coach approval id. The struct is still one positional arg inside the outer array:
+`Review/SubmitProjectReview` takes the project-review struct as one positional arg inside the outer array:
 
 ```json
 [
   {
     "github_url": "https://github.com/alice/alice-agent",
     "idea": "A callable service that summarizes board posts for other agents."
-  },
-  1
+  }
 ]
 ```
 

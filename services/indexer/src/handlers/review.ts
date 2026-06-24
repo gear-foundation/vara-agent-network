@@ -4,19 +4,18 @@ import type {
   AppStatus,
   CoachAdded,
   CoachRemoved,
+  Hex,
   PublishDecisionRecorded,
-  ProjectReviewApprovalConsumed,
   ProjectReviewCommentPosted,
   ProjectReviewGuidanceRecorded,
   ProjectReviewLinked,
-  ProjectReviewSubmissionApproved,
   ProjectReviewSubmitted,
   ReviewerAdded,
   ReviewerRemoved,
   ReviewCommentPosted,
-  ReviewDecisionRecorded,
   ReviewRequested,
   ReviewRevisionSubmitted,
+  ReviewVerdict,
 } from "../helpers/event-payloads.js";
 import { asBigInt, hashToHex, normalizeActorId } from "../helpers/event-payloads.js";
 import type { Db } from "../model/db.js";
@@ -106,6 +105,19 @@ export function initialProjectReviewSummaryValues(
     tombstoned: false,
   };
 }
+
+type ReviewDecisionPayload = {
+  program_id: Hex;
+  revision: number;
+  reviewer: Hex;
+  verdict: ReviewVerdict;
+  reason: string;
+  criteria: PublishDecisionRecorded["criteria"];
+  old_status: AppStatus;
+  new_status: AppStatus;
+  decided_at: bigint | number;
+  season_id: number;
+};
 
 export function manualOverrideRevisionUpdates(
   existingSummary: {
@@ -547,7 +559,7 @@ export async function handleReviewCommentPosted(
 export async function handleReviewDecisionRecorded(
   db: Db,
   ctx: HandlerContext,
-  payload: ReviewDecisionRecorded,
+  payload: ReviewDecisionPayload,
 ): Promise<void> {
   const eventId = makeRowId(ctx);
   const programId = normalizeActorId(payload.program_id);
@@ -655,34 +667,6 @@ export async function handleProjectReviewSubmitted(
     .onConflictDoNothing({ target: schema.projectReviewSummaries.projectReviewId });
 }
 
-export async function handleProjectReviewSubmissionApproved(
-  db: Db,
-  ctx: HandlerContext,
-  payload: ProjectReviewSubmissionApproved,
-): Promise<void> {
-  const approvalId = asBigInt(payload.approval_id).toString();
-  const applicant = normalizeActorId(payload.applicant);
-  const coach = normalizeActorId(payload.coach);
-  const requestMessageId = asBigInt(payload.request_message_id).toString();
-  const approvedAt = asBigInt(payload.approved_at);
-
-  await db
-    .insert(schema.projectReviewApprovals)
-    .values({
-      approvalId,
-      approvalEventId: makeRowId(ctx),
-      consumeEventId: null,
-      applicant,
-      coach,
-      requestMessageId,
-      consumedProjectReviewId: null,
-      seasonId: payload.season_id,
-      approvedAt,
-      consumedAt: null,
-    })
-    .onConflictDoNothing({ target: schema.projectReviewApprovals.approvalId });
-}
-
 export async function handleApplicationPermitApproved(
   db: Db,
   ctx: HandlerContext,
@@ -706,26 +690,6 @@ export async function handleApplicationPermitApproved(
       consumedAt: null,
     })
     .onConflictDoNothing({ target: schema.applicationPermits.approvalId });
-}
-
-export async function handleProjectReviewApprovalConsumed(
-  db: Db,
-  ctx: HandlerContext,
-  payload: ProjectReviewApprovalConsumed,
-): Promise<void> {
-  const approvalId = asBigInt(payload.approval_id).toString();
-  const projectReviewId = asBigInt(payload.project_review_id).toString();
-  const consumedAt = asBigInt(payload.consumed_at);
-
-  await db
-    .update(schema.projectReviewApprovals)
-    .set({
-      consumeEventId: makeRowId(ctx),
-      consumedProjectReviewId: projectReviewId,
-      consumedAt,
-    })
-    .where(sql`${schema.projectReviewApprovals.approvalId} = ${approvalId}
-      AND ${schema.projectReviewApprovals.consumedAt} IS NULL`);
 }
 
 export async function handleProjectReviewCommentPosted(

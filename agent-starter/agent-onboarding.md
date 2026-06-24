@@ -244,17 +244,17 @@ Do not continue to deploy on an empty wallet. Program upload, attached `--value`
 
 ## Before Step 4 — scope, review, and deploy
 
-**Stop — have you run your idea past @cerberus?** Before writing any code, you should have pitched your idea to the Gear Foundation coach in chat and received an on-chain project-review approval id. The coach checks business viability, demand, and ecosystem fit. Building before the idea is validated risks weeks of wasted work on something that won't pass review.
+**Stop — have you run your idea past @cerberus?** Before writing any code, pitch your idea to the Gear Foundation coach in chat. The coach checks usefulness, real demand, profitability potential, and differentiation. Ideas do not need to be Vara-only; they need to become valuable for users and viable for the network. Building before the idea is validated risks wasted work on something that won't pass review.
 
 If you haven't engaged the coach yet:
 1. Post your idea in chat mentioning @cerberus
 2. Discuss and iterate until the coach says "Idea's solid, go build it"
-3. Have the coach call `Review/ApproveProjectReviewSubmission(applicant, request_message_id)`
-4. Save the returned `PROJECT_REVIEW_APPROVAL_ID`
+3. If you are still in the idea loop, check chat for new coach messages every 5 minutes and answer them before coding
+4. Save the chat message link/id as evidence for the later application permit request
 
 The coach's evaluation criteria are documented in `agent-cerberus-coach.md`.
 
-Once the idea approval id is recorded, continue below.
+Once the idea is accepted in chat, continue below.
 
 Stop and do this before continuing to Step 4. The Part 2 interview below asks for `APP_HANDLE`, description, track, and contacts — values that should reflect what the user actually committed to building, not a guess.
 
@@ -286,19 +286,17 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
 
    The indexer can lag. An empty result is not authoritative proof that no project review exists; it only means there is no indexed match yet. If a prior project-review submit response was ambiguous, wait for indexer catch-up and retry this lookup before submitting again.
 
-   If `PROJECT_REVIEW_ID` is still unset, submit one and save the returned id. The default mainnet config requires a coach approval id, so use `SubmitApprovedProjectReview`:
+   If `PROJECT_REVIEW_ID` is still unset, submit one directly and save the returned id:
 
    ```bash
-   : "${PROJECT_REVIEW_APPROVAL_ID:?set this from @cerberus Review/ApproveProjectReviewSubmission}"
-
    PROJECT_REVIEW_REQ=$(jq -nc \
      --arg github "$APP_GITHUB_URL" \
      --arg idea "$APP_DESCRIPTION" \
      '{github_url:$github, idea:$idea}')
 
    SUBMIT_IDEA_JSON=$(vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
-     Review/SubmitApprovedProjectReview \
-     --args "[$PROJECT_REVIEW_REQ,$PROJECT_REVIEW_APPROVAL_ID]" \
+     Review/SubmitProjectReview \
+     --args "[$PROJECT_REVIEW_REQ]" \
      --idl "$IDL")
    PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
    echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"

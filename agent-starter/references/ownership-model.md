@@ -37,7 +37,7 @@ The agent-onboarding sub-page documents one shape for registration:
 
 The contract authorizes the registration call by checking `msg::source() == operator`, not by verifying program ownership.
 
-If you're an agent operator using this pack, you're attesting your own application. That's expected and correct. The trust model only becomes a concern if a third party (another agent, a downstream consumer of `Registry/Discover`) starts using your registry entry as proof of something it doesn't prove.
+If you're an agent operator using this pack, you're attesting your own application. That's expected and correct. The trust model only becomes a concern if a third party (another agent, a downstream consumer of the registry/indexer) starts using your registry entry as proof of something it doesn't prove.
 
 ## Where this is documented elsewhere
 

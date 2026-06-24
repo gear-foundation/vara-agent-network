@@ -73,7 +73,7 @@ async fn coach_role_is_admin_granted_and_publicly_queryable() {
 }
 
 #[tokio::test]
-async fn project_review_submission_requires_active_coach_approval_by_default() {
+async fn project_review_submission_is_direct() {
     let system = init_system();
     let env = GtestEnv::new(system, DEPLOYER.into());
     let program = deploy(&env).await;
@@ -88,37 +88,12 @@ async fn project_review_submission_requires_active_coach_approval_by_default() {
 
     let req = SubmitProjectReviewReq {
         github_url: "https://github.com/alice/coach-gated-agent".to_string(),
-        idea: "agent that only opens after public coach approval".to_string(),
+        idea: "agent that asks for public coach guidance before deployment".to_string(),
     };
 
-    program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 7)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap_err();
-    program
-        .review()
-        .add_coach(CAROL.into())
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-    program
-        .review()
-        .approve_project_review_submission(CAROL.into(), 8)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap_err();
-
-    let approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 7)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
     let project_review_id = program
         .review()
-        .submit_approved_project_review(req.clone(), approval_id)
+        .submit_project_review(req.clone())
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
@@ -130,59 +105,13 @@ async fn project_review_submission_requires_active_coach_approval_by_default() {
         .unwrap();
     assert_eq!(summary.owner, ALICE.into());
 
-    program
+    let second_project_review_id = program
         .review()
-        .submit_approved_project_review(req.clone(), approval_id)
+        .submit_project_review(req.clone())
         .with_actor_id(ALICE.into())
         .await
-        .unwrap_err();
-}
-
-#[tokio::test]
-async fn removing_coach_invalidates_unconsumed_approval() {
-    let system = init_system();
-    let env = GtestEnv::new(system, DEPLOYER.into());
-    let program = deploy(&env).await;
-    let mut config = program.admin().get_config().await.unwrap();
-    config.review_rate_limit_ms = 0;
-    program
-        .admin()
-        .update_config(config)
-        .with_actor_id(DEPLOYER.into())
-        .await
         .unwrap();
-
-    program
-        .review()
-        .add_coach(CAROL.into())
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-    let approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 12)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
-    program
-        .review()
-        .remove_coach(CAROL.into())
-        .with_actor_id(DEPLOYER.into())
-        .await
-        .unwrap();
-
-    program
-        .review()
-        .submit_approved_project_review(
-            SubmitProjectReviewReq {
-                github_url: "https://github.com/alice/stale-coach".to_string(),
-                idea: "approval should fail after coach removal".to_string(),
-            },
-            approval_id,
-        )
-        .with_actor_id(ALICE.into())
-        .await
-        .unwrap_err();
+    assert_ne!(project_review_id, second_project_review_id);
 }
 
 #[tokio::test]
@@ -269,7 +198,7 @@ async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions()
 
     program
         .review()
-        .request_revision(
+        .request_publish_changes(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "needs a runnable demo".to_string(),
@@ -304,7 +233,7 @@ async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions()
 
     program
         .review()
-        .approve_for_listing(
+        .publish_application(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "stale retry".to_string(),
@@ -323,7 +252,7 @@ async fn reviewer_revision_request_then_listing_approval_loop_tracks_revisions()
 
     program
         .review()
-        .approve_for_listing(
+        .publish_application(
             STUB_PROGRAM_ALPHA.into(),
             2,
             "ready for public listing".to_string(),
@@ -407,7 +336,7 @@ async fn review_guards_reject_self_review_and_stale_revision() {
 
     program
         .review()
-        .approve_for_listing(
+        .publish_application(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "owner reviewer cannot approve".to_string(),
@@ -419,7 +348,7 @@ async fn review_guards_reject_self_review_and_stale_revision() {
 
     program
         .review()
-        .request_revision(
+        .request_publish_changes(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "owner reviewer cannot request revision".to_string(),
@@ -461,7 +390,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
 
     program
         .review()
-        .approve_for_listing(
+        .publish_application(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "initially ready".to_string(),
@@ -507,7 +436,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
 
     program
         .review()
-        .approve_for_listing(
+        .publish_application(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "old revision should stay closed".to_string(),
@@ -519,7 +448,7 @@ async fn manual_reopen_to_building_submits_next_revision() {
 
     program
         .review()
-        .approve_for_listing(
+        .publish_application(
             STUB_PROGRAM_ALPHA.into(),
             2,
             "reopened revision is ready".to_string(),
@@ -566,7 +495,7 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
         .unwrap();
     program
         .review()
-        .approve_for_listing(
+        .publish_application(
             STUB_PROGRAM_ALPHA.into(),
             1,
             "first listing".to_string(),
@@ -610,7 +539,7 @@ async fn re_registered_application_can_receive_fresh_revision_one_decision() {
 
     program
         .review()
-        .request_revision(
+        .request_publish_changes(
             STUB_PROGRAM_BETA.into(),
             1,
             "fresh review can decide revision one".to_string(),
@@ -653,7 +582,7 @@ async fn project_review_guidance_link_and_program_replacement_preserve_predeploy
         .await
         .unwrap();
 
-    let project_review_id = submit_approved_project_review_for_test(
+    let project_review_id = submit_project_review_for_test(
         &program,
         ALICE,
         "https://github.com/alice/idea-agent".to_string(),
@@ -773,19 +702,6 @@ async fn project_review_respects_paused_and_review_disabled_config() {
         .with_actor_id(DEPLOYER.into())
         .await
         .unwrap();
-    let paused_approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 7)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
-    let disabled_approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 8)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
-
     config.paused = true;
     program
         .admin()
@@ -795,12 +711,11 @@ async fn project_review_respects_paused_and_review_disabled_config() {
         .unwrap();
     program
         .review()
-        .submit_approved_project_review(
+        .submit_project_review(
             SubmitProjectReviewReq {
                 github_url: "https://github.com/alice/idea-agent".to_string(),
                 idea: "agent that helps builders find valuable integrations".to_string(),
             },
-            paused_approval_id,
         )
         .with_actor_id(ALICE.into())
         .await
@@ -816,12 +731,11 @@ async fn project_review_respects_paused_and_review_disabled_config() {
         .unwrap();
     program
         .review()
-        .submit_approved_project_review(
+        .submit_project_review(
             SubmitProjectReviewReq {
                 github_url: "https://github.com/alice/idea-agent".to_string(),
                 idea: "agent that helps builders find valuable integrations".to_string(),
             },
-            disabled_approval_id,
         )
         .with_actor_id(ALICE.into())
         .await
@@ -848,18 +762,6 @@ async fn project_review_rate_limits_repeated_builder_actions() {
         .await
         .unwrap();
 
-    let first_approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 7)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
-    let second_approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 8)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
     config.review_rate_limit_ms = u64::MAX / 2;
     program
         .admin()
@@ -869,24 +771,22 @@ async fn project_review_rate_limits_repeated_builder_actions() {
         .unwrap();
     program
         .review()
-        .submit_approved_project_review(
+        .submit_project_review(
             SubmitProjectReviewReq {
                 github_url: "https://github.com/alice/idea-agent".to_string(),
                 idea: "agent that helps builders find valuable integrations".to_string(),
             },
-            first_approval_id,
         )
         .with_actor_id(ALICE.into())
         .await
         .unwrap();
     program
         .review()
-        .submit_approved_project_review(
+        .submit_project_review(
             SubmitProjectReviewReq {
                 github_url: "https://github.com/alice/another-idea-agent".to_string(),
                 idea: "another valuable integration idea".to_string(),
             },
-            second_approval_id,
         )
         .with_actor_id(ALICE.into())
         .await
@@ -919,44 +819,30 @@ async fn project_review_rejects_invalid_inputs() {
         .await
         .unwrap();
 
-    let bad_url_approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 7)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
     program
         .review()
-        .submit_approved_project_review(
+        .submit_project_review(
             SubmitProjectReviewReq {
                 github_url: "https://gitlab.com/alice/idea-agent".to_string(),
                 idea: "agent idea".to_string(),
             },
-            bad_url_approval_id,
         )
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
-    let empty_idea_approval_id = program
-        .review()
-        .approve_project_review_submission(ALICE.into(), 8)
-        .with_actor_id(CAROL.into())
-        .await
-        .unwrap();
     program
         .review()
-        .submit_approved_project_review(
+        .submit_project_review(
             SubmitProjectReviewReq {
                 github_url: "https://github.com/alice/idea-agent".to_string(),
                 idea: String::new(),
             },
-            empty_idea_approval_id,
         )
         .with_actor_id(ALICE.into())
         .await
         .unwrap_err();
 
-    let project_review_id = submit_approved_project_review_for_test(
+    let project_review_id = submit_project_review_for_test(
         &program,
         ALICE,
         "https://github.com/alice/idea-agent".to_string(),
@@ -1012,7 +898,7 @@ async fn project_review_pagination_cursor_resumes_after_last_returned_idea() {
     disable_review_rate_limit(&program).await;
 
     for idx in 1..=3 {
-        submit_approved_project_review_for_test(
+        submit_project_review_for_test(
             &program,
             ALICE,
             format!("https://github.com/alice/idea-agent-{idx}"),

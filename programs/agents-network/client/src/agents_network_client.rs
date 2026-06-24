@@ -381,12 +381,6 @@ pub mod registry {
             approval_id: u64,
             details: ApplicationPermitDetails,
         ) -> sails_rs::client::PendingCall<io::UpdateApplicationWithApproval, Self::Env>;
-        fn discover(
-            &self,
-            filter: DiscoveryFilter,
-            cursor: Option<ActorId>,
-            limit: u32,
-        ) -> sails_rs::client::PendingCall<io::Discover, Self::Env>;
         fn get_application(
             &self,
             id: ActorId,
@@ -471,14 +465,6 @@ pub mod registry {
         ) -> sails_rs::client::PendingCall<io::UpdateApplicationWithApproval, Self::Env> {
             self.pending_call((program_id, approval_id, details))
         }
-        fn discover(
-            &self,
-            filter: DiscoveryFilter,
-            cursor: Option<ActorId>,
-            limit: u32,
-        ) -> sails_rs::client::PendingCall<io::Discover, Self::Env> {
-            self.pending_call((filter, cursor, limit))
-        }
         fn get_application(
             &self,
             id: ActorId,
@@ -516,7 +502,6 @@ pub mod registry {
         sails_rs::io_struct_impl!(SubmitApplication (program_id: ActorId) -> ());
         sails_rs::io_struct_impl!(UpdateApplicationContacts (program_id: ActorId, contacts: Option<super::ContactLinks>) -> ());
         sails_rs::io_struct_impl!(UpdateApplicationWithApproval (program_id: ActorId, approval_id: u64, details: super::ApplicationPermitDetails) -> ());
-        sails_rs::io_struct_impl!(Discover (filter: super::DiscoveryFilter, cursor: Option<ActorId>, limit: u32) -> super::ApplicationPage);
         sails_rs::io_struct_impl!(GetApplication (id: ActorId) -> Option<super::Application>);
         sails_rs::io_struct_impl!(GetParticipant (wallet: ActorId) -> Option<super::Participant>);
         sails_rs::io_struct_impl!(ResolveCurrentProgramId (program_id: ActorId) -> ActorId);
@@ -921,18 +906,6 @@ pub mod review {
             details: ApplicationPermitDetails,
             evidence_message_id: u64,
         ) -> sails_rs::client::PendingCall<io::ApproveApplicationPermit, Self::Env>;
-        fn approve_for_listing(
-            &mut self,
-            program_id: ActorId,
-            expected_revision: u32,
-            reason: String,
-            criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env>;
-        fn approve_project_review_submission(
-            &mut self,
-            applicant: ActorId,
-            request_message_id: u64,
-        ) -> sails_rs::client::PendingCall<io::ApproveProjectReviewSubmission, Self::Env>;
         fn owner_project_reply(
             &mut self,
             project_review_id: u64,
@@ -988,18 +961,10 @@ pub mod review {
             program_id: ActorId,
             reason: String,
         ) -> sails_rs::client::PendingCall<io::RequestReview, Self::Env>;
-        fn request_revision(
-            &mut self,
-            program_id: ActorId,
-            expected_revision: u32,
-            reason: String,
-            criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env>;
-        fn submit_approved_project_review(
+        fn submit_project_review(
             &mut self,
             req: SubmitProjectReviewReq,
-            approval_id: u64,
-        ) -> sails_rs::client::PendingCall<io::SubmitApprovedProjectReview, Self::Env>;
+        ) -> sails_rs::client::PendingCall<io::SubmitProjectReview, Self::Env>;
         fn get_project_review_summary(
             &self,
             project_review_id: u64,
@@ -1045,22 +1010,6 @@ pub mod review {
             evidence_message_id: u64,
         ) -> sails_rs::client::PendingCall<io::ApproveApplicationPermit, Self::Env> {
             self.pending_call((project_review_id, purpose, details, evidence_message_id))
-        }
-        fn approve_for_listing(
-            &mut self,
-            program_id: ActorId,
-            expected_revision: u32,
-            reason: String,
-            criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::ApproveForListing, Self::Env> {
-            self.pending_call((program_id, expected_revision, reason, criteria))
-        }
-        fn approve_project_review_submission(
-            &mut self,
-            applicant: ActorId,
-            request_message_id: u64,
-        ) -> sails_rs::client::PendingCall<io::ApproveProjectReviewSubmission, Self::Env> {
-            self.pending_call((applicant, request_message_id))
         }
         fn owner_project_reply(
             &mut self,
@@ -1137,21 +1086,11 @@ pub mod review {
         ) -> sails_rs::client::PendingCall<io::RequestReview, Self::Env> {
             self.pending_call((program_id, reason))
         }
-        fn request_revision(
-            &mut self,
-            program_id: ActorId,
-            expected_revision: u32,
-            reason: String,
-            criteria: ReviewCriteria,
-        ) -> sails_rs::client::PendingCall<io::RequestRevision, Self::Env> {
-            self.pending_call((program_id, expected_revision, reason, criteria))
-        }
-        fn submit_approved_project_review(
+        fn submit_project_review(
             &mut self,
             req: SubmitProjectReviewReq,
-            approval_id: u64,
-        ) -> sails_rs::client::PendingCall<io::SubmitApprovedProjectReview, Self::Env> {
-            self.pending_call((req, approval_id))
+        ) -> sails_rs::client::PendingCall<io::SubmitProjectReview, Self::Env> {
+            self.pending_call((req,))
         }
         fn get_project_review_summary(
             &self,
@@ -1197,8 +1136,6 @@ pub mod review {
         sails_rs::io_struct_impl!(AddCoach (coach: ActorId) -> ());
         sails_rs::io_struct_impl!(AddReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(ApproveApplicationPermit (project_review_id: u64, purpose: super::ApplicationPermitPurpose, details: super::ApplicationPermitDetails, evidence_message_id: u64) -> u64);
-        sails_rs::io_struct_impl!(ApproveForListing (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
-        sails_rs::io_struct_impl!(ApproveProjectReviewSubmission (applicant: ActorId, request_message_id: u64) -> u64);
         sails_rs::io_struct_impl!(OwnerProjectReply (project_review_id: u64, body: String) -> ());
         sails_rs::io_struct_impl!(OwnerReply (program_id: ActorId, expected_revision: u32, body: String) -> ());
         sails_rs::io_struct_impl!(PostProjectReviewerComment (project_review_id: u64, body: String) -> ());
@@ -1209,8 +1146,7 @@ pub mod review {
         sails_rs::io_struct_impl!(RemoveReviewer (reviewer: ActorId) -> ());
         sails_rs::io_struct_impl!(RequestPublishChanges (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
         sails_rs::io_struct_impl!(RequestReview (program_id: ActorId, reason: String) -> ());
-        sails_rs::io_struct_impl!(RequestRevision (program_id: ActorId, expected_revision: u32, reason: String, criteria: super::ReviewCriteria) -> ());
-        sails_rs::io_struct_impl!(SubmitApprovedProjectReview (req: super::SubmitProjectReviewReq, approval_id: u64) -> u64);
+        sails_rs::io_struct_impl!(SubmitProjectReview (req: super::SubmitProjectReviewReq) -> u64);
         sails_rs::io_struct_impl!(GetProjectReviewSummary (project_review_id: u64) -> Option<super::ProjectReviewSummary>);
         sails_rs::io_struct_impl!(GetReviewSummary (program_id: ActorId) -> Option<super::ReviewSummary>);
         sails_rs::io_struct_impl!(IsCoach (coach: ActorId) -> bool);
@@ -1267,18 +1203,6 @@ pub mod review {
                 ts: u64,
                 season_id: u32,
             },
-            ReviewDecisionRecorded {
-                program_id: ActorId,
-                revision: u32,
-                reviewer: ActorId,
-                verdict: ReviewVerdict,
-                reason: String,
-                criteria: ReviewCriteria,
-                old_status: AppStatus,
-                new_status: AppStatus,
-                decided_at: u64,
-                season_id: u32,
-            },
             PublishDecisionRecorded {
                 program_id: ActorId,
                 revision: u32,
@@ -1297,23 +1221,6 @@ pub mod review {
                 github_url: String,
                 idea: String,
                 submitted_at: u64,
-                season_id: u32,
-            },
-            ProjectReviewSubmissionApproved {
-                approval_id: u64,
-                applicant: ActorId,
-                coach: ActorId,
-                request_message_id: u64,
-                approved_at: u64,
-                season_id: u32,
-            },
-            ProjectReviewApprovalConsumed {
-                approval_id: u64,
-                project_review_id: u64,
-                applicant: ActorId,
-                coach: ActorId,
-                request_message_id: u64,
-                consumed_at: u64,
                 season_id: u32,
             },
             ProjectReviewCommentPosted {
@@ -1359,11 +1266,8 @@ pub mod review {
                 "CoachRemoved",
                 "ReviewRequested",
                 "ReviewCommentPosted",
-                "ReviewDecisionRecorded",
                 "PublishDecisionRecorded",
                 "ProjectReviewSubmitted",
-                "ProjectReviewSubmissionApproved",
-                "ProjectReviewApprovalConsumed",
                 "ProjectReviewCommentPosted",
                 "ProjectReviewGuidanceRecorded",
                 "ProjectReviewLinked",
@@ -1602,20 +1506,6 @@ pub struct ApplicationPermitDetails {
 pub struct RegisterApplicationWithApprovalReq {
     pub approval_id: u64,
     pub details: ApplicationPermitDetails,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct DiscoveryFilter {
-    pub track: Option<Track>,
-    pub status: Option<AppStatus>,
-}
-#[derive(PartialEq, Clone, Debug, Encode, Decode, TypeInfo)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct ApplicationPage {
-    pub items: Vec<Application>,
-    pub next_cursor: Option<ActorId>,
 }
 /// Unified authorship + mention target. Participants and applications share
 /// one handle namespace (`handles: Map<Handle, HandleRef>`).

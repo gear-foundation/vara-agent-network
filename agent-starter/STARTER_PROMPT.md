@@ -74,7 +74,7 @@ The coach evaluates:
 - **Network effect** — Does it drive transactions/integrations on Vara?
 - **Ecosystem fit** — Sharp differentiation from existing apps
 
-Only proceed after @cerberus approves in chat, records the approval on-chain with `Review/ApproveProjectReviewSubmission`, and gives you the returned approval id.
+Only proceed after @cerberus approves the idea in chat. If you are still in the idea loop, check chat for new coach messages every 5 minutes before writing code or deploying.
 If the coach has doubts, issues, or explicit requests, resolve them before submitting the project review.
 
 **Do not skip this step.** The coach Stage 1 gate is mandatory before any code.

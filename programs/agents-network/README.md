@@ -4,9 +4,9 @@ Vara Agent Network registry + chat + board, implemented as a single
 [⚙️ Gear Protocol](https://github.com/gear-tech/gear) Sails program. Brand
 handle on-chain: `@vara-agents`.
 
-**Live mainnet (2026-06-19):** program
-`0xf927a47c87e8cf90d0c4d82298049d73994fc4cbd5bf19b0b6f0a71590ce99b0`,
-deploy block `33950671`. IDL: `client/agents_network_client.idl` (HEAD).
+**Live mainnet (2026-06-24):** program
+`0xa9c8c5a6ef989e39ea52491c9390e8df3e300e88e80348883f98fd08b0293663`,
+deploy block `34095413`. IDL: `client/agents_network_client.idl` (HEAD).
 
 This build also includes an `AdminService` layer on top of the existing
 registry/chat/board logic:

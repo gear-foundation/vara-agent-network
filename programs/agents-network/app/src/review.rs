@@ -22,9 +22,7 @@ pub struct ReviewState {
     pub decisions: BTreeMap<(ActorId, u32), bool>,
     pub last_review_at: BTreeMap<ActorId, u64>,
     pub next_project_review_id: ProjectReviewId,
-    pub next_project_review_approval_id: ProjectReviewApprovalId,
     pub next_application_permit_id: ApplicationPermitId,
-    pub project_review_approvals: BTreeMap<ProjectReviewApprovalId, ProjectReviewApproval>,
     pub application_permits: BTreeMap<ApplicationPermitId, ApplicationPermit>,
     pub project_summaries: BTreeMap<ProjectReviewId, ProjectReviewSummary>,
     pub project_review_by_program: BTreeMap<ActorId, ProjectReviewId>,
@@ -76,18 +74,6 @@ pub enum ReviewEvent {
         ts: u64,
         season_id: u32,
     },
-    ReviewDecisionRecorded {
-        program_id: ActorId,
-        revision: u32,
-        reviewer: ActorId,
-        verdict: ReviewVerdict,
-        reason: String,
-        criteria: ReviewCriteria,
-        old_status: AppStatus,
-        new_status: AppStatus,
-        decided_at: u64,
-        season_id: u32,
-    },
     PublishDecisionRecorded {
         program_id: ActorId,
         revision: u32,
@@ -106,23 +92,6 @@ pub enum ReviewEvent {
         github_url: String,
         idea: String,
         submitted_at: u64,
-        season_id: u32,
-    },
-    ProjectReviewSubmissionApproved {
-        approval_id: ProjectReviewApprovalId,
-        applicant: ActorId,
-        coach: ActorId,
-        request_message_id: ChatMsgId,
-        approved_at: u64,
-        season_id: u32,
-    },
-    ProjectReviewApprovalConsumed {
-        approval_id: ProjectReviewApprovalId,
-        project_review_id: ProjectReviewId,
-        applicant: ActorId,
-        coach: ActorId,
-        request_message_id: ChatMsgId,
-        consumed_at: u64,
         season_id: u32,
     },
     ProjectReviewCommentPosted {
@@ -401,40 +370,6 @@ impl<'a> ReviewService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn approve_for_listing(
-        &mut self,
-        program_id: ActorId,
-        expected_revision: u32,
-        reason: String,
-        criteria: ReviewCriteria,
-    ) -> Result<(), ContractError> {
-        self.decide_with_event(
-            program_id,
-            expected_revision,
-            reason,
-            criteria,
-            ReviewVerdict::ApprovedForListing,
-        )
-    }
-
-    #[export(unwrap_result)]
-    pub fn request_revision(
-        &mut self,
-        program_id: ActorId,
-        expected_revision: u32,
-        reason: String,
-        criteria: ReviewCriteria,
-    ) -> Result<(), ContractError> {
-        self.decide_with_event(
-            program_id,
-            expected_revision,
-            reason,
-            criteria,
-            ReviewVerdict::RevisionRequested,
-        )
-    }
-
-    #[export(unwrap_result)]
     pub fn publish_application(
         &mut self,
         program_id: ActorId,
@@ -491,31 +426,6 @@ impl<'a> ReviewService<'a> {
         Ok(())
     }
 
-    fn decide_with_event(
-        &mut self,
-        program_id: ActorId,
-        expected_revision: u32,
-        reason: String,
-        criteria: ReviewCriteria,
-        verdict: ReviewVerdict,
-    ) -> Result<(), ContractError> {
-        let outcome = self.decide(program_id, expected_revision, verdict, &reason, &criteria)?;
-        self.emit_event(ReviewEvent::ReviewDecisionRecorded {
-            program_id,
-            revision: expected_revision,
-            reviewer: outcome.reviewer,
-            verdict,
-            reason,
-            criteria,
-            old_status: outcome.old_status,
-            new_status: outcome.new_status,
-            decided_at: outcome.decided_at,
-            season_id: outcome.season_id,
-        })
-        .expect("emit ReviewDecisionRecorded failed");
-        Ok(())
-    }
-
     fn publish_with_event(
         &mut self,
         program_id: ActorId,
@@ -540,60 +450,6 @@ impl<'a> ReviewService<'a> {
         })
         .expect("emit PublishDecisionRecorded failed");
         Ok(())
-    }
-
-    #[export(unwrap_result)]
-    pub fn approve_project_review_submission(
-        &mut self,
-        applicant: ActorId,
-        request_message_id: ChatMsgId,
-    ) -> Result<ProjectReviewApprovalId, ContractError> {
-        let config = self.admin.borrow().config.clone();
-        guards::ensure_user_mutations_allowed(&config)?;
-        guards::ensure_review_enabled(&config)?;
-
-        let caller = msg::source();
-        let now = exec::block_timestamp();
-        let season_id = self.current_season;
-        let approval_id = {
-            let mut review = self.review.borrow_mut();
-            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
-            if !is_active_coach(&review, season_id, caller) {
-                return Err(ContractError::NotCoach);
-            }
-            if applicant == caller {
-                return Err(ContractError::SelfReviewForbidden);
-            }
-            review.next_project_review_approval_id =
-                review.next_project_review_approval_id.saturating_add(1);
-            let approval_id = review.next_project_review_approval_id;
-            review.project_review_approvals.insert(
-                approval_id,
-                ProjectReviewApproval {
-                    approval_id,
-                    applicant,
-                    coach: caller,
-                    request_message_id,
-                    consumed_project_review_id: None,
-                    season_id,
-                    approved_at: now,
-                    consumed_at: None,
-                },
-            );
-            approval_id
-        };
-
-        self.emit_event(ReviewEvent::ProjectReviewSubmissionApproved {
-            approval_id,
-            applicant,
-            coach: caller,
-            request_message_id,
-            approved_at: now,
-            season_id,
-        })
-        .expect("emit ProjectReviewSubmissionApproved failed");
-
-        Ok(approval_id)
     }
 
     #[export(unwrap_result)]
@@ -654,7 +510,6 @@ impl<'a> ReviewService<'a> {
                     project_review_id,
                     purpose,
                     details_hash,
-                    pending_details: Some(details),
                     applicant: summary.owner,
                     coach: caller,
                     evidence_message_id,
@@ -684,12 +539,11 @@ impl<'a> ReviewService<'a> {
     }
 
     #[export(unwrap_result)]
-    pub fn submit_approved_project_review(
+    pub fn submit_project_review(
         &mut self,
         req: SubmitProjectReviewReq,
-        approval_id: ProjectReviewApprovalId,
     ) -> Result<ProjectReviewId, ContractError> {
-        self.submit_project_review_state(req, approval_id)
+        self.submit_project_review_state(req)
     }
 
     #[export(unwrap_result)]
@@ -781,7 +635,6 @@ impl<'a> ReviewService<'a> {
     fn submit_project_review_state(
         &mut self,
         req: SubmitProjectReviewReq,
-        approval_id: ProjectReviewApprovalId,
     ) -> Result<ProjectReviewId, ContractError> {
         let config = self.admin.borrow().config.clone();
         guards::ensure_user_mutations_allowed(&config)?;
@@ -791,27 +644,9 @@ impl<'a> ReviewService<'a> {
         let caller = msg::source();
         let now = exec::block_timestamp();
         let season_id = self.current_season;
-        let consumed_approval = {
-            let mut review = self.review.borrow_mut();
-            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
-            let approval = review
-                .project_review_approvals
-                .get(&approval_id)
-                .ok_or(ContractError::UnknownProjectReviewApproval)?;
-            if approval.applicant != caller || approval.season_id != season_id {
-                return Err(ContractError::ProjectReviewApprovalRequired);
-            }
-            if approval.consumed_project_review_id.is_some() {
-                return Err(ContractError::ProjectReviewApprovalUsed);
-            }
-            if !is_active_coach(&review, season_id, approval.coach) {
-                return Err(ContractError::NotCoach);
-            }
-            approval.clone()
-        };
-
         let project_review_id = {
             let mut review = self.review.borrow_mut();
+            ensure_rate_limit(&mut review, caller, now, config.review_rate_limit_ms)?;
             review.next_project_review_id = review.next_project_review_id.saturating_add(1);
             let project_review_id = review.next_project_review_id;
             review.project_summaries.insert(
@@ -832,13 +667,6 @@ impl<'a> ReviewService<'a> {
                     updated_at: now,
                 },
             );
-            if let Some(stored) = review
-                .project_review_approvals
-                .get_mut(&consumed_approval.approval_id)
-            {
-                stored.consumed_project_review_id = Some(project_review_id);
-                stored.consumed_at = Some(now);
-            }
             project_review_id
         };
 
@@ -851,17 +679,6 @@ impl<'a> ReviewService<'a> {
             season_id,
         })
         .expect("emit ProjectReviewSubmitted failed");
-
-        self.emit_event(ReviewEvent::ProjectReviewApprovalConsumed {
-            approval_id: consumed_approval.approval_id,
-            project_review_id,
-            applicant: caller,
-            coach: consumed_approval.coach,
-            request_message_id: consumed_approval.request_message_id,
-            consumed_at: now,
-            season_id,
-        })
-        .expect("emit ProjectReviewApprovalConsumed failed");
 
         Ok(project_review_id)
     }
@@ -1199,11 +1016,10 @@ pub fn consume_application_permit(
     if !is_active_coach(review, season_id, permit.coach) {
         return Err(ContractError::NotCoach);
     }
-    if permit.details_hash != details_hash || permit.pending_details.as_ref() != Some(details) {
+    if permit.details_hash != details_hash {
         return Err(ContractError::ApplicationPermitMismatch);
     }
     if let Some(stored) = review.application_permits.get_mut(&approval_id) {
-        stored.pending_details = None;
         stored.consumed_program_id = Some(consumed_program_id);
         stored.consumed_at = Some(consumed_at);
     }

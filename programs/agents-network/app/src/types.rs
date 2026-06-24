@@ -149,9 +149,6 @@ pub enum ContractError {
     NotCoach,
     UnknownCoach,
     SelfReviewForbidden,
-    ProjectReviewApprovalRequired,
-    ProjectReviewApprovalUsed,
-    UnknownProjectReviewApproval,
     ReviewAlreadyRequested,
     ReviewRequestLimitReached,
     DecisionAlreadyRecorded,
@@ -193,7 +190,6 @@ pub type ChatMsgId = u64;
 pub type PostId = u64;
 pub type Hash32 = [u8; 32];
 pub type ProjectReviewId = u64;
-pub type ProjectReviewApprovalId = u64;
 pub type ApplicationPermitId = u64;
 
 // ---------------------------------------------------------------------------
@@ -425,15 +421,6 @@ pub struct ApplicationPatch {
     pub contacts: Option<Option<ContactLinks>>,
 }
 
-#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq, Default)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
-pub struct DiscoveryFilter {
-    pub track: Option<Track>,
-    pub status: Option<AppStatus>,
-    // skill_tag is indexer-only — see spec.
-}
-
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
@@ -577,26 +564,11 @@ pub struct SubmitProjectReviewReq {
 #[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
 #[codec(crate = sails_rs::scale_codec)]
 #[scale_info(crate = sails_rs::scale_info)]
-pub struct ProjectReviewApproval {
-    pub approval_id: ProjectReviewApprovalId,
-    pub applicant: ActorId,
-    pub coach: ActorId,
-    pub request_message_id: ChatMsgId,
-    pub consumed_project_review_id: Option<ProjectReviewId>,
-    pub season_id: u32,
-    pub approved_at: u64,
-    pub consumed_at: Option<u64>,
-}
-
-#[derive(Encode, Decode, TypeInfo, Clone, Debug, PartialEq, Eq)]
-#[codec(crate = sails_rs::scale_codec)]
-#[scale_info(crate = sails_rs::scale_info)]
 pub struct ApplicationPermit {
     pub approval_id: ApplicationPermitId,
     pub project_review_id: ProjectReviewId,
     pub purpose: ApplicationPermitPurpose,
     pub details_hash: Hash32,
-    pub pending_details: Option<ApplicationPermitDetails>,
     pub applicant: ActorId,
     pub coach: ActorId,
     pub evidence_message_id: ChatMsgId,

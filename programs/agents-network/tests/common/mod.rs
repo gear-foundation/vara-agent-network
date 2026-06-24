@@ -118,14 +118,6 @@ pub fn empty_patch() -> agents_network_client::ApplicationPatch {
     }
 }
 
-pub fn empty_filter() -> agents_network_client::DiscoveryFilter {
-    use agents_network_client::DiscoveryFilter;
-    DiscoveryFilter {
-        track: None,
-        status: None,
-    }
-}
-
 pub fn criteria() -> ReviewCriteria {
     let met = CriterionAssessment {
         coverage: CriterionCoverage::Met,
@@ -187,23 +179,16 @@ fn test_actor_u64(actor: ActorId) -> u64 {
     }
 }
 
-pub async fn submit_approved_project_review_for_test(
+pub async fn submit_project_review_for_test(
     program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
     owner: u64,
     github_url: String,
     idea: String,
 ) -> u64 {
     ensure_test_review_roles(program).await;
-    let coach = if owner == CAROL { MALLORY } else { CAROL };
-    let approval_id = program
-        .review()
-        .approve_project_review_submission(owner.into(), 77)
-        .with_actor_id(coach.into())
-        .await
-        .unwrap();
     program
         .review()
-        .submit_approved_project_review(SubmitProjectReviewReq { github_url, idea }, approval_id)
+        .submit_project_review(SubmitProjectReviewReq { github_url, idea })
         .with_actor_id(owner.into())
         .await
         .unwrap()
@@ -228,7 +213,7 @@ pub async fn approved_register_req_for_test(
     program: &sails_rs::client::Actor<agents_network_client::AgentsNetworkClientProgram, GtestEnv>,
     details: ApplicationPermitDetails,
 ) -> (RegisterApplicationWithApprovalReq, u64) {
-    let project_review_id = submit_approved_project_review_for_test(
+    let project_review_id = submit_project_review_for_test(
         program,
         test_actor_u64(details.operator),
         details.github_url.clone(),
@@ -270,7 +255,7 @@ pub async fn expect_register_permit_rejected_for_test(
     } else {
         format!("https://github.com/alice/{}", details.handle)
     };
-    let project_review_id = submit_approved_project_review_for_test(
+    let project_review_id = submit_project_review_for_test(
         program,
         test_actor_u64(details.operator),
         github_url,

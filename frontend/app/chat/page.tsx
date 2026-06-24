@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useLayoutEffect, useMemo } from 'react'
 import type { CSSProperties, FormEvent, KeyboardEvent } from 'react'
-import { CheckCircle2, Loader2, Send, ShieldCheck } from 'lucide-react'
+import { Loader2, Send, ShieldCheck } from 'lucide-react'
 import { NavBar } from '@/components/nav-bar'
 import { NetworkPulse } from '@/components/network-pulse'
 import { LiveTicker } from '@/components/live-ticker'
@@ -14,7 +14,7 @@ import { useMentionTargets } from '@/hooks/use-mention-targets'
 import { useRegistryIdentities } from '@/hooks/use-registry-identities'
 import { useVaraWallet } from '@/hooks/use-vara-wallet'
 import { getActiveCoaches } from '@/lib/indexer-client'
-import { addressToActorId, approveProjectReviewSubmission, postChatMessage } from '@/lib/vara-program'
+import { addressToActorId, postChatMessage } from '@/lib/vara-program'
 import { cn } from '@/lib/utils'
 import { env } from '@/lib/env'
 import { formatDappError, isFrontendChunkLoadError, logError } from '@/lib/debug'
@@ -229,7 +229,6 @@ export default function ChatPage() {
   const [sending, setSending] = useState(false)
   const [activeCoaches, setActiveCoaches] = useState<Set<string>>(new Set())
   const [accountActorId, setAccountActorId] = useState<string | null>(null)
-  const [approvingMessageId, setApprovingMessageId] = useState<string | null>(null)
   const [pendingMessages, setPendingMessages] = useState<PendingChatMessage[]>([])
   const bottomRef = useRef<HTMLDivElement>(null)
   const feedRef = useRef<HTMLDivElement>(null)
@@ -559,49 +558,6 @@ export default function ChatPage() {
   }
 
   const canSend = Boolean(programConfigured && account && input.trim() && !sending)
-  const connectedAsCoach = Boolean(accountActorId && activeCoaches.has(accountActorId))
-
-  const approveMessage = async (message: LiveChatMessage) => {
-    if (!account) return
-    const applicant = actorIdFromAuthorRef(message.authorRef)
-    if (!applicant) {
-      toast({
-        title: 'Approval unavailable',
-        description: 'Only participant chat requests can be approved for project review submission.',
-        variant: 'destructive',
-      })
-      return
-    }
-    setApprovingMessageId(message.id)
-    try {
-      const coaches = await getActiveCoaches()
-      const nextCoaches = toCoachSet(coaches)
-      setActiveCoaches((current) => sameCoachSet(current, nextCoaches) ? current : nextCoaches)
-      if (!accountActorId || !nextCoaches.has(accountActorId)) {
-        toast({
-          title: 'Coach role inactive',
-          description: 'Your Coach role is no longer active on chain.',
-          variant: 'destructive',
-        })
-        return
-      }
-      await approveProjectReviewSubmission(account, applicant, message.msgId)
-      toast({
-        title: 'Coach approval recorded',
-        description: 'The builder can now submit a project review from the approval on chain.',
-      })
-    } catch (err) {
-      logError('chat.ui', 'coach approval failed', err)
-      toast({
-        title: 'Coach approval failed',
-        description: formatDappError(err),
-        variant: 'destructive',
-      })
-    } finally {
-      setApprovingMessageId(null)
-    }
-  }
-
   const requestOlderMessages = () => {
     suppressNextAutoScroll.current = true
     void loadOlder()
@@ -763,10 +719,6 @@ export default function ChatPage() {
                   const tone = toneForHandle(handle)
                   const authorActorId = actorIdFromAuthorRef(message.authorRef)
                   const authorIsCoach = Boolean(authorActorId && activeCoaches.has(authorActorId))
-                  const canApprove = connectedAsCoach
-                    && 'msgId' in message
-                    && Boolean(authorActorId)
-                    && authorActorId !== accountActorId
                   const reason = chatMode === 'agent'
                     ? cerberusReason(message, selectedAgent, selectedAgentMessageIds)
                     : null
@@ -790,21 +742,6 @@ export default function ChatPage() {
                               {message.status === 'signing' ? 'signing' : 'pending'}
                             </span>
                           )}
-                          {canApprove ? (
-                            <button
-                              className="chat-msg__approve"
-                              type="button"
-                              disabled={approvingMessageId === message.id}
-                              onClick={() => void approveMessage(message)}
-                            >
-                              {approvingMessageId === message.id ? (
-                                <Loader2 className="h-3 w-3 animate-spin" />
-                              ) : (
-                                <CheckCircle2 className="h-3 w-3" />
-                              )}
-                              Approve
-                            </button>
-                          ) : null}
                           {reason && (
                             <span className="chat-msg__status chat-msg__status--coach">
                               {reason}

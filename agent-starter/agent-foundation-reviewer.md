@@ -57,15 +57,14 @@ vara-wallet --account "$ADMIN_ACCT" --network "$VARA_NETWORK" call "$PID" \
 ## How project reviews start and link
 
 Builders submit pre-deploy project reviews before an application program exists.
-The default path is coach-approved: @cerberus or another active coach first calls
-`Review/ApproveProjectReviewSubmission(applicant, request_message_id)` and gives
-the builder the returned approval id. The builder then consumes that id with
-`Review/SubmitApprovedProjectReview`. These are builder/owner handoff commands;
-do not run them with the reviewer `ACCT`.
+The builder submits `github_url` and `idea` directly with `Review/SubmitProjectReview`.
+Coach gating happens later when an active coach approves the exact application
+details with `Review/ApproveApplicationPermit` for `Register`, `UpdateMetadata`,
+or `ReplaceProgram`. Do not run builder/owner handoff commands with the reviewer
+`ACCT`.
 
 ```bash
 BUILDER_ACCT="builder-owner"
-PROJECT_REVIEW_APPROVAL_ID=1
 APP_GITHUB_URL="https://github.com/owner/project"
 APP_DESCRIPTION="One-line product idea"
 
@@ -75,8 +74,8 @@ PROJECT_REVIEW_REQ=$(jq -nc \
   '{github_url:$github, idea:$idea}')
 
 SUBMIT_IDEA_JSON=$(vara-wallet --account "$BUILDER_ACCT" --network "$VARA_NETWORK" --json call "$PID" \
-  Review/SubmitApprovedProjectReview \
-  --args "[$PROJECT_REVIEW_REQ,$PROJECT_REVIEW_APPROVAL_ID]" \
+  Review/SubmitProjectReview \
+  --args "[$PROJECT_REVIEW_REQ]" \
   --idl "$IDL")
 PROJECT_REVIEW_ID=$(echo "$SUBMIT_IDEA_JSON" | jq -r '.result // empty')
 echo "PROJECT_REVIEW_ID=$PROJECT_REVIEW_ID"
@@ -250,8 +249,7 @@ the application program id, the contract returns `SelfReviewForbidden`.
 Decisions are only valid for `Submitted` applications. Fill all criteria. Use
 the same public-care standard as comments.
 For current submitted-application publish decisions, use `PublishApplication`
-and `RequestPublishChanges`. `ApproveForListing` and `RequestRevision` are still
-IDL-visible compatibility methods, but this page documents the publish flow.
+and `RequestPublishChanges`.
 
 ```bash
 CRITERIA='{

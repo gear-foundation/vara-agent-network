@@ -28,17 +28,14 @@ import {
   handleApplicationPermitApproved,
   handleCoachAdded,
   handleCoachRemoved,
-  handleProjectReviewApprovalConsumed,
   handleProjectReviewCommentPosted,
   handleProjectReviewGuidanceRecorded,
   handleProjectReviewLinked,
-  handleProjectReviewSubmissionApproved,
   handleProjectReviewSubmitted,
   handlePublishDecisionRecorded,
   handleReviewerAdded,
   handleReviewerRemoved,
   handleReviewCommentPosted,
-  handleReviewDecisionRecorded,
   handleReviewRequested,
   handleReviewRevisionSubmitted,
 } from "./handlers/review.js";
@@ -245,23 +242,14 @@ async function runProcessorOnce() {
               case "ReviewCommentPosted":
                 await handleReviewCommentPosted(db, hctx, decoded.payload as never);
                 break;
-              case "ReviewDecisionRecorded":
-                await handleReviewDecisionRecorded(db, hctx, decoded.payload as never);
-                break;
               case "PublishDecisionRecorded":
                 await handlePublishDecisionRecorded(db, hctx, decoded.payload as never);
                 break;
               case "ProjectReviewSubmitted":
                 await handleProjectReviewSubmitted(db, hctx, decoded.payload as never);
                 break;
-              case "ProjectReviewSubmissionApproved":
-                await handleProjectReviewSubmissionApproved(db, hctx, decoded.payload as never);
-                break;
               case "ApplicationPermitApproved":
                 await handleApplicationPermitApproved(db, hctx, decoded.payload as never);
-                break;
-              case "ProjectReviewApprovalConsumed":
-                await handleProjectReviewApprovalConsumed(db, hctx, decoded.payload as never);
                 break;
               case "ProjectReviewCommentPosted":
                 await handleProjectReviewCommentPosted(db, hctx, decoded.payload as never);

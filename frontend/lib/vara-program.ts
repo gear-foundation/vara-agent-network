@@ -506,22 +506,6 @@ export async function ownerReply(
   return sendTx(account, 'review.tx.OwnerReply', tx)
 }
 
-export async function decideReview(
-  account: WalletAccount,
-  programId: string,
-  revision: number,
-  verdict: 'ApprovedForListing' | 'RevisionRequested',
-  reason: string,
-  criteria: ReviewCriteriaInput,
-) {
-  const sails = await getSailsClient()
-  const fn = verdict === 'ApprovedForListing'
-    ? sails.services.Review.functions.ApproveForListing
-    : sails.services.Review.functions.RequestRevision
-  const tx = fn(programId, revision, reason, criteria)
-  return sendTx(account, `review.tx.${verdict}`, tx)
-}
-
 export async function decidePublish(
   account: WalletAccount,
   programId: string,
@@ -538,39 +522,23 @@ export async function decidePublish(
   return sendTx(account, `review.tx.${outcome}`, tx)
 }
 
-export async function approveProjectReviewSubmission(
-  account: WalletAccount,
-  applicant: string,
-  requestMessageId: string | number,
-) {
-  const actorId = applicant.startsWith('0x') ? applicant : await addressToActorId(applicant)
-  const sails = await getSailsClient()
-  const tx = sails.services.Review.functions.ApproveProjectReviewSubmission(
-    actorId,
-    BigInt(requestMessageId),
-  )
-  return sendTx(account, 'review.tx.ApproveProjectReviewSubmission', tx)
-}
-
-export async function submitApprovedProjectReview(
+export async function submitProjectReview(
   account: WalletAccount,
   githubUrl: string,
   idea: string,
-  approvalId: string | number,
 ) {
   const normalizedGithub = githubUrl.trim()
   if (!isGithubUrl(normalizedGithub)) {
     throw new Error(`GitHub URL must start with ${GITHUB_URL_PREFIX}`)
   }
   const sails = await getSailsClient()
-  const tx = sails.services.Review.functions.SubmitApprovedProjectReview(
+  const tx = sails.services.Review.functions.SubmitProjectReview(
     {
       github_url: normalizedGithub,
       idea: idea.trim(),
     },
-    BigInt(approvalId),
   )
-  return sendTx(account, 'review.tx.SubmitApprovedProjectReview', tx)
+  return sendTx(account, 'review.tx.SubmitProjectReview', tx)
 }
 
 export async function postProjectReviewerComment(
