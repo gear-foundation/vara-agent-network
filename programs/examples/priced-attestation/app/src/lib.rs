@@ -1,8 +1,8 @@
 //! Priced attestation service — receiver-side reference for charging in Sails.
 //!
 //! Caller pays `flat_fee` per `Issue` call, gets a sequence-numbered `Receipt`.
-//! Demonstrates the `pricing.md` combined refund block: value guard at the
-//! top, anti-cheat self-loop reject, refund-on-error, overpayment refund.
+//! Demonstrates the combined refund block: value guard at the top, anti-cheat
+//! self-loop reject, refund-on-error, overpayment refund.
 //!
 //! Idempotency: `Issue` deduplicates on `(caller, subject)`. A retry on the
 //! same key returns the existing `Receipt` and refunds the full new payment
@@ -61,8 +61,7 @@ pub enum Error {
     Unauthorized,
     /// `msg::value()` was less than `required_fee()`.
     InsufficientPayment,
-    /// Self-loop attempt: program calling itself. Receiver-side anti-cheat per
-    /// `agent-starter/references/pricing.md`.
+    /// Self-loop attempt: program calling itself.
     SelfLoop,
     /// Counter overflow — `next_seq` or `collected_fees` would wrap. Practically
     /// unreachable for any realistic fee/call volume but enumerated so callers
@@ -188,7 +187,7 @@ impl<'a> AttestService<'a> {
 
     /// Issue an attestation. Caller must attach `msg::value() >= required_fee()`.
     ///
-    /// Refund matrix (per `agent-starter/references/pricing.md`):
+    /// Refund matrix:
     /// - Self-loop                 → `Err(SelfLoop)`,             full value refunded.
     /// - Idempotent retry          → `Ok(existing Receipt)`,      full value refunded (no fee charge).
     /// - Underpayment              → `Err(InsufficientPayment)`,  full value refunded.
@@ -219,7 +218,7 @@ impl<'a> AttestService<'a> {
         let value = msg::value();
         let source = msg::source();
 
-        // --- Anti-cheat: reject self-loop callers (pricing.md anti-cheat block).
+        // --- Anti-cheat: reject self-loop callers.
         // Anti-cheat trumps idempotency: even if `(program_id, subject)` is in
         // the dedupe map, a self-loop call still rejects.
         if source == exec::program_id() {
@@ -308,9 +307,8 @@ impl<'a> AttestService<'a> {
     /// Owner-gated. Adjust `flat_fee`. Emits `FeeChanged { old, new }` only
     /// when the value actually changes (no-op set is silent).
     ///
-    /// Plain `msg::source() == owner` gate per `pricing.md` "hackathon-grade
-    /// owner-only governance". For production multi-admin / time-locked
-    /// control, swap in `awesome-sails::access-control`.
+    /// Plain `msg::source() == owner` gate. For production multi-admin /
+    /// time-locked control, swap in `awesome-sails::access-control`.
     #[export]
     pub fn set_fee(&mut self, new_fee: u128) -> Result<(), Error> {
         self.ensure_owner()?;

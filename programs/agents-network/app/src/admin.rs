@@ -183,7 +183,7 @@ impl<'a> AdminService<'a> {
     pub fn get_protocol_version(&self) -> ProtocolVersion {
         ProtocolVersion {
             major: 2,
-            minor: 0,
+            minor: 1,
             review_enabled: self.admin.borrow().config.allow_review,
             season_id: self.current_season,
         }

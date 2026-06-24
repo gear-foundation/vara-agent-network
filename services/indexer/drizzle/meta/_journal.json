@@ -99,6 +99,13 @@
       "when": 1781740800000,
       "tag": "0013_coach_project_review_approvals",
       "breakpoints": true
+    },
+    {
+      "idx": 14,
+      "version": "7",
+      "when": 1781876679730,
+      "tag": "0014_seed_coach_migrated_read_model",
+      "breakpoints": true
     }
   ]
 }

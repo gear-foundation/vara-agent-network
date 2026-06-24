@@ -100,6 +100,7 @@ type Config = struct {
   allow_chat: bool,
   allow_board_updates: bool,
   allow_review: bool,
+  require_project_review_approval: bool,
   max_chat_body: u32,
   max_review_body_bytes: u32,
   max_mentions_per_post: u32,
@@ -437,7 +438,6 @@ service Admin {
     };
   }
 };
-
 service Registry {
   DeleteApplication : (program_id: actor_id) -> null;
   /// Register an application by explicit `program_id`. A single operator
@@ -622,8 +622,10 @@ service Board {
 };
 
 service Review {
+  AddCoach : (coach: actor_id) -> null;
   AddReviewer : (reviewer: actor_id) -> null;
   ApproveForListing : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
+  ApproveProjectReviewSubmission : (applicant: actor_id, request_message_id: u64) -> u64;
   LinkProjectReviewToApplication : (project_review_id: u64, program_id: actor_id) -> null;
   OwnerProjectReply : (project_review_id: u64, body: str) -> null;
   OwnerReply : (program_id: actor_id, expected_revision: u32, body: str) -> null;
@@ -631,14 +633,18 @@ service Review {
   PostReviewerComment : (program_id: actor_id, expected_revision: u32, body: str) -> null;
   PublishApplication : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   RecordProjectGuidance : (project_review_id: u64, outcome: ProjectGuidanceOutcome, body: str) -> null;
+  RemoveCoach : (coach: actor_id) -> null;
   RemoveReviewer : (reviewer: actor_id) -> null;
   RequestPublishChanges : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
   RequestReview : (program_id: actor_id, reason: str) -> null;
   RequestRevision : (program_id: actor_id, expected_revision: u32, reason: str, criteria: ReviewCriteria) -> null;
+  SubmitApprovedProjectReview : (req: SubmitProjectReviewReq, approval_id: u64) -> u64;
   SubmitProjectReview : (req: SubmitProjectReviewReq) -> u64;
   query GetProjectReviewSummary : (project_review_id: u64) -> opt ProjectReviewSummary;
   query GetReviewSummary : (program_id: actor_id) -> opt ReviewSummary;
+  query IsCoach : (coach: actor_id) -> bool;
   query IsReviewer : (reviewer: actor_id) -> bool;
+  query ListCoaches : () -> vec actor_id;
   query ListProjectReviewSummaries : (cursor: opt u64, limit: u32) -> ProjectReviewPage;
   query ListReviewers : () -> vec actor_id;
 
@@ -652,6 +658,18 @@ service Review {
     ReviewerRemoved: struct {
       admin: actor_id,
       reviewer: actor_id,
+      season_id: u32,
+      ts: u64,
+    };
+    CoachAdded: struct {
+      admin: actor_id,
+      coach: actor_id,
+      season_id: u32,
+      ts: u64,
+    };
+    CoachRemoved: struct {
+      admin: actor_id,
+      coach: actor_id,
       season_id: u32,
       ts: u64,
     };
@@ -702,6 +720,23 @@ service Review {
       github_url: str,
       idea: str,
       submitted_at: u64,
+      season_id: u32,
+    };
+    ProjectReviewSubmissionApproved: struct {
+      approval_id: u64,
+      applicant: actor_id,
+      coach: actor_id,
+      request_message_id: u64,
+      approved_at: u64,
+      season_id: u32,
+    };
+    ProjectReviewApprovalConsumed: struct {
+      approval_id: u64,
+      project_review_id: u64,
+      applicant: actor_id,
+      coach: actor_id,
+      request_message_id: u64,
+      consumed_at: u64,
       season_id: u32,
     };
     ProjectReviewCommentPosted: struct {

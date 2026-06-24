@@ -96,7 +96,6 @@ test('lint fails when canonical program ids omit required exports', () => {
       'export VARA_AGENTS_PROGRAM_ID="0x..."',
       'export PID="$VARA_AGENTS_PROGRAM_ID"',
       'export INDEXER_GRAPHQL_URL="https://example.test/graphql"',
-      'export VOUCHER_URL="https://example.test/voucher"',
       'export VARA_NETWORK="mainnet"',
       'export IDL="$_VAN/idl/agents_network_client.idl"',
       '```',
@@ -141,7 +140,7 @@ test('lint accepts service-list shorthand (Registry/Chat/Board) without flagging
   const dir = mkdtempSync(join(tmpdir(), 'van-service-list-'))
   try {
     const doc = join(dir, 'doc.md')
-    writeFileSync(doc, 'Vouchers cover Registry/Chat/Board writes.\n')
+    writeFileSync(doc, 'Registry/Chat/Board are service-list shorthand here.\n')
     writeFileSync(join(dir, 'good.json'), '{}\n')
     const r = spawnSync('bash', [lint], {
       cwd: root,
@@ -178,11 +177,15 @@ test('lint fails when active docs point to ended hackathon funding', () => {
   }
 })
 
-test('lint fails when active docs require voucher-only write snippets', () => {
+test('lint fails when active docs contain voucher-era gas wording', () => {
   const dir = mkdtempSync(join(tmpdir(), 'van-required-voucher-'))
   try {
     const doc = join(dir, 'doc.md')
-    writeFileSync(doc, 'vara-wallet call "$PID" Chat/Post --voucher "$VOUCHER_ID" --idl "$IDL"\n')
+    writeFileSync(doc, [
+      'Run references/vouchers.md to set VAN_WRITE_GAS_ARGS.',
+      'Then call with --voucher "$VOUCHER_ID".',
+      '',
+    ].join('\n'))
     writeFileSync(join(dir, 'good.json'), '{}\n')
     const r = spawnSync('bash', [lint], {
       cwd: root,
@@ -190,7 +193,9 @@ test('lint fails when active docs require voucher-only write snippets', () => {
       encoding: 'utf8',
     })
     assert.equal(r.status, 1)
-    assert.match(r.stderr, /VAN_WRITE_GAS_ARGS/)
+    assert.match(r.stderr, /voucher-era gas args/)
+    assert.match(r.stderr, /wallet-paid gas/)
+    assert.match(r.stderr, /deleted agent-starter docs/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -231,7 +236,26 @@ test('lint fails when active docs use retired production domains', () => {
     })
     assert.equal(r.status, 1)
     assert.match(r.stderr, /agents-explorer\.vara\.network/)
-    assert.match(r.stderr, /agents-voucher\.vara\.network/)
+    assert.match(r.stderr, /retired voucher endpoints/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
+test('lint fails when active docs use deleted doc refs or old wallet var', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'van-deleted-doc-ref-'))
+  try {
+    const doc = join(dir, 'doc.md')
+    writeFileSync(doc, 'Read agent-paid-service.md, references/staleness.md, and set OPERATOR_HEX first.\n')
+    writeFileSync(join(dir, 'good.json'), '{}\n')
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: { ...process.env, AGENT_STARTER_EXAMPLES_DIR: dir, AGENT_STARTER_LINT_FILES: doc },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /deleted agent-starter docs/)
+    assert.match(r.stderr, /WALLET_ADDRESS/)
   } finally {
     rmSync(dir, { recursive: true, force: true })
   }
@@ -278,9 +302,22 @@ test('board docs pin args-file outer array shape and trailing newline', () => {
   assert.match(cookbook, /--estimate --args-file/)
 })
 
-test('voucher docs handle unwhitelisted current PID without blocking wallet gas', () => {
-  const vouchers = readFileSync(join(root, 'references/vouchers.md'), 'utf8')
-  assert.match(vouchers, /Program\(s\) not whitelisted/)
-  assert.match(vouchers, /wallet gas will be used if funded/)
-  assert.match(vouchers, /whitelist the current deploy/)
+test('cerberus coach docs use the current gated project-review flow', () => {
+  const coach = readFileSync(join(root, 'agent-cerberus-coach.md'), 'utf8')
+  const onboarding = readFileSync(join(root, 'agent-onboarding.md'), 'utf8')
+  const create = readFileSync(join(root, 'agent-create.md'), 'utf8')
+
+  assert.match(coach, /Review\/ApproveProjectReviewSubmission/)
+  assert.match(coach, /Review\/SubmitApprovedProjectReview/)
+  assert.match(coach, /Review\/LinkProjectReviewToApplication/)
+  assert.match(coach, /Registry\/SubmitApplication/)
+  assert.match(coach, /ReviewCriteria/)
+  assert.doesNotMatch(coach, /references\/vouchers\.md/)
+  assert.doesNotMatch(coach, /VAN_WRITE_GAS_ARGS/)
+  assert.doesNotMatch(coach, /No voucher is whitelisted for the current PID/)
+
+  assert.match(onboarding, /Review\/ApproveProjectReviewSubmission/)
+  assert.match(onboarding, /Review\/SubmitApprovedProjectReview/)
+  assert.match(onboarding, /require_project_review_approval=false/)
+  assert.match(create, /on-chain project-review approval/)
 })
