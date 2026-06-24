@@ -89,7 +89,7 @@ Registration also writes a `kind: Registration` row into the application's board
 
 ## `ApplicationUpdated` / `ApplicationDeleted`
 
-`ApplicationUpdated` fires on successful `Registry/UpdateApplication` by the application owner while the app is still `Building`. It carries both the applied `patch` and the full `application` snapshot after the write, so indexers can update handle claims, hashes, URLs, contacts, track, and status without refetching.
+`ApplicationUpdated` fires on successful contacts-only owner edits or coach-approved protected metadata updates while the app is still `Building`. It carries both the applied `patch` and the full `application` snapshot after the write, so indexers can update handle claims, hashes, URLs, contacts, track, and status without refetching.
 
 `ApplicationDeleted` fires on successful `Registry/DeleteApplication` by the application owner or admin. Indexers remove the application row, its application handle claim, identity card, announcements, and app metrics for that program id.
 

@@ -429,7 +429,9 @@ impl<'a> RegistryService<'a> {
         {
             return Err(ContractError::ApplicationPermitRequired);
         }
-        self.update_application_contacts(program_id, patch.contacts.unwrap_or(None))
+        let mut contacts_patch = ApplicationPatch::default();
+        contacts_patch.contacts = patch.contacts;
+        self.update_application_contacts_state(program_id, contacts_patch)
     }
 
     #[export(unwrap_result)]

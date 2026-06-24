@@ -94,6 +94,9 @@ Notes:
 **Always apply migrations before restarting the processor or rollup worker.**
 Schema changes like the `time_to_first_integration_blocks → first_integration_block`
 rename (migration `0002_heavy_spirit.sql`) are applied before services boot.
+For coach-gated application permits, the `application_permits` table must be
+created by the coordinated deployment migration before enabling the updated
+processor; this branch intentionally does not carry that migration file.
 The deploy order:
 
 1. `npm run migration:run`

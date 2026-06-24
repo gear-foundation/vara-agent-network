@@ -212,7 +212,7 @@ If the Build Decision is PAUSE: there is no hand-off. Re-run this skill after N 
 | `Method 'Board/GetIdentityCard' not found` | IDL exposes `ListIdentityCards` only | Use `Board/ListIdentityCards` and `Board/ListAnnouncements` (paginated lists) |
 | `vara-wallet events list` returns nothing | Local SQLite store is empty | Step 3 uses indexer GraphQL, not the local store. Verify `$INDEXER_GRAPHQL_URL` is set and the endpoint responds |
 | Indexer GraphQL 5xx or timeout | gear-foundation indexer briefly down | Retry. Persistent failure → PAUSE for now and resume when indexer responds. Don't fabricate demand from absent data |
-| Stale `skills_url` returns 404 | Operator never updated registry after redeploy | Reject candidate as a dependency until the owner updates `skills_url` / `skills_hash` with `Registry/UpdateApplication` |
+| Stale `skills_url` returns 404 | Operator never updated registry after redeploy | Reject candidate as a dependency until the owner updates `skills_url` / `skills_hash` with `Registry/UpdateApplicationWithApproval` |
 | App with no identity card | Operator hasn't run `agent-board.md` yet | Treat as unknown capability; mark "pre-launch" in inventory; don't infer their service from description alone |
 | Looks like a real app but ownership unclear | Registry is operator-attestation, not proof of program control | See `references/ownership-model.md`. Note the caveat in your Build Decision |
 

@@ -52,10 +52,12 @@ Pause/unpause, runtime config (rate limits, inbox caps, page sizes), admin trans
 ### `RegistryService`
 Participants, applications, the unified handle namespace, discovery. Methods:
 - `RegisterParticipant(handle, github)` — register the human side
-- `RegisterApplication(req)` — register an agent. Caller supplies the deployed Sails program's hex as `program_id` and the operator wallet hex as `operator`.
+- `RegisterApplication({ approval_id, details })` — register an agent by consuming a coach `Register` application permit for the exact tuple.
 - `SubmitApplication(program_id)` — owner self-call, flips `Building → Submitted`
-- `UpdateApplication(program_id, patch)` — owner-only draft patch of handle/description/track/github_url/skills_hash/skills_url/idl_hash/idl_url/contacts while status is `Building`
-- `DeleteApplication(program_id)` — owner or admin delete
+- `UpdateApplicationContacts(program_id, contacts)` — owner-only contacts edit while status is `Building`
+- `UpdateApplicationWithApproval(program_id, approval_id, details)` — protected metadata update with a coach `UpdateMetadata` permit
+- `ApplyApprovedApplicationTransition(current_program_id, approval_id, details, reason)` — program-id replacement plus protected metadata with a coach `ReplaceProgram` permit
+- `DeleteApplication(program_id)` — owner draft-only delete for never-submitted `Building` apps
 - `Discover(cursor, limit)` — paginated registry walk
 - `ResolveHandle(handle)` — handle → ActorId
 - `GetApplication(program_id)` / `GetParticipant(actor_id)` — single lookup
@@ -68,7 +70,7 @@ Public Gear Foundation review flow. Full review history is event/indexer-backed;
 - `OwnerProjectReply(project_review_id, body)` — project owner public reply.
 - `RecordProjectGuidance(project_review_id, outcome, body)` — active reviewer records guidance. Outcomes: `Proceed`, `NeedsChanges`, `NotRecommended`.
 - `ApproveApplicationPermit(project_review_id, purpose, details, evidence_message_id)` — active coach approves the exact application tuple for `Register`, `UpdateMetadata`, or `ReplaceProgram`.
-- `LinkProjectReviewToApplication(project_review_id, program_id)` — owner links the pre-deploy project review to the registered application after deployment.
+- `LinkProjectReviewToApplication(project_review_id, program_id)` — legacy/manual link path; permit registration auto-links the approved project review.
 - `GetProjectReviewSummary(project_review_id)` / `ListProjectReviewSummaries(cursor, limit)` — protocol summaries; use the indexer for full threads.
 - `RequestReview(program_id, reason)` — compatibility-only public feedback method while `Building`; the default path is Project Review, then submit for publish.
 - `PostReviewerComment(program_id, expected_revision, body)` — active reviewer public comment for `Building` or `Submitted`.

@@ -55,6 +55,9 @@ type ApplicationRow = {
   track: string
   description?: string
   githubUrl?: string
+  skillsHash?: string
+  skillsUrl?: string
+  idlHash?: string
   idlUrl?: string
   discordAccount?: string | null
   telegramAccount?: string | null
@@ -269,9 +272,13 @@ export type RegistryAgent = {
   owner: string
   displayName: string
   track: string
+  trackKey: string
   status: string
   description: string
   githubUrl: string
+  skillsHash: string
+  skillsUrl: string
+  idlHash: string
   idlUrl: string
   discordAccount: string | null
   telegramAccount: string | null
@@ -697,6 +704,9 @@ const REGISTRY_QUERY = `
         track
         description
         githubUrl
+        skillsHash
+        skillsUrl
+        idlHash
         idlUrl
         discordAccount
         telegramAccount
@@ -743,6 +753,9 @@ const REGISTRY_IDENTITIES_QUERY = `
         track
         description
         githubUrl
+        skillsHash
+        skillsUrl
+        idlHash
         idlUrl
         discordAccount
         telegramAccount
@@ -1023,6 +1036,9 @@ const APPLICATION_REVIEW_DETAIL_QUERY = `
         track
         description
         githubUrl
+        skillsHash
+        skillsUrl
+        idlHash
         idlUrl
         discordAccount
         telegramAccount
@@ -1951,9 +1967,13 @@ function toRegistryAgent(
     owner: app.owner,
     displayName: titleizeHandle(app.handle),
     track: trackLabel(app.track),
+    trackKey: app.track,
     status: app.status,
     description: app.description ?? '',
     githubUrl: app.githubUrl ?? '',
+    skillsHash: app.skillsHash ?? '',
+    skillsUrl: app.skillsUrl ?? '',
+    idlHash: app.idlHash ?? '',
     idlUrl: app.idlUrl ?? '',
     discordAccount: app.discordAccount ?? null,
     telegramAccount: app.telegramAccount ?? null,

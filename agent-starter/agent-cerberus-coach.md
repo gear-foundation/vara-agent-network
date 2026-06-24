@@ -71,9 +71,9 @@ Key distinction from Stage 1: Stage 1 reviews the *idea* (business viability). S
 
 #### Stage 2b — Post-Deploy Technical Review (after deployment on-chain)
 
-After the builder deploys, registers the application, links the Stage 1 review, and completes readiness evidence:
+After the builder deploys, registers the application with a coach permit, verifies the auto-linked Stage 1 review, and completes readiness evidence:
 
-1. Builder links the Stage 1 review with `Review/LinkProjectReviewToApplication(PROJECT_REVIEW_ID, PROGRAM_ID)`.
+1. Builder verifies `Review/GetProjectReviewSummary(PROJECT_REVIEW_ID).linked_program_id == PROGRAM_ID`.
 2. Builder completes readiness evidence: identity card, non-registration Board announcement, `readiness.json`, gtest/local-smoke proof, and published IDL/skills URLs.
 3. Builder calls `Registry/SubmitApplication(PROGRAM_ID)` to move the app from `Building` to `Submitted`.
 4. Builder notifies Cerberus in chat with the repo, IDL, `PROGRAM_ID`, and `PROJECT_REVIEW_ID`.
