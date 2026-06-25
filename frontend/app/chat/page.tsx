@@ -209,15 +209,9 @@ function bodyMentionsAgent(body: string, agent: AgentOption | null) {
   return bodyMentionsHandle(body, agent.handle) || body.toLowerCase().includes(agent.ownerId.toLowerCase())
 }
 
-function isReplyToKnownMessage(message: DisplayChatMessage, messageIds: Set<string>) {
-  return 'replyTo' in message && Boolean(message.replyTo && messageIds.has(String(message.replyTo)))
-}
-
-function cerberusReason(message: DisplayChatMessage, agent: AgentOption | null, agentMessageIds: Set<string>) {
+function cerberusReason(message: DisplayChatMessage, agent: AgentOption | null) {
   if (!isAuthoredBy(message, CERBERUS_HANDLE)) return null
-  if (bodyMentionsHandle(message.body, 'all')) return 'mentions @all'
   if (bodyMentionsAgent(message.body, agent)) return 'mentions agent'
-  if (isReplyToKnownMessage(message, agentMessageIds)) return 'reply'
   return null
 }
 
@@ -325,42 +319,14 @@ export default function ChatPage() {
       .map(({ agent }) => agent)
   }, [agentOptions, agentSearch])
   const selectedAgentLabel = selectedAgent ? `@${selectedAgent.handle}` : 'Search by handle or address'
-  const selectedAgentMessageIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const message of displayMessages) {
-      if (
-        isAuthoredByAgent(message, selectedAgent)
-        && bodyMentionsHandle(message.body, CERBERUS_HANDLE)
-        && 'msgId' in message
-      ) {
-        ids.add(String(message.msgId))
-      }
-    }
-    return ids
-  }, [displayMessages, selectedAgent])
-  const selectedCerberusMessageIds = useMemo(() => {
-    const ids = new Set<string>()
-    for (const message of displayMessages) {
-      if (cerberusReason(message, selectedAgent, selectedAgentMessageIds) && 'msgId' in message) {
-        ids.add(String(message.msgId))
-      }
-    }
-    return ids
-  }, [displayMessages, selectedAgent, selectedAgentMessageIds])
   const filteredDisplayMessages = useMemo(() => {
     if (chatMode !== 'agent') return displayMessages
     if (!selectedAgent) return []
     return displayMessages.filter((message) => (
-      (
-        isAuthoredByAgent(message, selectedAgent)
-        && (
-          bodyMentionsHandle(message.body, CERBERUS_HANDLE)
-          || isReplyToKnownMessage(message, selectedCerberusMessageIds)
-        )
-      )
-      || Boolean(cerberusReason(message, selectedAgent, selectedAgentMessageIds))
+      (isAuthoredByAgent(message, selectedAgent) && bodyMentionsHandle(message.body, CERBERUS_HANDLE))
+      || Boolean(cerberusReason(message, selectedAgent))
     ))
-  }, [chatMode, displayMessages, selectedAgent, selectedAgentMessageIds, selectedCerberusMessageIds])
+  }, [chatMode, displayMessages, selectedAgent])
   const fallbackChannelStats = useMemo(() => {
     const recentAuthors = Array.from(
       displayMessages.reduce((map, message) => {
@@ -659,7 +625,7 @@ export default function ChatPage() {
                   <div className="chat-header__sub">
                     {chatMode === 'agent'
                       ? selectedAgent
-                        ? `showing ${selectedAgentLabel} plus relevant @${CERBERUS_HANDLE} replies, direct mentions, and @all`
+                        ? `showing direct ${selectedAgentLabel} and @${CERBERUS_HANDLE} mentions`
                         : `search an agent to show its dialogue with @${CERBERUS_HANDLE}`
                       : 'on-chain · all messages are extrinsics · mention agents by @handle'}
                   </div>
@@ -763,7 +729,7 @@ export default function ChatPage() {
                   const authorActorId = actorIdFromAuthorRef(message.authorRef)
                   const authorIsCoach = Boolean(authorActorId && activeCoaches.has(authorActorId))
                   const reason = chatMode === 'agent'
-                    ? cerberusReason(message, selectedAgent, selectedAgentMessageIds)
+                    ? cerberusReason(message, selectedAgent)
                     : null
 
                   return (
