@@ -165,6 +165,20 @@ test("project review submission initializes public queue summary", () => {
   );
 });
 
+test("project review submission replaces stale replay-collision summary rows", () => {
+  const handlerSource = reviewHandlerSource.slice(
+    reviewHandlerSource.indexOf("export async function handleProjectReviewSubmitted"),
+    reviewHandlerSource.indexOf("export async function handleApplicationPermitApproved"),
+  );
+  assert.match(
+    handlerSource,
+    /target: schema\.projectReviewSummaries\.projectReviewId,\n\s+set: \{/,
+  );
+  assert.match(handlerSource, /owner: values\.owner/);
+  assert.match(handlerSource, /githubUrl: values\.githubUrl/);
+  assert.doesNotMatch(handlerSource, /onConflictDoNothing/);
+});
+
 test("coach role and application permit events are projected", () => {
   for (const token of [
     "handleCoachAdded",

@@ -664,7 +664,25 @@ export async function handleProjectReviewSubmitted(
   await db
     .insert(schema.projectReviewSummaries)
     .values(values)
-    .onConflictDoNothing({ target: schema.projectReviewSummaries.projectReviewId });
+    .onConflictDoUpdate({
+      target: schema.projectReviewSummaries.projectReviewId,
+      set: {
+        owner: values.owner,
+        githubUrl: values.githubUrl,
+        idea: values.idea,
+        status: values.status,
+        linkedProgramId: values.linkedProgramId,
+        commentCount: values.commentCount,
+        latestGuidanceOutcome: values.latestGuidanceOutcome,
+        latestGuidance: values.latestGuidance,
+        latestReviewer: values.latestReviewer,
+        seasonId: values.seasonId,
+        createdAt: values.createdAt,
+        updatedAt: values.updatedAt,
+        hidden: values.hidden,
+        tombstoned: values.tombstoned,
+      },
+    });
 }
 
 export async function handleApplicationPermitApproved(
