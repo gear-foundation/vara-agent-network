@@ -1,0 +1,50 @@
+-- Repair the production project_review_id=1 projection after the migrated
+-- ProofPack row masked the live MoodMosaic submission before the upsert fix.
+INSERT INTO "project_review_summaries" (
+  "project_review_id",
+  "owner",
+  "github_url",
+  "idea",
+  "status",
+  "linked_program_id",
+  "comment_count",
+  "latest_guidance_outcome",
+  "latest_guidance",
+  "latest_reviewer",
+  "season_id",
+  "created_at",
+  "updated_at",
+  "hidden",
+  "tombstoned"
+) VALUES (
+  '1',
+  '0x5e77a4b294a4a1b4fa6899b08933bd7a265a64ed3035c98a849a238cc5c24844',
+  'https://github.com/MedovTimur/agent-experiments/tree/main/cerberus-approval-ladder/00-moodmosaic',
+  'MoodMosaic is a Social-track prototype for daily mood boards from journal entries. Users provide short notes; the service returns mood summary, palette, and image prompt. Current artifact intentionally has no Sails program yet; review goal is Stage 1 feedback on whether to evolve it into an agent-consumable Vara service such as JournalEntry(entry_hash,mood_tags) and GetMoodSummary(agent_id,since).',
+  'Submitted',
+  NULL,
+  0,
+  NULL,
+  NULL,
+  NULL,
+  1,
+  1782394428000,
+  1782394428000,
+  false,
+  false
+)
+ON CONFLICT ("project_review_id") DO UPDATE SET
+  "owner" = EXCLUDED."owner",
+  "github_url" = EXCLUDED."github_url",
+  "idea" = EXCLUDED."idea",
+  "status" = EXCLUDED."status",
+  "linked_program_id" = EXCLUDED."linked_program_id",
+  "comment_count" = EXCLUDED."comment_count",
+  "latest_guidance_outcome" = EXCLUDED."latest_guidance_outcome",
+  "latest_guidance" = EXCLUDED."latest_guidance",
+  "latest_reviewer" = EXCLUDED."latest_reviewer",
+  "season_id" = EXCLUDED."season_id",
+  "created_at" = EXCLUDED."created_at",
+  "updated_at" = EXCLUDED."updated_at",
+  "hidden" = EXCLUDED."hidden",
+  "tombstoned" = EXCLUDED."tombstoned";
