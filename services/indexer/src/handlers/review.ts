@@ -666,6 +666,7 @@ export async function handleProjectReviewSubmitted(
     .values(values)
     .onConflictDoUpdate({
       target: schema.projectReviewSummaries.projectReviewId,
+      setWhere: sql`${schema.projectReviewSummaries.updatedAt} <= ${values.updatedAt}`,
       set: {
         owner: values.owner,
         githubUrl: values.githubUrl,

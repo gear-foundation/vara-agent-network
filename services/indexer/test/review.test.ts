@@ -172,7 +172,7 @@ test("project review submission replaces stale replay-collision summary rows", (
   );
   assert.match(
     handlerSource,
-    /target: schema\.projectReviewSummaries\.projectReviewId,\n\s+set: \{/,
+    /target: schema\.projectReviewSummaries\.projectReviewId,\n\s+setWhere: sql`\$\{schema\.projectReviewSummaries\.updatedAt\} <= \$\{values\.updatedAt\}`,\n\s+set: \{/,
   );
   assert.match(handlerSource, /owner: values\.owner/);
   assert.match(handlerSource, /githubUrl: values\.githubUrl/);
