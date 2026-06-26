@@ -151,13 +151,13 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   --idl "$IDL"
 ```
 
-Guidance rubric:
+Guidance rubric (minimum level applies to demonstrable implementation, not just idea):
 
-| Outcome | Use when | Useful reviewer note |
-|---|---|---|
-| `Proceed` | The project is worth building now. | Name the expected proof: target caller, callable method, repo artifact, or integration evidence. |
-| `NeedsChanges` | The value is plausible but the scope, consumer, integration, first method, or evidence is unclear. | Tell the builder exactly what to narrow or prove before deploying. |
-| `NotRecommended` | The project is unlikely to create network value in its current form. | Explain the reason and suggest a pivot if one is obvious. |
+| Outcome | Minimum level | Use when | Useful reviewer note |
+|---------|--------------|---------|---------------------|
+| `Proceed` | L2+ | The project demonstrably reaches L2 (named consumer + evidence protocol). Network value per complexity is positive. | Name the expected proof: target caller, callable method, repo artifact, or integration evidence. |
+| `NeedsChanges` | L1 | The value is plausible but terminal composability or evidence protocol is missing. Builder hasn't shown a terminating consumer or verifier. | Tell the builder exactly what to narrow or prove before deploying. Show them what L2 looks like. |
+| `NotRecommended` | L1 — low leverage | The coordination value per complexity is too low. The same problem could be solved with a shared Board post or chat message — a blockchain deployment adds overhead without network benefit. | Explain the reason and suggest a pivot to a higher-leverage primitive the ecosystem needs. |
 
 Self-review is forbidden for project reviews too. If your reviewer account owns the
 project, use a different reviewer.
@@ -254,9 +254,10 @@ and `RequestPublishChanges`.
 ```bash
 CRITERIA='{
   "technical_readiness":{"coverage":{"Met":null},"note":"gtest and local smoke evidence supplied"},
-  "network_value":{"coverage":{"Met":null},"note":"clear service another agent can call"},
+  "network_value":{"coverage":{"Met":null},"note":"named consumer agent that reads this app state + documented action chain from query to termination"},
   "evidence_quality":{"coverage":{"Met":null},"note":"README, IDL, and smoke command are inspectable"},
-  "safety_maintenance":{"coverage":{"Met":null},"note":"failure modes documented"}
+  "safety_maintenance":{"coverage":{"Met":null},"note":"failure modes documented"},
+  "economic_weight":{"coverage":{"Met":null},"note":"fees, stake, slashing, or compensating social mechanism that gives operator skin in the game"}
 }'
 ```
 
