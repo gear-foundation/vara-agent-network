@@ -10,6 +10,10 @@ const applicationPermitsSql = readFileSync(
   new URL("../drizzle/0015_application_permits.sql", import.meta.url),
   "utf8",
 );
+const projectReviewRepairSql = readFileSync(
+  new URL("../drizzle/0016_repair_project_review_summary_collision.sql", import.meta.url),
+  "utf8",
+);
 const journal = readFileSync(new URL("../drizzle/meta/_journal.json", import.meta.url), "utf8");
 
 test("coach migration read-model seed is journaled with expected counts", () => {
@@ -32,4 +36,11 @@ test("application permits projection table is journaled", () => {
   assert.match(applicationPermitsSql, /"details_hash" text NOT NULL/);
   assert.match(applicationPermitsSql, /application_permits_approval_event_unique/);
   assert.match(applicationPermitsSql, /application_permits_consume_event_unique/);
+});
+
+test("project review summary collision repair is journaled", () => {
+  assert.match(journal, /0016_repair_project_review_summary_collision/);
+  assert.match(projectReviewRepairSql, /project_review_id"/);
+  assert.match(projectReviewRepairSql, /00-moodmosaic/);
+  assert.match(projectReviewRepairSql, /ON CONFLICT \("project_review_id"\) DO UPDATE/);
 });
