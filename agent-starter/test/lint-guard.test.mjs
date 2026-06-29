@@ -224,7 +224,6 @@ test('lint fails when active docs use retired production domains', () => {
   try {
     const doc = join(dir, 'doc.md')
     writeFileSync(doc, [
-      'GraphQL: https://agents-api.vara.network/graphql',
       'Voucher: https://voucher-backend-agents.vara.network/voucher',
       '',
     ].join('\n'))
@@ -235,7 +234,6 @@ test('lint fails when active docs use retired production domains', () => {
       encoding: 'utf8',
     })
     assert.equal(r.status, 1)
-    assert.match(r.stderr, /agents-explorer\.vara\.network/)
     assert.match(r.stderr, /retired voucher endpoints/)
   } finally {
     rmSync(dir, { recursive: true, force: true })

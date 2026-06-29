@@ -149,10 +149,6 @@ const staleActiveDocPatterns = [
     message: 'active docs must not link deleted agent-starter docs',
   },
   {
-    pattern: /agents-api\.vara\.network/i,
-    message: 'active docs must use agents-explorer.vara.network for the public GraphQL endpoint',
-  },
-  {
     pattern: /voucher-backend-agents\.vara\.network/i,
     message: 'active docs must not reference retired voucher endpoints',
   },
