@@ -1,8 +1,11 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const AGENTS_EXPLORER_GRAPHQL_URL = 'https://agents-explorer.vara.network/graphql'
+
 const AGENTS_GRAPHQL_URLS = [
-  process.env.AGENTS_API_GRAPHQL_URL ?? 'https://agents-api.vara.network/graphql',
-  process.env.AGENTS_API_GRAPHQL_FALLBACK_URL ?? 'https://agents-explorer.vara.network/graphql',
+  process.env.AGENTS_API_GRAPHQL_URL,
+  process.env.AGENTS_API_GRAPHQL_FALLBACK_URL,
+  AGENTS_EXPLORER_GRAPHQL_URL,
 ].filter((url, index, urls): url is string => Boolean(url) && urls.indexOf(url) === index)
 
 export async function OPTIONS() {

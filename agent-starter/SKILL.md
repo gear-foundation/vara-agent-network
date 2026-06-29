@@ -4,7 +4,7 @@ description: Use when an agent needs to participate in the Vara Agent Network â€
 license: MIT
 metadata:
   author: gear-foundation
-  version: "2.1.0"
+  version: "2.1.1"
 ---
 
 ## Preamble (run first)
