@@ -706,6 +706,22 @@
 .reviews-dashboard {
   display: grid;
   gap: 16px;
+  --review-panel: oklch(0.155 0 0);
+  --review-panel-soft: oklch(0.18 0.006 170 / 0.64);
+  --review-border: oklch(1 0 0 / 0.085);
+  --review-border-strong: oklch(1 0 0 / 0.14);
+  --review-green: oklch(0.82 0.21 145);
+  --review-green-soft: oklch(0.82 0.21 145 / 0.105);
+  --review-green-border: oklch(0.82 0.21 145 / 0.42);
+  --review-cyan: oklch(0.78 0.16 205);
+  --review-cyan-soft: oklch(0.78 0.16 205 / 0.095);
+  --review-cyan-border: oklch(0.78 0.16 205 / 0.36);
+  --review-warn: oklch(0.8 0.15 52);
+  --review-warn-soft: oklch(0.8 0.15 52 / 0.08);
+  --review-warn-border: oklch(0.8 0.15 52 / 0.28);
+  --review-danger: oklch(0.72 0.18 28);
+  --review-danger-soft: oklch(0.72 0.18 28 / 0.09);
+  --review-danger-border: oklch(0.72 0.18 28 / 0.34);
 }
 
 .reviews-dashboard__header {
@@ -722,25 +738,25 @@
 }
 
 .reviews-metric {
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 8px;
-  background: var(--card);
+  background: var(--review-panel);
   padding: 11px 12px;
 }
 
 .reviews-metric[data-tone='good'] {
-  border-color: color-mix(in oklch, var(--primary) 36%, var(--border));
-  background: color-mix(in oklch, var(--primary) 8%, var(--card));
+  border-color: var(--review-green-border);
+  background: var(--review-green-soft);
 }
 
 .reviews-metric[data-tone='warn'] {
-  border-color: oklch(0.76 0.13 78 / 0.38);
-  background: oklch(0.22 0.03 78 / 0.42);
+  border-color: var(--review-warn-border);
+  background: var(--review-warn-soft);
 }
 
 .reviews-metric[data-tone='info'] {
-  border-color: color-mix(in oklch, var(--accent) 34%, var(--border));
-  background: color-mix(in oklch, var(--accent) 8%, var(--card));
+  border-color: var(--review-cyan-border);
+  background: var(--review-cyan-soft);
 }
 
 .reviews-metric span {
@@ -770,9 +786,9 @@
 .reviews-detail,
 .reviews-dossier,
 .reviews-thread-panel {
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 8px;
-  background: var(--card);
+  background: var(--review-panel);
 }
 
 .reviews-list-panel {
@@ -785,7 +801,7 @@
   display: flex;
   align-items: center;
   gap: 10px;
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--review-border);
   padding: 12px;
   color: var(--muted-foreground);
 }
@@ -814,9 +830,9 @@
   width: 100%;
   gap: 8px;
   outline: none;
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 8px;
-  background: color-mix(in oklch, var(--background) 62%, transparent);
+  background: oklch(0.13 0 0 / 0.64);
   padding: 13px;
   color: var(--foreground);
   cursor: pointer;
@@ -827,12 +843,14 @@
 .reviews-list-item:hover,
 .reviews-list-item[data-selected='true'],
 .reviews-list-item:focus-visible {
-  border-color: color-mix(in oklch, var(--primary) 44%, var(--border));
-  background: color-mix(in oklch, var(--primary) 8%, var(--card));
+  border-color: var(--review-green-border);
+  background:
+    linear-gradient(90deg, var(--review-green-soft), transparent 58%),
+    oklch(0.145 0.01 148 / 0.72);
 }
 
 .reviews-list-item[data-selected='true'] {
-  box-shadow: inset 3px 0 0 var(--primary);
+  box-shadow: inset 3px 0 0 var(--review-green);
 }
 
 .reviews-list-item__top,
@@ -887,7 +905,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border-strong);
   border-radius: 999px;
   padding: 4px 8px;
   font-family: var(--font-mono);
@@ -901,32 +919,34 @@
 }
 
 .reviews-status[data-status='Linked'] {
-  border-color: color-mix(in oklch, var(--accent) 38%, var(--border));
-  color: var(--accent);
+  border-color: var(--review-cyan-border);
+  background: var(--review-cyan-soft);
+  color: var(--review-cyan);
 }
 
 .reviews-status[data-status='GuidanceRecorded'],
 .reviews-status[data-status='Commented'] {
-  border-color: color-mix(in oklch, var(--primary) 34%, var(--border));
-  color: var(--primary);
+  border-color: var(--review-green-border);
+  background: var(--review-green-soft);
+  color: var(--review-green);
 }
 
 .reviews-outcome[data-tone='good'] {
-  border-color: color-mix(in oklch, var(--primary) 42%, var(--border));
-  background: color-mix(in oklch, var(--primary) 10%, transparent);
-  color: var(--primary);
+  border-color: var(--review-green-border);
+  background: var(--review-green-soft);
+  color: var(--review-green);
 }
 
 .reviews-outcome[data-tone='warn'] {
-  border-color: oklch(0.76 0.13 78 / 0.42);
-  background: oklch(0.3 0.04 78 / 0.44);
-  color: oklch(0.82 0.13 78);
+  border-color: var(--review-warn-border);
+  background: var(--review-warn-soft);
+  color: var(--review-warn);
 }
 
 .reviews-outcome[data-tone='danger'] {
-  border-color: color-mix(in oklch, var(--destructive) 42%, var(--border));
-  background: color-mix(in oklch, var(--destructive) 10%, transparent);
-  color: oklch(0.78 0.16 28);
+  border-color: var(--review-danger-border);
+  background: var(--review-danger-soft);
+  color: var(--review-danger);
 }
 
 .reviews-outcome[data-tone='neutral'] {
@@ -968,15 +988,15 @@
 }
 
 .reviews-agent-chip {
-  border-color: color-mix(in oklch, var(--primary) 36%, var(--border));
-  background: color-mix(in oklch, var(--primary) 8%, transparent);
-  color: var(--primary);
+  border-color: var(--review-green-border);
+  background: var(--review-green-soft);
+  color: var(--review-green);
 }
 
 .reviews-app-chip {
-  border-color: color-mix(in oklch, var(--accent) 34%, var(--border));
-  background: color-mix(in oklch, var(--accent) 8%, transparent);
-  color: var(--accent);
+  border-color: var(--review-cyan-border);
+  background: var(--review-cyan-soft);
+  color: var(--review-cyan);
 }
 
 .reviews-description {
@@ -994,8 +1014,8 @@
 }
 
 .reviews-description:focus-visible {
-  border-color: color-mix(in oklch, var(--primary) 44%, var(--border));
-  box-shadow: 0 0 0 3px color-mix(in oklch, var(--primary) 10%, transparent);
+  border-color: var(--review-green-border);
+  box-shadow: 0 0 0 3px var(--review-green-soft);
 }
 
 .reviews-description span {
@@ -1023,18 +1043,18 @@
   align-items: center;
   gap: 6px;
   margin-top: 10px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border-strong);
   border-radius: 999px;
   padding: 5px 9px;
-  color: var(--primary);
+  color: var(--review-green);
   font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 800;
 }
 
 .reviews-description:hover strong {
-  border-color: color-mix(in oklch, var(--primary) 40%, var(--border));
-  background: color-mix(in oklch, var(--primary) 8%, transparent);
+  border-color: var(--review-green-border);
+  background: var(--review-green-soft);
 }
 
 .reviews-dossier__facts {
@@ -1048,7 +1068,7 @@
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 999px;
   padding: 6px 10px;
 }
@@ -1075,7 +1095,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 8px;
   padding: 8px 10px;
   color: var(--foreground);
@@ -1084,8 +1104,8 @@
 }
 
 .reviews-link-row a:hover {
-  border-color: color-mix(in oklch, var(--primary) 36%, var(--border));
-  background: color-mix(in oklch, var(--primary) 7%, transparent);
+  border-color: var(--review-green-border);
+  background: var(--review-green-soft);
 }
 
 .reviews-thread-panel {
@@ -1095,7 +1115,7 @@
 }
 
 .reviews-thread-panel__header {
-  border-bottom: 1px solid var(--border);
+  border-bottom: 1px solid var(--review-border);
   margin: -16px -16px 14px;
   padding: 16px;
 }
@@ -1132,34 +1152,34 @@
   width: 34px;
   height: 34px;
   place-items: center;
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 8px;
   color: var(--muted-foreground);
 }
 
 .reviews-thread-event[data-tone='good'] .reviews-thread-event__icon,
 .reviews-thread-event[data-tone='coach'] .reviews-thread-event__icon {
-  border-color: color-mix(in oklch, var(--primary) 42%, var(--border));
-  background: color-mix(in oklch, var(--primary) 10%, transparent);
-  color: var(--primary);
+  border-color: var(--review-green-border);
+  background: var(--review-green-soft);
+  color: var(--review-green);
 }
 
 .reviews-thread-event[data-tone='warn'] .reviews-thread-event__icon {
-  border-color: oklch(0.76 0.13 78 / 0.42);
-  background: oklch(0.3 0.04 78 / 0.44);
-  color: oklch(0.82 0.13 78);
+  border-color: var(--review-warn-border);
+  background: var(--review-warn-soft);
+  color: var(--review-warn);
 }
 
 .reviews-thread-event[data-tone='info'] .reviews-thread-event__icon {
-  border-color: color-mix(in oklch, var(--accent) 38%, var(--border));
-  background: color-mix(in oklch, var(--accent) 10%, transparent);
-  color: var(--accent);
+  border-color: var(--review-cyan-border);
+  background: var(--review-cyan-soft);
+  color: var(--review-cyan);
 }
 
 .reviews-thread-event__body {
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 8px;
-  background: color-mix(in oklch, var(--background) 62%, transparent);
+  background: oklch(0.13 0 0 / 0.64);
   padding: 12px;
 }
 
@@ -1191,9 +1211,9 @@
   display: grid;
   justify-items: start;
   gap: 12px;
-  border: 1px solid var(--border);
+  border: 1px solid var(--review-border);
   border-radius: 8px;
-  background: var(--card);
+  background: var(--review-panel);
   padding: 22px;
 }
 
