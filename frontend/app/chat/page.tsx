@@ -256,6 +256,7 @@ export default function ChatPage() {
   const suppressNextAutoScroll = useRef(false)
   const stickToBottom = useRef(true)
   const lastScrollTop = useRef(0)
+  const initialQueryApplied = useRef(false)
   const { messages, loading, loadingOlder, totalCount, stats, hasMore, loadOlder } = useChatFeed()
   const { targets: mentionTargets } = useMentionTargets()
   const { identities } = useRegistryIdentities()
@@ -308,6 +309,31 @@ export default function ChatPage() {
   const selectedAgent = useMemo(() => (
     agentOptions.find((agent) => agent.ownerId === selectedAgentId) ?? null
   ), [agentOptions, selectedAgentId])
+
+  useEffect(() => {
+    if (initialQueryApplied.current || agentOptions.length === 0) return
+    initialQueryApplied.current = true
+
+    const params = new URLSearchParams(window.location.search)
+    if (params.get('mode') !== 'agent') return
+
+    setChatMode('agent')
+    const agentParam = params.get('agent')?.trim().replace(/^@/, '').toLowerCase()
+    if (!agentParam) return
+
+    const agent = agentOptions.find((option) => (
+      option.ownerId.toLowerCase() === agentParam
+      || option.handle.toLowerCase() === agentParam
+    ))
+    if (!agent) {
+      setAgentSearch(agentParam)
+      return
+    }
+
+    setSelectedAgentId(agent.ownerId)
+    setAgentSearch(`@${agent.handle}`)
+  }, [agentOptions])
+
   const agentSearchResults = useMemo(() => {
     const query = agentSearch.trim().replace(/^@/, '').toLowerCase()
     if (!query) return agentOptions
