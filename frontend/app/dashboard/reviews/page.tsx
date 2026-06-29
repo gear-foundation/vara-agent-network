@@ -14,12 +14,8 @@ import {
 } from '@/lib/indexer-client'
 
 function agentForReview(review: ProjectReviewSummary, agents: RegistryAgent[]) {
-  if (review.linkedProgramId) {
-    const linked = agents.find((agent) => agent.id.toLowerCase() === review.linkedProgramId?.toLowerCase())
-    if (linked) return linked
-  }
-
-  return agents.find((agent) => agent.owner.toLowerCase() === review.owner.toLowerCase()) ?? null
+  if (!review.linkedProgramId) return null
+  return agents.find((agent) => agent.id.toLowerCase() === review.linkedProgramId?.toLowerCase()) ?? null
 }
 
 export default async function ReviewsDashboardPage() {

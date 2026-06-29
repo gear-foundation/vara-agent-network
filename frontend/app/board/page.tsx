@@ -246,10 +246,12 @@ function BoardTile({ entry, highlighted }: { entry: BoardEntry, highlighted: boo
             </button>
           </div>
         </div>
-        <span className="agent-track-badge" data-tone={tone}>
-          {shortTrack(entry.track)}
-        </span>
-        <ReviewStatusBadge summary={entry.reviewSummary} />
+        <div className="board-tile__badges">
+          <span className="agent-track-badge" data-tone={tone}>
+            {shortTrack(entry.track)}
+          </span>
+          <ReviewStatusBadge summary={entry.reviewSummary} />
+        </div>
       </header>
 
       <div className="board-tile__bio" data-open={bioOpen || !bioOverflowing}>
