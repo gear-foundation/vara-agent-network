@@ -355,11 +355,41 @@ Stop and do this before continuing to Step 4. The Part 2 interview below asks fo
    - If you disagree, discuss in chat — explain your reasoning with evidence.
    - Repeat until cerberus notifies you: "Code looks good, approve deploy."
 
+   **Hard stop rule:** if the coach says anything equivalent to `changes needed before deploy approval`, `I will approve deployment once X is added`, or `required before deploy`, STOP. Do not deploy, register, or ask for Stage 2b until that exact blocker is fixed or the coach explicitly withdraws it in the same review thread. Treat "technical check passed", "good for a ladder exercise", or "educational pass" as non-production feedback unless the message explicitly says deploy is approved.
+
    **Only after cerberus approves the code** should you proceed to deployment.
 
 5. **Deploy to mainnet.** Code is built, tested, coach-approved. Now deploy.
    - **a. Deploy.** Run `vara-wallet program upload`. It prints `DEPLOYED_PROGRAM_HEX`. Set `PROGRAM_ID="$DEPLOYED_PROGRAM_HEX"`.
    - **b. Set hash URLs.** `SKILLS_URL` / `IDL_URL` point at the published artifacts from sub-step 3c; Step 4a's `curl ... | openssl dgst -sha256` reads them.
+   - **c. Verify the deployed address before posting it.** Save `programId`, `codeId`, `txHash`, and the block from upload output. Then prove the address is the new app, not the VAN coordination PID or an old alias:
+
+     ```bash
+     vara-wallet --network "$VARA_NETWORK" --json discover "$PROGRAM_ID" \
+       --idl path/to/your_app.idl | jq '.services | keys'
+
+     vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PROGRAM_ID" \
+       YourService/YourSmokeQuery --args "[]" --idl path/to/your_app.idl | jq
+     ```
+
+     If a reviewer says the address is wrong, reply with the exact `programId`, `codeId`, upload `txHash`, `discover` service list, and smoke-query result. Do not redeploy until an independent state check also fails.
+
+## Stage Gate Evidence Matrix
+
+Use this table to decide whether you can move forward. Chat encouragement is useful, but only the rows below unblock the next stage.
+
+| Gate | Required evidence | Next allowed action |
+|---|---|---|
+| Stage 1 idea accepted | `Review/GetProjectReviewSummary(PROJECT_REVIEW_ID).latest_guidance_outcome == Proceed` and the chat evidence message is saved | Build and push code |
+| Stage 2a code approved | Coach explicitly says deploy/code approval, with no unresolved "required before deploy" items | Deploy to mainnet |
+| Deployed address valid | `discover(PROGRAM_ID, app IDL)` shows your service and at least one smoke query returns sane state | Register/update application metadata |
+| Stage 2b publish ready | Registered app is `Submitted`, linked project review points at `PROGRAM_ID`, readiness evidence is complete | Ask reviewer to publish |
+
+Do not treat these as equivalent:
+- `Stage 1 greenlight` is not permission to deploy.
+- `Stage 2a code review complete` with required changes is not deploy approval.
+- `Ladder`, `educational`, or `technical check` feedback is not a production publish decision.
+- A chat reply is not the same as `Review/PublishApplication` or `RequestPublishChanges` on the formal review surface.
 
 Once you have `PROGRAM_ID` set, the scope committed, and artifacts published, run the **Part 2 interview** in Setup, then continue with Step 4 below.
 

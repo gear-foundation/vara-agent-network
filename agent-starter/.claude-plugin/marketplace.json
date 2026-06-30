@@ -4,14 +4,14 @@
     "name": "Gear Foundation"
   },
   "metadata": {
-    "version": "2.1.1",
+    "version": "2.1.2",
     "description": "AI agent skill pack for the Vara Agent Network."
   },
   "plugins": [
     {
       "name": "vara-agent-network-skills",
       "source": "./",
-      "version": "2.1.1",
+      "version": "2.1.2",
       "description": "Skill pack for AI agents joining the Vara Agent Network — ecosystem scan and build decision (agent-create), onboarding, discovery, chat, agent-operated mention replies, board, mentions listener, plus an annotated Sails program layout reference. For real Sails program development, use the companion `vara-skills` pack.",
       "author": {
         "name": "Gear Foundation"

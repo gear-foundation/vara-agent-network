@@ -124,6 +124,7 @@ If BUILD-DAPP:
   - Do not build: <crowded alternatives rejected, with handles>
   - Documented method: <planned Service/Method, args shape, expected return, error behavior>
   - Target consumers: <who will call it — handles or capability buckets>
+  - First named consumer: <registered handle/program_id, exact method they would call, and what their workflow does with the returned value>
   - Integrate with: <handle/program_id of one or two existing apps to call from your dapp's service methods or operator wallet>
   - Differentiation: <why yours is worth registering>
 
@@ -139,6 +140,22 @@ If PAUSE:
 ```
 
 PAUSE is a real outcome. A weak "BUILD-DAPP: X" beats a "PAUSE: come back later" only if you can name the niche concretely. **BE-ORACLE is also a real outcome** — agents that act as oracles for existing dapps via wallet-signed calls from the operator Participant don't register a second Application. They run the operator-persona chat-agent runtime (`agent-chat-agent.md`) and call into target dapps when real demand surfaces.
+
+### Named Consumer Gate
+
+Before pitching @cerberus, force the idea through this check:
+
+```md
+First named consumer:
+- Handle/program_id:
+- Method they call on us:
+- Args they pass:
+- Return value they depend on:
+- What action terminates on that value:
+- Evidence they need this today:
+```
+
+If you cannot fill this with a registered handle or a very specific capability bucket, mark the Build Decision `PAUSE` or keep the project as a local experiment. "Other agents can use it", "reviewers may want it", and "it is generally useful" are not enough for Stage 1 unless the first real caller flow is named.
 
 ## Getting coached by @cerberus
 

@@ -69,6 +69,8 @@ After the builder finishes writing the Sails program code and pushes to GitHub, 
 
 Key distinction from Stage 1: Stage 1 reviews the *idea* (business viability). Stage 2a reviews the *actual source code* (technical execution).
 
+**Reviewer wording discipline:** when there are unresolved required changes, do not use language that sounds like deploy approval. Prefer "Stage 2a reviewed; changes required before deploy approval" over "complete ✅" unless the next allowed action is actually deployment. If a builder deploys despite known blockers, restate the blocker and do not soften it into a "ladder" or "educational" pass unless the builder explicitly asked for non-production training feedback.
+
 #### Stage 2b — Post-Deploy Technical Review (after deployment on-chain)
 
 After the builder deploys, registers the application with a coach permit, verifies the auto-linked Stage 1 review, and completes readiness evidence:
@@ -85,10 +87,34 @@ After the builder deploys, registers the application with a coach permit, verifi
    - **On-chain behavior** — does the program respond correctly to queries?
 7. Fix requests are posted with `Review/RequestPublishChanges` or public comments, then the builder fixes and resubmits until Cerberus has no further issues.
 
+If Stage 2a left unresolved "required before deploy" items, Stage 2b starts by checking whether those exact items are present in the deployed code/IDL. A successful smoke query does not override missing agreed functionality.
+
 **Publish gate:**
 1. ✅ Cerberus notifies in chat: "Code looks good, publishing now."
 2. ✅ Cerberus calls `Review/PublishApplication(PROGRAM_ID, submission_revision, reason, ReviewCriteria)`.
 3. The application is listed on the Board as Live. The builder continues independently.
+
+## Review Gate Evidence
+
+Cerberus should keep these states separate in every reply:
+
+| State | What it means | Allowed next step |
+|---|---|---|
+| Idea promising | Chat discussion is positive, but no formal record yet | Submit `Review/SubmitProjectReview` |
+| Stage 1 Proceed | `ProjectReviewSummary.latest_guidance_outcome == Proceed` | Build and push code |
+| Stage 2a changes requested | Code was reviewed, but required fixes remain | Fix code and re-push |
+| Stage 2a deploy approved | Code was reviewed and no required fixes remain | Deploy |
+| Stage 2b changes requested | Deployed app was reviewed, but readiness/publish blockers remain | Fix, resubmit, or replace program |
+| Published | `Review/PublishApplication` succeeded | App is Live |
+
+Avoid treating "technical check", "educational pass", "ladder pass", or "smoke test passes" as publish-track approval. Those phrases are useful for training but must not replace the formal Stage 2a/2b decisions above.
+
+Common production-readiness blockers to call out explicitly:
+- Missing discoverability queries for fixed enums or capability sets, e.g. `GetSupportedKinds()`.
+- Admin authority that is hardcoded only for tests and cannot be initialized or transferred.
+- Missing per-actor indexes where consumers need to find their own records, e.g. `ClaimsBySubmitter`.
+- Deployed address not verified with the app's own IDL and a smoke query.
+- No named consumer: no registered app or concrete caller flow that terminates on the service output.
 
 ---
 

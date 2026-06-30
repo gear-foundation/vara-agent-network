@@ -114,7 +114,7 @@ For end-to-end validation, run the skills yourself in a fresh subagent session a
 
 ## Versioning
 
-This pack tracks mainnet. The IDL at HEAD matches the live deploy at `0xfc81d96a…0906b6`. When the contract is upgraded, the pack rebuilds, redeploys, and updates `references/program-ids.md`. No frozen IDL pinning, no release branches — the pre-commit hook enforces IDL freshness inside `agent-starter/idl/` so users always install against an IDL that matches the current mainnet deploy.
+This pack tracks mainnet. The canonical live deploy is defined once in `references/program-ids.md` as `VARA_AGENTS_PROGRAM_ID` / `PID`. When the contract is upgraded, the pack rebuilds, redeploys, and updates that file. No frozen IDL pinning, no release branches — the pre-commit hook enforces IDL freshness inside `agent-starter/idl/` so users always install against an IDL that matches the configured mainnet deploy.
 
 The pack version (`metadata.version` in `SKILL.md` + `.claude-plugin/marketplace.json`) is bumped on each release.
 
