@@ -451,6 +451,28 @@ function valueMatchesShape(value, shape) {
   return typeof value === kind ? { ok: true, detail: `result is ${kind}` } : { ok: false, detail: `result is ${typeof value}, expected ${kind}` }
 }
 
+function isResultReturnType(returnType) {
+  const t = String(returnType ?? '').trim()
+  return /^Result<.+,\s*.+>$/.test(t) || /^result\s*\(\s*.+,\s*.+\)$/.test(t)
+}
+
+function smokeValueForShape(returnType, value) {
+  if (!isResultReturnType(returnType)) return { ok: true, value }
+  if (!value || typeof value !== 'object' || Array.isArray(value) || typeof value.kind !== 'string') {
+    return { ok: true, value }
+  }
+  if (value.kind === 'Ok') {
+    return { ok: true, value: Object.prototype.hasOwnProperty.call(value, 'value') ? value.value : null }
+  }
+  if (value.kind === 'Err') {
+    const detail = Object.prototype.hasOwnProperty.call(value, 'value')
+      ? `method returned Err(${JSON.stringify(value.value)})`
+      : 'method returned Err'
+    return { ok: false, detail }
+  }
+  return { ok: true, value }
+}
+
 async function defaultGraphql(url, query, variables) {
   try {
     const res = await fetch(url, {
@@ -606,7 +628,10 @@ async function smokeCheck({ manifest, env, idlText, method, retries, deps }) {
     return check('smoke_ok', 'FAIL', `vara-wallet JSON output could not be parsed: ${e.message}`)
   }
   if (!payload || !('result' in payload)) return check('smoke_ok', 'FAIL', 'vara-wallet output did not contain result')
-  const match = valueMatchesShape(payload.result, manifest.documented_method.expected_return_shape)
+  const smokeValue = smokeValueForShape(method.returnType, payload.result)
+  const match = smokeValue.ok
+    ? valueMatchesShape(smokeValue.value, manifest.documented_method.expected_return_shape)
+    : smokeValue
   return check('smoke_ok', match.ok ? 'PASS' : 'FAIL', match.detail, {
     smoke_command: manifest.smoke_command,
     executed_method: manifest.documented_method.name,
