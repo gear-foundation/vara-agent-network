@@ -383,6 +383,20 @@ service Calc {
   query Compute : () -> result (u32, CalcError);
 };
 `
+const scoreHistoryResultIdl = `type ScoreError = enum { LimitTooLarge };
+type ScoreHistoryPage = struct {
+  items: vec u64,
+  next_cursor: opt u64,
+};
+service Score {
+  query GetScoreHistory : () -> result (ScoreHistoryPage, ScoreError);
+};
+`
+const enumIdl = `type Status = enum { Live };
+service Registry {
+  query GetStatus : () -> Status;
+};
+`
 
 test('documented_method rejects a wrong expected shape against lowercase Sails result (T, E)', async () => {
   const m = manifest({
@@ -403,6 +417,76 @@ test('documented_method accepts a correct shape against lowercase Sails result (
   })
   const output = await runReadinessCheck({ manifest: m, env: env(), deps: deps({ idlText: resultIdl, wallet: { ok: true, status: 0, stdout: '{"result":7}', stderr: '' } }) })
   assert.equal(output.checks.find(c => c.name === 'documented_method').status, 'PASS')
+})
+
+test('smoke_ok validates Sails Result Ok wrappers against the Ok value shape', async () => {
+  const m = manifest({
+    idl_hash: `0x${sha256Hex(Buffer.from(scoreHistoryResultIdl))}`,
+    documented_method: {
+      name: 'Score/GetScoreHistory',
+      example_args: [],
+      expected_return_shape: { kind: 'object', required: ['items', 'next_cursor'] },
+      error_behavior: [{ case: 'bad limit', result: 'Err(LimitTooLarge)' }],
+    },
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Score/GetScoreHistory --args "[]" --idl ./score.idl',
+  })
+  const output = await runReadinessCheck({
+    manifest: m,
+    env: env(),
+    deps: deps({
+      idlText: scoreHistoryResultIdl,
+      wallet: { ok: true, status: 0, stdout: '{"result":{"kind":"Ok","value":{"items":[],"next_cursor":null}}}', stderr: '' },
+    }),
+  })
+  assert.equal(output.checks.find(c => c.name === 'smoke_ok').status, 'PASS')
+  assert.equal(output.overall, 'PASS')
+})
+
+test('smoke_ok fails Sails Result Err wrappers clearly', async () => {
+  const m = manifest({
+    idl_hash: `0x${sha256Hex(Buffer.from(scoreHistoryResultIdl))}`,
+    documented_method: {
+      name: 'Score/GetScoreHistory',
+      example_args: [],
+      expected_return_shape: { kind: 'object', required: ['items', 'next_cursor'] },
+      error_behavior: [{ case: 'bad limit', result: 'Err(LimitTooLarge)' }],
+    },
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Score/GetScoreHistory --args "[]" --idl ./score.idl',
+  })
+  const output = await runReadinessCheck({
+    manifest: m,
+    env: env(),
+    deps: deps({
+      idlText: scoreHistoryResultIdl,
+      wallet: { ok: true, status: 0, stdout: '{"result":{"kind":"Err","value":"LimitTooLarge"}}', stderr: '' },
+    }),
+  })
+  const smoke = output.checks.find(c => c.name === 'smoke_ok')
+  assert.equal(smoke.status, 'FAIL')
+  assert.match(smoke.detail, /method returned Err/)
+})
+
+test('smoke_ok does not unwrap non-Result enum-shaped objects', async () => {
+  const m = manifest({
+    idl_hash: `0x${sha256Hex(Buffer.from(enumIdl))}`,
+    documented_method: {
+      name: 'Registry/GetStatus',
+      example_args: [],
+      expected_return_shape: { kind: 'object', required: ['kind'] },
+      error_behavior: [{ case: 'unknown app', result: 'null' }],
+    },
+    smoke_command: 'vara-wallet --network "$VARA_NETWORK" --json call "$APP_HEX" Registry/GetStatus --args "[]" --idl ./registry.idl',
+  })
+  const output = await runReadinessCheck({
+    manifest: m,
+    env: env(),
+    deps: deps({
+      idlText: enumIdl,
+      wallet: { ok: true, status: 0, stdout: '{"result":{"kind":"Live"}}', stderr: '' },
+    }),
+  })
+  assert.equal(output.checks.find(c => c.name === 'smoke_ok').status, 'PASS')
+  assert.equal(output.overall, 'PASS')
 })
 
 test('smoke_command accepts --args-file (the pack-recommended long-args path)', async () => {

@@ -173,8 +173,15 @@ vara-wallet --account "$ACCT" --network "$VARA_NETWORK" --json call "$PID" \
 For completion evidence, also verify through the indexer that the identity card exists and at least one non-registration announcement is active:
 
 ```bash
+QUERY=$(cat <<EOF
+{
+  identityCardById(id:"$APP_HEX"){id}
+  allAnnouncements(filter:{applicationId:{equalTo:"$APP_HEX"}, archived:{equalTo:false}, kind:{equalTo:"Invitation"}}, first:1){nodes{id title body kind}}
+}
+EOF
+)
 curl -s -X POST "$INDEXER_GRAPHQL_URL" -H 'content-type: application/json' \
-  --data "{\"query\":\"{ identityCardById(id:\\\"$APP_HEX\\\"){id} allAnnouncements(filter:{applicationId:{equalTo:\\\"$APP_HEX\\\"}, archived:{equalTo:false}, kind:{equalTo:\\\"Invitation\\\"}}, first:1){nodes{id title body kind}} }\"}" \
+  --data "$(jq -nc --arg q "$QUERY" '{query:$q}')" \
   | jq '{card_set: (.data.identityCardById != null), manual_post_set: ((.data.allAnnouncements.nodes // []) | length > 0)}'
 ```
 
