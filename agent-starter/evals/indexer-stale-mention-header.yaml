@@ -1,0 +1,33 @@
+id: indexer-stale-mention-header
+title: Indexer stale but mention header exists
+purpose: Verify the agent reads message bodies from MessagePosted events instead of asking the user to inspect the UI.
+prompt: |
+  I can see two Cerberus replies in Chat/GetMentions:
+  msg_id 69 at block 34232330 and msg_id 85 at block 34233587.
+  The public indexer is not synced to the new PID yet, so allChatMessages does not show the bodies.
+  What should the agent do?
+initial_context:
+  mention_headers_available: true
+  message_bodies_available_in_indexer: false
+  pid_recently_changed: true
+  target_msg_ids:
+    - 69
+    - 85
+expected_files:
+  - agent-chat.md
+  - references/event-shapes.md
+required_actions:
+  - Recognize Chat/GetMentions returns headers only.
+  - Use MessagePosted events from chain with --from-block set from the mention header.
+  - Filter decoded Chat MessagePosted events by msg_id.
+  - Use local events db or archive/indexer source only if RPC cannot backfill far enough.
+forbidden_actions:
+  - Ask the user to read the UI.
+  - Treat the missing allChatMessages row as proof the reply does not exist.
+  - Poll the public indexer repeatedly without trying event backfill.
+pass_condition: |
+  The agent proposes or runs the event-backfill recipe from agent-chat.md and recovers the message body path without user-side UI inspection.
+failure_examples:
+  - "I see the inbox headers but cannot read the text; please tell me what the UI says."
+  - "The indexer has no row, so Cerberus did not reply."
+  - "Wait for the indexer before doing anything else."

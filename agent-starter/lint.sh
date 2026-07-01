@@ -6,6 +6,7 @@
 set -u
 cd "$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 EXAMPLES_DIR="${AGENT_STARTER_EXAMPLES_DIR:-examples}"
+EVALS_DIR="${AGENT_STARTER_EVALS_DIR:-evals}"
 PROGRAM_IDS_FILE="${AGENT_STARTER_PROGRAM_IDS_FILE:-references/program-ids.md}"
 IDL_FILE="${AGENT_STARTER_IDL_FILE:-idl/agents_network_client.idl}"
 
@@ -50,9 +51,9 @@ check_fences() {
   [ "$idx" -eq 0 ] || ok "$f: $idx bash fence(s) parse"
 }
 
-for f in SKILL.md agent-*.md; do
-  [ -f "$f" ] && check_fences "$f"
-done
+while IFS= read -r f; do
+  check_fences "$f"
+done < <(find . -path './.claude-plugin' -prune -o -name '*.md' -type f -print | sort)
 
 # 3. No daemon-era references in skill content
 DAEMON_TOKENS='autonomous-loop\|paid-integration\|payment-reconciliation\|rational-discovery\|budget-control\|intent-recovery'
@@ -76,17 +77,16 @@ const failures = []
 
 function defaultFiles() {
   const files = []
-  for (const name of ['SKILL.md', 'STARTER_PROMPT.md', 'README.md']) {
-    if (existsSync(name)) files.push(name)
-  }
-  for (const name of readdirSync(root)) {
-    if (/^agent-.*\.md$/.test(name)) files.push(name)
-  }
-  if (existsSync('references')) {
-    for (const name of readdirSync('references')) {
-      if (name.endsWith('.md')) files.push(join('references', name))
+  function walk(dir) {
+    if (!existsSync(dir)) return
+    for (const name of readdirSync(dir, { withFileTypes: true })) {
+      if (name.name === '.claude-plugin') continue
+      const path = join(dir, name.name)
+      if (name.isDirectory()) walk(path)
+      else if (name.isFile() && name.name.endsWith('.md')) files.push(path)
     }
   }
+  walk(root)
   return [...new Set(files)].sort()
 }
 
@@ -113,6 +113,49 @@ for (const file of files) {
     }
     if (!existsSync(join(root, target))) failures.push(`${file}: missing skill reference ${match[0]}`)
   }
+}
+
+const evalDir = process.env.AGENT_STARTER_EVALS_DIR || join(root, 'evals')
+if (existsSync(evalDir)) {
+  const evalFiles = readdirSync(evalDir).filter(name => name.endsWith('.yaml')).sort()
+  if (evalFiles.length < 3) failures.push(`evals: expected at least 3 yaml scenarios, found ${evalFiles.length}`)
+  const requiredEvalFields = [
+    'id',
+    'title',
+    'purpose',
+    'prompt',
+    'expected_files',
+    'required_actions',
+    'forbidden_actions',
+    'pass_condition',
+  ]
+  for (const name of evalFiles) {
+    const fullPath = join(evalDir, name)
+    const normalizedRoot = normalize(root)
+    const normalizedFullPath = normalize(fullPath)
+    const file = normalizedFullPath.startsWith(normalizedRoot)
+      ? normalizedFullPath.slice(normalizedRoot.length + 1)
+      : join('evals', name)
+    const text = read(fullPath)
+    for (const field of requiredEvalFields) {
+      if (!new RegExp(`^${field}:`, 'm').test(text)) failures.push(`${file}: missing required eval field ${field}`)
+    }
+    const expectedBlock = text.match(/^expected_files:\n((?:  - .+\n)+)/m)
+    if (!expectedBlock) {
+      failures.push(`${file}: expected_files must contain at least one list item`)
+      continue
+    }
+    const expectedFiles = [...expectedBlock[1].matchAll(/^  - (.+)$/gm)].map(match => match[1].trim())
+    for (const expected of expectedFiles) {
+      if (expected.includes('..') || expected.startsWith('/')) {
+        failures.push(`${file}: unsafe expected_files entry ${expected}`)
+      } else if (!existsSync(join(root, expected))) {
+        failures.push(`${file}: expected_files entry does not exist: ${expected}`)
+      }
+    }
+  }
+} else {
+  failures.push('evals: directory missing')
 }
 
 const staleActiveDocPatterns = [

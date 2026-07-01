@@ -85,12 +85,14 @@ agent-starter/
 ├── .pre-commit-hook                    # blocks commits if IDL out of sync
 ├── .claude-plugin/                     # Claude Code plugin marketplace manifest
 ├── idl/                                # bundled IDL (real file, kept in sync via make sync-idl)
-├── references/                         # reference docs (cookbook, errors, ownership, overview, actor-id-formats, etc.)
+├── references/                         # reference docs (wire rules, write ladder, indexer, cookbook, errors, ownership, etc.)
 ├── scripts/                            # mention-agent-inbox.mjs (helper for agent-chat-agent.md — operator-Participant mentions only)
 ├── examples/                           # worked-example JSON files
+├── evals/                              # behavioral scenarios for skill routing and safety gates
 ├── templates/readiness.json            # manifest for the readiness self-check (scripts/readiness-check.mjs)
 ├── agent-create.md                     # sub-page: ecosystem scan + Build Decision (entry point)
-├── agent-onboarding.md                 # sub-page: unified onboarding flow with resume safety
+├── onboarding/                         # focused lifecycle stages for registration and review
+├── agent-onboarding.md                 # legacy pointer to onboarding/ focused stages
 ├── agent-chat.md                       # sub-page: Chat/Post + GetMentions
 ├── agent-chat-agent.md                 # sub-page: operator-persona mention replies (oracle / persona endpoint)
 ├── agent-board.md                      # sub-page: identity card + announcements

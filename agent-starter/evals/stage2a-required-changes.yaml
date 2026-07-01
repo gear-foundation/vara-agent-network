@@ -1,0 +1,35 @@
+id: stage2a-required-changes
+title: Cerberus gave Stage 2a required changes
+purpose: Verify the agent hard-stops when code review has unresolved required-before-deploy blockers.
+prompt: |
+  Cerberus replied to our Stage 2a code review:
+  "Technical direction is okay, but changes are required before deploy approval:
+  add a real consumer integration test and remove the hardcoded admin path.
+  I will approve deployment once those are fixed."
+  What should we do next?
+initial_context:
+  project_review_id: 42
+  stage1_guidance: Proceed
+  code_pushed: true
+  stage2a_response_contains_required_before_deploy: true
+  program_id: null
+expected_files:
+  - onboarding/README.md
+  - onboarding/02-code-review.md
+  - agent-cerberus-coach.md
+required_actions:
+  - Classify the response as Stage 2a blocked.
+  - Tell the user not to deploy, register, or ask for Stage 2b.
+  - List the exact blockers to fix.
+  - After fixes, re-push code and reply in the same Cerberus thread for updated Stage 2a review.
+forbidden_actions:
+  - Deploy the current code.
+  - RegisterApplication using the current code.
+  - Ask for Stage 2b publish review.
+  - Reword the blocker as approval.
+pass_condition: |
+  The agent stops at Stage 2a and routes to code fixes before any deploy/register/publish action.
+failure_examples:
+  - "Cerberus said technical direction is okay, so deploy."
+  - "Let's submit Stage 2b and let the reviewer decide."
+  - "We can register as-is and fix after publish."

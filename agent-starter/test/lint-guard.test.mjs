@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, readFileSync, writeFileSync, rmSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { spawnSync } from 'node:child_process'
@@ -219,6 +219,47 @@ test('lint fails when fee docs expose hackathon caveats as method names', () => 
   }
 })
 
+test('lint fails when eval scenarios omit required fields or point to missing files', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'van-bad-evals-'))
+    try {
+      const evals = join(dir, 'evals')
+      const doc = join(dir, 'doc.md')
+      writeFileSync(doc, 'No method references here.\n')
+      writeFileSync(join(dir, 'good.json'), '{}\n')
+      mkdirSync(evals)
+      writeFileSync(join(evals, 'bad.yaml'), [
+      'id: bad-eval',
+      'title: Bad eval',
+      'purpose: Prove eval lint fails.',
+      'prompt: |',
+      '  Do something.',
+      'expected_files:',
+      '  - missing.md',
+      'required_actions:',
+      '  - Do a thing.',
+      'forbidden_actions:',
+      '  - Skip the thing.',
+      '',
+    ].join('\n'))
+    const r = spawnSync('bash', [lint], {
+      cwd: root,
+      env: {
+        ...process.env,
+        AGENT_STARTER_EXAMPLES_DIR: dir,
+        AGENT_STARTER_LINT_FILES: doc,
+        AGENT_STARTER_EVALS_DIR: evals,
+      },
+      encoding: 'utf8',
+    })
+    assert.equal(r.status, 1)
+    assert.match(r.stderr, /expected at least 3 yaml scenarios/)
+    assert.match(r.stderr, /missing required eval field pass_condition/)
+    assert.match(r.stderr, /expected_files entry does not exist: missing\.md/)
+  } finally {
+    rmSync(dir, { recursive: true, force: true })
+  }
+})
+
 test('lint fails when active docs use retired production domains', () => {
   const dir = mkdtempSync(join(tmpdir(), 'van-retired-domains-'))
   try {
@@ -302,7 +343,8 @@ test('board docs pin args-file outer array shape and trailing newline', () => {
 
 test('cerberus coach docs use the current gated project-review flow', () => {
   const coach = readFileSync(join(root, 'agent-cerberus-coach.md'), 'utf8')
-  const onboarding = readFileSync(join(root, 'agent-onboarding.md'), 'utf8')
+  const projectReview = readFileSync(join(root, 'onboarding/01-project-review.md'), 'utf8')
+  const onboardingLegacy = readFileSync(join(root, 'agent-onboarding.md'), 'utf8')
   const create = readFileSync(join(root, 'agent-create.md'), 'utf8')
 
   assert.match(coach, /Review\/SubmitProjectReview/)
@@ -314,9 +356,10 @@ test('cerberus coach docs use the current gated project-review flow', () => {
   assert.doesNotMatch(coach, /VAN_WRITE_GAS_ARGS/)
   assert.doesNotMatch(coach, /No voucher is whitelisted for the current PID/)
 
-  assert.match(onboarding, /Review\/SubmitProjectReview/)
-  assert.doesNotMatch(onboarding, /Review\/ApproveProjectReviewSubmission/)
-  assert.doesNotMatch(onboarding, /Review\/SubmitApprovedProjectReview/)
-  assert.doesNotMatch(onboarding, /require_project_review_approval/)
+  assert.match(projectReview, /Review\/SubmitProjectReview/)
+  assert.match(onboardingLegacy, /onboarding\/01-project-review\.md/)
+  assert.doesNotMatch(projectReview, /Review\/ApproveProjectReviewSubmission/)
+  assert.doesNotMatch(projectReview, /Review\/SubmitApprovedProjectReview/)
+  assert.doesNotMatch(projectReview, /require_project_review_approval/)
   assert.match(create, /check chat for new coach messages every 5 minutes/)
 })

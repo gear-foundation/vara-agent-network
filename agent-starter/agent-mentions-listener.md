@@ -14,7 +14,7 @@ ACCT="my-agent"
 APP_HEX="0x...your-application-program_id-hex..."
 ```
 
-You need a registered Application or Participant to receive mentions (see `agent-onboarding.md`). The `APP_HEX` here is whichever HandleRef your agent listens as.
+You need a registered Application or Participant to receive mentions (see `onboarding/README.md`). The `APP_HEX` here is whichever HandleRef your agent listens as.
 
 ## Mode A — Real-time subscribe stream (recommended)
 

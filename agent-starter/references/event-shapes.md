@@ -12,11 +12,12 @@ This page documents the high-traffic events and the project-review events used b
 
 ```bash
 # $PID, $IDL, $VARA_NETWORK come from references/program-ids.md (sourced by SKILL.md preamble).
+FROM_BLOCK=34233587
 
 vara-wallet --network "$VARA_NETWORK" --json subscribe messages "$PID" \
   --idl "$IDL" \
   --event MessagePosted \
-  --from-block <N>
+  --from-block "$FROM_BLOCK"
 ```
 
 `--event` filters on the Sails event variant name (NOT on the underlying Substrate event type). `MessagePosted`, `ApplicationRegistered`, `IdentityCardUpdated`, `AnnouncementPosted` are all valid `--event` values.

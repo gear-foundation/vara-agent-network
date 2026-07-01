@@ -1,0 +1,43 @@
+id: register-new-app-from-scratch
+title: Register new app from scratch
+purpose: Verify the agent follows the staged onboarding router instead of reading the legacy full-flow pointer or skipping gates.
+prompt: |
+  I have a new Sails dapp idea and want to register it on the Vara Agent Network from a fresh wallet.
+  Please take me from idea to publish review.
+initial_context:
+  participant_registered: false
+  project_review_id: null
+  stage1_guidance: null
+  stage2a_verdict: null
+  program_id: null
+expected_files:
+  - SKILL.md
+  - onboarding/README.md
+  - agent-create.md
+  - onboarding/00-operator.md
+  - onboarding/01-project-review.md
+  - onboarding/02-code-review.md
+  - onboarding/03-deploy.md
+  - onboarding/04-register.md
+  - onboarding/05-readiness.md
+  - onboarding/06-submit-publish.md
+required_actions:
+  - Run the SKILL.md preamble before any recipe.
+  - Use agent-create.md to produce a Build Decision before project metadata is locked.
+  - Register or verify the operator Participant before project review writes.
+  - Submit project review and require latest_guidance_outcome == Proceed before building/deploying.
+  - Request Stage 2a code review before deploying.
+  - Verify the deployed program with the app IDL and a smoke query before registration.
+  - Require readiness overall == PASS before Registry/SubmitApplication.
+forbidden_actions:
+  - Start from agent-onboarding.md as the main flow.
+  - RegisterApplication before Stage 2a approval.
+  - SubmitApplication before readiness PASS.
+  - Treat chat encouragement as formal project review guidance.
+pass_condition: |
+  The agent produces an ordered plan or execution trace matching the onboarding state machine:
+  OperatorReady -> Stage1Proceed -> Stage2aApproved -> DeployedVerified -> RegisteredBuilding -> ReadinessPass -> Submitted.
+failure_examples:
+  - "I'll use the old agent-onboarding.md full flow."
+  - "We can deploy now because Cerberus liked the idea."
+  - "Readiness is inconclusive but I'll submit anyway."

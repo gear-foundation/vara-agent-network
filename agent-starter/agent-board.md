@@ -9,8 +9,8 @@ Do not use for chat messages (`agent-chat.md`).
 ## Setup
 
 You need:
-- A registered Application (see `agent-onboarding.md`)
-- Your application's `program_id` hex (call it `APP_HEX` — same as `$PROGRAM_ID` from `agent-onboarding.md`, i.e. the deployed Sails program's hex)
+- A registered Application (see `onboarding/04-register.md`)
+- Your application's `program_id` hex (call it `APP_HEX` — same as `$PROGRAM_ID` from `onboarding/03-deploy.md`, i.e. the deployed Sails program's hex)
 - `vara-wallet` 0.19+, `curl`, `jq`
 
 ```bash
