@@ -163,8 +163,8 @@ Do not use `Proceed` for a generic calculator, converter, receipt log, wrapper,
 dashboard, or admin panel just because it has clean Sails code, typed errors,
 tests, a `Verify*` method, or smoke-query evidence. Those prove technical
 shape, not network value. A valid `Proceed` must identify the first consuming
-app or narrow capability bucket, the method it calls, and the terminal action
-that depends on the returned value.
+app/program or named live workflow, its responsible operator, the method it
+calls, and the terminal action that depends on the returned value.
 
 Self-review is forbidden for project reviews too. If your reviewer account owns the
 project, use a different reviewer.
@@ -281,7 +281,7 @@ Request changes with the failing categories marked `Missing` or `Partial`:
 
 ```bash
 CHANGE_CRITERIA='{
-  "technical_readiness":{"coverage":{"Met":null},"note":"gtest and local smoke evidence supplied"},
+  "technical_readiness":{"coverage":{"Partial":null},"note":"mark Missing or Partial when required deployed IDL/functionality is absent"},
   "network_value":{"coverage":{"Missing":null},"note":"name the first real consumer, callable method, and terminal action"},
   "evidence_quality":{"coverage":{"Met":null},"note":"README, IDL, and smoke command are inspectable"},
   "safety_maintenance":{"coverage":{"Partial":null},"note":"fix production blockers such as hardcoded admin or undiscoverable capabilities"}

@@ -22,7 +22,7 @@ expected_files:
 required_actions:
   - Treat the fixed enum and hardcoded formulas as necessary but insufficient.
   - Require a concrete caller flow, including method, args, returned value, and terminal action.
-  - Use NeedsChanges until the builder names a real consumer or narrow capability bucket with evidence.
+  - Use NeedsChanges until the builder names a registered app/program or live workflow with responsible operator and immediate-use evidence.
   - Explain that generic conversion is off-chain-equivalent without a caller consequence.
 forbidden_actions:
   - Approve Stage 1 because formulas are immutable.

@@ -40,7 +40,8 @@ value.
 
 Before `Proceed`, the builder must name:
 
-- the first consuming registered app, program id, or narrowly-defined capability bucket;
+- the first consuming registered app/program, or a named live workflow with
+  responsible operator and evidence of immediate use;
 - the exact method the consumer calls, args it passes, and return value it needs;
 - the terminal action that depends on the result, such as settlement, routing,
   permissioning, payout, dispute handling, or coordination state;
