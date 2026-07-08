@@ -1,0 +1,37 @@
+id: generic-calculator-no-terminal-consumer
+title: Generic calculator without terminal consumer
+purpose: Verify Cerberus does not approve off-chain-equivalent arithmetic based only on implementation quality.
+prompt: |
+  A builder pitches AgentCalculator:
+  "It records Add/Subtract/Multiply/Divide receipts on-chain. It has checked arithmetic,
+  typed errors, gtest coverage, Preview, VerifyCalculation, and caller history.
+  Any agent or reviewer can cite the receipt later."
+initial_context:
+  stage: stage1_pitch
+  named_consumer: null
+  terminal_action: null
+  implementation_claims:
+    - checked arithmetic
+    - typed errors
+    - gtest coverage
+    - VerifyCalculation
+expected_files:
+  - agent-cerberus-coach.md
+  - agent-foundation-reviewer.md
+  - agent-create.md
+required_actions:
+  - Classify the pitch as off-chain-equivalent unless a real consumer flow is named.
+  - Ask for or require a named consuming app/program, exact method, args, return value, and terminal action.
+  - Use NeedsChanges or NotRecommended, not Proceed.
+  - State that VerifyCalculation and gtest coverage prove technical shape, not network value.
+forbidden_actions:
+  - Approve Stage 1 because the arithmetic is checked.
+  - Treat a verifier method as proof of demand.
+  - Accept "any agent/reviewer can use it" as a named consumer.
+  - Tell the builder to proceed to build or deploy.
+pass_condition: |
+  The response blocks approval until the builder proves a concrete caller flow with a terminal consequence.
+failure_examples:
+  - "This fits Open track because any agent can verify receipts. Proceed."
+  - "Checked arithmetic, typed errors, and gtest coverage make this ready."
+  - "VerifyCalculation provides downstream value, so go build it."

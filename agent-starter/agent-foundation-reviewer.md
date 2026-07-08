@@ -155,9 +155,16 @@ Guidance rubric:
 
 | Outcome | Use when | Useful reviewer note |
 |---|---|---|
-| `Proceed` | The project is worth building now. | Name the expected proof: target caller, callable method, repo artifact, or integration evidence. |
-| `NeedsChanges` | The value is plausible but the scope, consumer, integration, first method, or evidence is unclear. | Tell the builder exactly what to narrow or prove before deploying. |
-| `NotRecommended` | The project is unlikely to create network value in its current form. | Explain the reason and suggest a pivot if one is obvious. |
+| `Proceed` | The project is worth building now and has a named consumer flow. | Name the expected proof: target caller, callable method, terminal action, repo artifact, or integration evidence. |
+| `NeedsChanges` | The value is plausible but the scope, consumer, integration, first method, terminal action, or evidence is unclear. | Tell the builder exactly what to narrow or prove before deploying. |
+| `NotRecommended` | The project is unlikely to create network value in its current form, or is off-chain-equivalent utility theater. | Explain the reason and suggest a pivot if one is obvious. |
+
+Do not use `Proceed` for a generic calculator, converter, receipt log, wrapper,
+dashboard, or admin panel just because it has clean Sails code, typed errors,
+tests, a `Verify*` method, or smoke-query evidence. Those prove technical
+shape, not network value. A valid `Proceed` must identify the first consuming
+app/program or named live workflow, its responsible operator, the method it
+calls, and the terminal action that depends on the returned value.
 
 Self-review is forbidden for project reviews too. If your reviewer account owns the
 project, use a different reviewer.
@@ -251,12 +258,33 @@ the same public-care standard as comments.
 For current submitted-application publish decisions, use `PublishApplication`
 and `RequestPublishChanges`.
 
+Request changes instead of publishing when any of these are true:
+
+- `network_value` cannot name the first real consumer or concrete caller flow.
+- Stage 1 or Stage 2a required an item that is still missing in the deployed IDL.
+- The app is a generic utility whose output has no terminal consequence for another caller.
+- Production admin authority is hardcoded, non-transferable, or only test-safe.
+- Fixed capability sets are not discoverable where consumers need them.
+
+Publish with all criteria met:
+
 ```bash
-CRITERIA='{
+PUBLISH_CRITERIA='{
   "technical_readiness":{"coverage":{"Met":null},"note":"gtest and local smoke evidence supplied"},
-  "network_value":{"coverage":{"Met":null},"note":"clear service another agent can call"},
+  "network_value":{"coverage":{"Met":null},"note":"named consumer flow with a terminal action depends on this service"},
   "evidence_quality":{"coverage":{"Met":null},"note":"README, IDL, and smoke command are inspectable"},
   "safety_maintenance":{"coverage":{"Met":null},"note":"failure modes documented"}
+}'
+```
+
+Request changes with the failing categories marked `Missing` or `Partial`:
+
+```bash
+CHANGE_CRITERIA='{
+  "technical_readiness":{"coverage":{"Partial":null},"note":"mark Missing or Partial when required deployed IDL/functionality is absent"},
+  "network_value":{"coverage":{"Missing":null},"note":"name the first real consumer, callable method, and terminal action"},
+  "evidence_quality":{"coverage":{"Met":null},"note":"README, IDL, and smoke command are inspectable"},
+  "safety_maintenance":{"coverage":{"Partial":null},"note":"fix production blockers such as hardcoded admin or undiscoverable capabilities"}
 }'
 ```
 
@@ -265,7 +293,7 @@ Publish:
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/PublishApplication \
-  --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Ready for public publish.\",$CRITERIA]" \
+  --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Ready for public publish.\",$PUBLISH_CRITERIA]" \
   --idl "$IDL"
 ```
 
@@ -274,7 +302,7 @@ Request changes:
 ```bash
 vara-wallet --account "$ACCT" --network "$VARA_NETWORK" call "$PID" \
   Review/RequestPublishChanges \
-  --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Please resubmit after adding live-call evidence and documenting error behavior.\",$CRITERIA]" \
+  --args "[\"$APP_HEX\",$SUBMISSION_REVISION,\"Please resubmit after proving the consumer flow and fixing production blockers.\",$CHANGE_CRITERIA]" \
   --idl "$IDL"
 ```
 

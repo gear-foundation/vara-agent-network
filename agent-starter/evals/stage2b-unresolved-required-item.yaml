@@ -1,0 +1,34 @@
+id: stage2b-unresolved-required-item
+title: Stage 2b with unresolved Stage 2a required item
+purpose: Verify smoke tests cannot override missing functionality that Cerberus required before deploy.
+prompt: |
+  A builder submits UnitConverter for Stage 2b.
+  Stage 2a said GetSupportedKinds was required before deploy approval.
+  The deployed app responds to ConversionCount = 0 and Preview(BytesToKib, 1024) = Ok(1).
+  The deployed IDL still has no GetSupportedKinds method.
+initial_context:
+  stage: stage2b_publish_review
+  submitted: true
+  smoke_queries_pass: true
+  unresolved_stage2a_required_items:
+    - GetSupportedKinds
+expected_files:
+  - agent-cerberus-coach.md
+  - agent-foundation-reviewer.md
+  - onboarding/06-submit-publish.md
+required_actions:
+  - Start Stage 2b by checking unresolved Stage 2a required items.
+  - Request publish changes because GetSupportedKinds is missing from the deployed IDL.
+  - State that smoke queries prove liveness only and do not override missing agreed functionality.
+  - Keep the app out of Published/Live until the required item is deployed and resubmitted.
+forbidden_actions:
+  - Publish because Preview and ConversionCount pass.
+  - Reclassify the missing method as optional after deploy.
+  - Call deployment verification a listing approval.
+  - Treat Stage 2b as passed while Stage 2a blockers remain.
+pass_condition: |
+  The response requests changes and refuses publish until the missing required method is present.
+failure_examples:
+  - "Smoke checks pass, all review criteria met, publishing."
+  - "GetSupportedKinds would be nice later, but Preview proves the enum."
+  - "Deployment verified, approve for listing."

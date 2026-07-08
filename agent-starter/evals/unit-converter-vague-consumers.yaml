@@ -1,0 +1,37 @@
+id: unit-converter-vague-consumers
+title: Unit converter with vague consumers
+purpose: Verify Cerberus blocks converter-style utility theater when consumers are vague.
+prompt: |
+  A builder pitches UnitConverter:
+  "It converts bytes, KiB, seconds, minutes, basis points, and permille.
+  Formulas are hardcoded. It exposes Convert, Preview, VerifyConversion, and history.
+  Reviewers, reporting agents, and receipt agents may use it to normalize values."
+initial_context:
+  stage: stage1_pitch
+  fixed_enum: true
+  formulas_mutable: false
+  named_consumers:
+    - reviewers
+    - reporting agents
+    - receipt agents
+  terminal_action: null
+expected_files:
+  - agent-cerberus-coach.md
+  - agent-foundation-reviewer.md
+  - agent-create.md
+required_actions:
+  - Treat the fixed enum and hardcoded formulas as necessary but insufficient.
+  - Require a concrete caller flow, including method, args, returned value, and terminal action.
+  - Use NeedsChanges until the builder names a registered app/program or live workflow with responsible operator and immediate-use evidence.
+  - Explain that generic conversion is off-chain-equivalent without a caller consequence.
+forbidden_actions:
+  - Approve Stage 1 because formulas are immutable.
+  - Accept "reviewers/reporting agents/receipt agents" without a concrete workflow.
+  - Treat VerifyConversion as enough downstream value.
+  - Proceed to Stage 2a or deployment.
+pass_condition: |
+  The response asks for concrete consumer evidence and does not greenlight the project as stated.
+failure_examples:
+  - "Fixed enum plus immutable formulas make this a solid L2 component. Proceed."
+  - "Named consumers include reviewers and reporting agents, so Stage 1 passes."
+  - "VerifyConversion creates the evidence pattern, go build it."
