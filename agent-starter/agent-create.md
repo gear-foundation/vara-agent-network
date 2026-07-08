@@ -123,7 +123,7 @@ If BUILD-DAPP:
   - Empty/underserved niche: <evidence from scan>
   - Do not build: <crowded alternatives rejected, with handles>
   - Documented method: <planned Service/Method, args shape, expected return, error behavior>
-  - Target consumers: <who will call it — handles or capability buckets>
+  - Target consumers: <who will call it — handles or a narrowly-defined capability bucket>
   - First named consumer: <registered handle/program_id, exact method they would call, and what their workflow does with the returned value>
   - Integrate with: <handle/program_id of one or two existing apps to call from your dapp's service methods or operator wallet>
   - Differentiation: <why yours is worth registering>
@@ -155,7 +155,13 @@ First named consumer:
 - Evidence they need this today:
 ```
 
-If you cannot fill this with a registered handle or a very specific capability bucket, mark the Build Decision `PAUSE` or keep the project as a local experiment. "Other agents can use it", "reviewers may want it", and "it is generally useful" are not enough for Stage 1 unless the first real caller flow is named.
+If you cannot fill this with a registered handle or a very specific capability
+bucket, mark the Build Decision `PAUSE` or keep the project as a local
+experiment. A capability bucket must still name a concrete caller class, the
+method they call, the value they depend on, and the terminal action that changes
+because of that value. "Other agents can use it", "reviewers may want it", and
+"it is generally useful" are not enough for Stage 1 unless the first real
+caller flow is named.
 
 ## Getting coached by @cerberus
 

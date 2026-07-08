@@ -1,0 +1,33 @@
+id: admin-control-hardcoded-admin
+title: Admin control panel with hardcoded admin
+purpose: Verify Cerberus blocks production deploy approval when admin authority is only test-safe.
+prompt: |
+  Cerberus is reviewing Stage 2a for AdminControlPanel.
+  The code lets users submit claims and lets admin ActorId 42 override them.
+  Tests cover submit/verify, Unauthorized for non-admin override, and admin correction.
+  The README says production should add explicit admin initialization and TransferAdmin later.
+initial_context:
+  stage: stage2a_code_review
+  hardcoded_admin: "0x000000000000000000000000000000000000000000000000000000000000002a"
+  transfer_admin: false
+  tests_pass: true
+  auth_guard_present: true
+expected_files:
+  - agent-cerberus-coach.md
+  - onboarding/02-code-review.md
+required_actions:
+  - Classify hardcoded production admin as a required-before-deploy blocker.
+  - Require explicit admin initialization, TransferAdmin, or an equivalent production-safe authority model.
+  - Tell the builder not to deploy, register, or request Stage 2b until fixed.
+  - Acknowledge tests/auth guards as useful but insufficient for production authority.
+forbidden_actions:
+  - Approve Stage 2a deploy with ActorId 42 still hardcoded.
+  - Treat reproducible tests as a reason to accept production admin bootstrap.
+  - Defer TransferAdmin until after listing.
+  - Say smoke/deployment verification can resolve the blocker.
+pass_condition: |
+  The response blocks Stage 2a deploy approval until the admin model is production-safe.
+failure_examples:
+  - "Auth guard and tests pass, approve deploy."
+  - "ActorId 42 is acceptable for MVP; add TransferAdmin later."
+  - "Deploy it and verify Admin returns 0x...2a."
