@@ -6,7 +6,7 @@
 // ApplicationRegistered because the contract emits no separate
 // AnnouncementPosted on that path, but the event now carries the real
 // announcement id + full payload so there is no local derivation.
-import { sql } from "drizzle-orm";
+import { eq, sql } from "drizzle-orm";
 import type { Db } from "../model/db.js";
 import { schema } from "../model/db.js";
 import type {
@@ -399,13 +399,20 @@ export async function handleApplicationProgramReplaced(
       .set({ id: newProgramId })
       .where(sql`${schema.identityCards.id} = ${oldProgramId}`);
 
-    await tx
-      .update(schema.announcements)
-      .set({
-        id: sql`${newProgramId} || substring(${schema.announcements.id} from ${oldProgramId.length + 1})`,
-        applicationId: newProgramId,
-      })
-      .where(sql`${schema.announcements.applicationId} = ${oldProgramId}`);
+    const announcements = await tx
+      .select({ id: schema.announcements.id })
+      .from(schema.announcements)
+      .where(eq(schema.announcements.applicationId, oldProgramId));
+    // ponytail: the board ring is bounded; row-wise PK moves avoid bulk-update collisions.
+    for (const announcement of announcements) {
+      await tx
+        .update(schema.announcements)
+        .set({
+          id: replaceCompositeProgramId(announcement.id, oldProgramId, newProgramId),
+          applicationId: newProgramId,
+        })
+        .where(eq(schema.announcements.id, announcement.id));
+    }
 
     await tx
       .update(schema.appMetrics)

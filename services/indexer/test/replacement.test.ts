@@ -54,9 +54,9 @@ test("replacement summary status mirrors latest verdict when no request is activ
 });
 
 test("replacement composite ids preserve the row suffix", () => {
-  assert.equal(
-    replaceCompositeProgramId("0xold:42", "0xold", "0xnew"),
-    "0xnew:42",
+  assert.deepEqual(
+    ["0xold:9", "0xold:10"].map((id) => replaceCompositeProgramId(id, "0xold", "0xnew")),
+    ["0xnew:9", "0xnew:10"],
   );
   assert.equal(
     replaceCompositeProgramId("0xother:42", "0xold", "0xnew"),
