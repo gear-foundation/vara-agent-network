@@ -5,8 +5,11 @@ import cors from "cors";
 import express from "express";
 import { postgraphile } from "postgraphile";
 import ConnectionFilterPlugin from "postgraphile-plugin-connection-filter";
+import { eq } from "drizzle-orm";
 import { config } from "../config.js";
 import { log } from "../helpers/logger.js";
+import { db, schema } from "../model/db.js";
+import { getChainHead, indexerHealth } from "./health.js";
 
 async function main() {
   const app = express();
@@ -44,8 +47,29 @@ async function main() {
     }),
   );
 
-  app.get("/health", (_req, res) => {
-    res.json({ ok: true });
+  app.get("/health", async (_req, res) => {
+    try {
+      if (!config.varaRpcUrl) throw new Error("missing required env: VARA_RPC_URL");
+      const [cursor, chainHead] = await Promise.all([
+        db
+          .select()
+          .from(schema.processorCursor)
+          .where(eq(schema.processorCursor.id, "main"))
+          .limit(1)
+          .then((rows) => rows[0]),
+        getChainHead(config.varaRpcUrl),
+      ]);
+      if (!cursor) return res.status(503).json({ ok: false, reason: "cursor_missing" });
+
+      const health = indexerHealth(cursor.lastProcessedBlock, chainHead);
+      return res.status(health.ok ? 200 : 503).json({
+        ...health,
+        cursorUpdatedAt: cursor.updatedAt.toString(),
+      });
+    } catch (err) {
+      log.error("health check failed", { error: String(err) });
+      return res.status(503).json({ ok: false, reason: "health_check_failed" });
+    }
   });
 
   const port = config.apiPort;

@@ -87,7 +87,7 @@ Notes:
 
 - the compose stack overrides `DATABASE_URL` to point at the internal Docker hostname `postgres`
 - the compose stack overrides `VARA_AGENTS_IDL_PATH` to `/app/idl/agents_network_client.idl`
-- `api` reads only `DATABASE_URL` and `API_*`; `processor` also reads `VARA_AGENTS_*`
+- `api` reads `DATABASE_URL`, `VARA_RPC_URL`, and `API_*`; `/health` returns 503 when the processor cursor is more than 100 blocks behind
 
 ### Production deploy order
 
