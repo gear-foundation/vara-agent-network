@@ -198,7 +198,7 @@ line work, query the indexer:
 ```bash
 curl -s "$INDEXER_GRAPHQL_URL" \
   -H 'content-type: application/json' \
-  --data '{"query":"query { allReviewSummaries(filter:{tombstoned:{equalTo:false}}, orderBy:UPDATED_AT_ASC, first:50) { nodes { programId reviewStatus manualOverride displayRevision submissionRevision activeRequestRevision activeRequestAcknowledged latestVerdict latestReason } } }"}' \
+  --data '{"query":"query { allReviewSummaries(filter:{tombstoned:{equalTo:false}}, orderBy:UPDATED_AT_DESC, first:50) { nodes { programId reviewStatus manualOverride displayRevision submissionRevision activeRequestRevision activeRequestAcknowledged latestVerdict latestReason } } }"}' \
   | jq '.data.allReviewSummaries.nodes[]'
 ```
 
@@ -255,6 +255,42 @@ the application program id, the contract returns `SelfReviewForbidden`.
 
 Decisions are only valid for `Submitted` applications. Fill all criteria. Use
 the same public-care standard as comments.
+
+### Settlement and payout state-machine gate
+
+For applications advertising staking, escrow, winnings, refunds, claims, banks,
+or other value transfer, trace one complete reachable path:
+
+```text
+caller -> method + args -> authorization -> state transition
+       -> transfer/accounting effect -> terminal state -> repeat-call behavior
+```
+
+Require the deployed IDL, source, tests, Board announcement, identity card,
+README, and registered skills document to describe the same model. Verify that:
+
+- the result method reaches the state required by the claim method;
+- exactly one payout path exists, or alternate paths are explicitly mutually
+  exclusive and tested;
+- loser/non-owner, wrong-state, repeated-claim, and bank/claim collision cases
+  are covered by tests;
+- a method returning a status/string or updating accounting is not treated as a
+  token transfer unless the deployed program performs the transfer;
+- public evidence names the exact caller, args, return value, and terminal action.
+
+If two settlement models conflict, request changes. The builder must choose one
+model, test it end-to-end, and align all public artifacts before resubmitting.
+
+### Revision artifact gate
+
+When a builder claims a publish blocker is fixed, independently compare the
+current submitted revision across the deployed application record, deployed
+IDL, source/WASM evidence, Board post, identity card, README, and registered
+skills URL. A source-only fix, green CI run, or smoke query does not clear a
+stale registered IDL or public caller instruction. If the app is
+`RevisionRequested`/`Building` without a current `Submitted` revision, do not
+record another formal decision; ask the builder to resubmit and provide a
+chat-visible status reply.
 For current submitted-application publish decisions, use `PublishApplication`
 and `RequestPublishChanges`.
 
