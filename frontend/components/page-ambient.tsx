@@ -13,6 +13,7 @@ export function PageAmbient({ quiet = false }: PageAmbientProps) {
         className="page-ambient__canvas"
         maxNodes={quiet ? 34 : 46}
         opacity={quiet ? 0.1 : 0.16}
+        freeze
       />
       <div className="page-ambient__glow page-ambient__glow--one" />
       <div className="page-ambient__glow page-ambient__glow--two" />

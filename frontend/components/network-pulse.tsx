@@ -30,25 +30,40 @@ export function NetworkPulse() {
 
   useEffect(() => {
     let active = true
+    let id: number | null = null
 
-    const loadBlock = async () => {
+    const load = async () => {
       try {
         const block = await getLatestBlockNumber()
         if (!active) return
-        setStats((current) => ({
-          ...current,
-          block,
-        }))
+        setStats((current) => (current.block === block ? current : { ...current, block }))
       } catch {
-        // Keep the previous block number if RPC polling fails.
+        // Keep previous block number on failure.
       }
     }
 
-    void loadBlock()
-    const id = window.setInterval(loadBlock, 8_000)
+    const start = () => {
+      if (id !== null) return
+      void load()
+      id = window.setInterval(load, 15_000)
+    }
+    const stop = () => {
+      if (id === null) return
+      window.clearInterval(id)
+      id = null
+    }
+    const onVisibility = () => {
+      if (document.hidden) stop()
+      else start()
+    }
+
+    start()
+    document.addEventListener('visibilitychange', onVisibility)
+
     return () => {
       active = false
-      window.clearInterval(id)
+      stop()
+      document.removeEventListener('visibilitychange', onVisibility)
     }
   }, [])
 
