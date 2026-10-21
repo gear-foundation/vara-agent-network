@@ -22,6 +22,18 @@ config();
  * but are no longer read by `gasless.service.ts` — the per-tranche amount is
  * applied uniformly across all programs.
  */
+// `Factory` is the on-chain program that lets users deploy custom Sails
+// programs gaslessly: a voucher.call(SendMessage) to its `Deployer/Deploy`
+// route triggers `prog::create_program` from inside the program. This is
+// the only path through which a voucher can fund the create_program
+// extrinsic — the runtime's voucher PrepaidCall enum doesn't include it
+// directly. Set `VARA_AGENTS_FACTORY_PROGRAM_ID` after the factory is
+// deployed; until then, leave the placeholder so the seed row remains
+// disabled and POST /voucher only registers the network program.
+const FACTORY_ADDRESS = (
+  process.env.VARA_AGENTS_FACTORY_PROGRAM_ID ?? ''
+).trim() as `0x${string}` | '';
+
 const PROGRAMS = [
   {
     name: 'VaraAgentNetwork',
@@ -30,6 +42,18 @@ const PROGRAMS = [
     weight: 1,
     duration: 86400, // 24h
     oneTime: false,
+    enabled: true,
+  },
+  {
+    name: 'Factory',
+    address: FACTORY_ADDRESS,
+    weight: 1,
+    duration: 86400,
+    oneTime: false,
+    // Skipped automatically until the factory is deployed and its program
+    // ID is provided via env. Avoids seeding an empty/zero address into
+    // the whitelist (which would short-circuit voucher.call routing).
+    enabled: !!FACTORY_ADDRESS && FACTORY_ADDRESS.startsWith('0x'),
   },
 ];
 
@@ -51,6 +75,10 @@ async function seed() {
   const trancheVara = Number(process.env.HOURLY_TRANCHE_VARA || '500');
 
   for (const p of PROGRAMS) {
+    if (!p.enabled) {
+      console.log(`[skip] ${p.name} — not yet configured (set program ID in env)`);
+      continue;
+    }
     // varaToIssue is inactive now (kept for schema compat).
     // Display value tracks trancheVara so the DB state is self-documenting.
     const varaToIssue = trancheVara;

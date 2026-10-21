@@ -219,6 +219,10 @@ describe('VoucherService', () => {
       BigInt(500) * BigInt(1e12),
       Math.round(86400 / 3),
       programs,
+      // codeUploading is unconditional — required for the factory deploy
+      // flow, since vouchers can't pay create_program directly and must
+      // route it through factory.SendMessage + UploadCode.
+      true,
     );
   });
 
@@ -312,6 +316,9 @@ describe('VoucherService', () => {
     await service.update(makeVoucher({ validUpToBlock: '28900' as any }), 500, 86400);
 
     expect(mockVoucherUpdate).toHaveBeenCalledWith('0xabc', '0xvoucher', {
+      // codeUploading: true is set on every update so legacy vouchers get
+      // promoted to code-upload-capable on their next tranche.
+      codeUploading: true,
       balanceTopUp: 500n * 10n ** 12n,
     });
   });

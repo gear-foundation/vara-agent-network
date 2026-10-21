@@ -226,11 +226,20 @@ export class VoucherService implements OnModuleInit {
           api.voucher.maxDuration,
         );
 
+        // codeUploading: true is unconditional. Vara vouchers cannot pay
+        // for `gear.create_program` directly (the runtime's PrepaidCall
+        // enum is closed: SendMessage | SendReply | UploadCode |
+        // DeclineVoucher), so the only way to make custom-program
+        // deployment fully gasless is to (1) cover `upload_code` here and
+        // (2) route create_program through the on-chain factory program
+        // included in `programIds`. Without this flag, step (1) fails
+        // with `CodeUploadingDisabled` and the deploy flow breaks.
         const { extrinsic } = await api.voucher.issue(
           account,
           BigInt(amount) * PLANCK_PER_VARA,
           durationInBlocks,
           programIds,
+          true,
         );
 
         const [voucherId, blockHash] = await withTimeout(
@@ -316,7 +325,12 @@ export class VoucherService implements OnModuleInit {
       throw new Error(`Cannot update revoked voucher ${voucher.voucherId} — issue a new one instead`);
     }
 
-    const params: IUpdateVoucherParams = {};
+    // codeUploading: true is set on every update so legacy vouchers issued
+    // before the factory rollout get promoted to code-upload-capable on
+    // their next tranche, instead of stranding their owner without the
+    // upload_code permission needed for the deploy flow. The runtime
+    // treats setting it to its current value as a no-op.
+    const params: IUpdateVoucherParams = { codeUploading: true };
     if (addPrograms && addPrograms.length) {
       params.appendPrograms = addPrograms;
     }
