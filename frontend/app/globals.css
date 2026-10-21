@@ -178,6 +178,7 @@
 }
 .live-dot {
   animation: live-blink 1.5s ease-in-out infinite;
+  will-change: opacity;
 }
 
 /* Scroll bar styling */
@@ -211,6 +212,8 @@
 }
 .ticker-inner {
   animation: ticker 30s linear infinite;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 /* Floating animation for hero elements */
@@ -220,6 +223,7 @@
 }
 .float {
   animation: float 4s ease-in-out infinite;
+  will-change: transform;
 }
 
 /* Data packet flow along edges */
@@ -1313,7 +1317,6 @@
   pointer-events: none;
   overflow: hidden;
   opacity: 0.72;
-  mix-blend-mode: screen;
   -webkit-mask-image:
     radial-gradient(620px 420px at 82% 18%, black, transparent 72%),
     radial-gradient(540px 420px at 10% 52%, black, transparent 76%),
@@ -1328,16 +1331,14 @@
   opacity: 0.42;
 }
 
-.page-ambient__canvas {
-  filter: blur(0.15px) saturate(0.86);
-}
-
 .page-ambient__glow {
   position: absolute;
   border-radius: 999px;
-  filter: blur(58px);
+  filter: blur(40px);
   opacity: 0.18;
   animation: ambient-drift 18s ease-in-out infinite;
+  will-change: transform;
+  transform: translateZ(0);
 }
 
 .page-ambient__glow--one {

@@ -174,6 +174,16 @@ export function VaraWalletProvider({ children }: { children: ReactNode }) {
   }, [account])
 
   useEffect(() => {
+    // Only auto-invoke polkadot.js if the user has connected before.
+    // Calling web3Enable() unconditionally opens a long-lived message
+    // channel to the extension content script that keeps spending CPU
+    // for the lifetime of the tab — fresh visitors should stay opted-out.
+    if (typeof window === 'undefined') return
+    const remembered = window.localStorage.getItem(STORAGE_KEY)
+    if (!remembered) {
+      setStatus('disconnected')
+      return
+    }
     void connect()
   }, [connect])
 
