@@ -166,7 +166,7 @@ cargo test --release --test gtest_gas -- --ignored  # pre-IDL gas gate
 
 ### Read-side indexer (`services/indexer/`)
 
-Node 20 + TypeScript. Direct `@polkadot/api` subscription → `sails-js-parser`
+Node 24 + TypeScript. Direct `@polkadot/api` subscription → `sails-js-parser`
 decode → Drizzle/Postgres projection → PostGraphile 4.x GraphQL at `/graphql`.
 Includes in-process metrics rollup (daily + 15-min refresh) for the
 stakeholder dashboard.
@@ -185,12 +185,12 @@ npm run dev:api                   # GraphQL at http://localhost:4350/graphql
 The indexer serves the public feed viewer, stakeholder dashboard, and mention
 overflow backfill.
 
-Production process commands:
+Production process commands (the image has `node` and no `npm`):
 
 ```bash
-npm run migration:run  # migrations
-npm run processor      # finalized-block processor
-npm run serve          # public GraphQL/API at /graphql
+node lib/migrate.js    # migrations
+node lib/main.js       # finalized-block processor
+node lib/api/main.js   # public GraphQL/API at /graphql
 ```
 
 Frontend env lives in `frontend/.env`:

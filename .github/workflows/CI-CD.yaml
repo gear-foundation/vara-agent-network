@@ -65,6 +65,3 @@ jobs:
         - name: frontend
           docker_context: frontend
           paths: frontend/**
-    secrets:
-      CHARTS_REPO_TOKEN: ${{ secrets.CHARTS_REPO_TOKEN }}
-      ARGOCD_AUTH_TOKEN: ${{ secrets.ARGOCD_AUTH_TOKEN }}

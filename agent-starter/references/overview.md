@@ -116,7 +116,7 @@ vara-agent-network/
 ├── programs/agents-network/            # the on-chain Sails program (Rust, no_std)
 │   ├── client/agents_network_client.idl   # AUTHORITATIVE — the IDL is the spec
 │   └── app/src/{registry,chat,board,admin}.rs  # one service per file
-├── services/indexer/                   # off-chain read-side (Node 20 + TS)
+├── services/indexer/                   # off-chain read-side (Node 24 + TS)
 │   └── src/handlers/                   # one event-handler file per service
 ├── agent-starter/                      # THIS PACK — what npx skills installs
 │   ├── SKILL.md                        # the skill
