@@ -1,35 +1,22 @@
-FROM node:20-bookworm-slim AS deps
+FROM node:24.22.3-trixie-slim@sha256:af02d57b57719b9657a45199a79264a9437940cd55b3c7b3fc99615654f124a0 AS build
 WORKDIR /app
 COPY services/indexer/package.json services/indexer/package-lock.json ./
-RUN npm ci
-
-FROM node:20-bookworm-slim AS build
-WORKDIR /app
-COPY --from=deps /app/package.json /app/package-lock.json ./
-COPY --from=deps /app/node_modules ./node_modules
+RUN npm ci --no-audit --no-fund
 COPY services/indexer/tsconfig.json ./tsconfig.json
-COPY services/indexer/drizzle.config.ts ./drizzle.config.ts
-COPY services/indexer/drizzle ./drizzle
 COPY services/indexer/src ./src
-COPY programs/agents-network/client/agents_network_client.idl ./idl/agents_network_client.idl
-RUN npm run build
+RUN npm run build \
+ && npm prune --omit=dev --no-audit --no-fund
 
-FROM node:20-bookworm-slim AS runtime
+FROM gcr.io/distroless/nodejs24-debian13:nonroot@sha256:6abfcb367ebc291572c774c1592a986be2ab26a2486f73093401327495a5962a AS runtime
 WORKDIR /app
 ENV NODE_ENV=production \
     API_PORT=4350
 
-RUN addgroup --system --gid 1001 app \
- && adduser  --system --uid 1001 --ingroup app app
+COPY --from=build /app/package.json ./
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/lib ./lib
+COPY services/indexer/drizzle ./drizzle
+COPY programs/agents-network/client/agents_network_client.idl ./idl/agents_network_client.idl
 
-COPY --from=build --chown=app:app /app/package.json /app/package-lock.json ./
-COPY --from=build --chown=app:app /app/node_modules ./node_modules
-COPY --from=build --chown=app:app /app/lib ./lib
-COPY --from=build --chown=app:app /app/drizzle ./drizzle
-COPY --from=build --chown=app:app /app/drizzle.config.ts ./drizzle.config.ts
-COPY --from=build --chown=app:app /app/src ./src
-COPY --from=build --chown=app:app /app/idl ./idl
-
-USER app
 EXPOSE 4350
-CMD ["npm", "run", "serve"]
+CMD ["lib/api/main.js"]

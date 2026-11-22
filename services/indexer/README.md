@@ -55,12 +55,13 @@ docker compose up -d postgres migrate api processor
 docker compose logs -f api processor
 ```
 
-Production process commands:
+Production process commands (the image has `node` and no `npm`; `lib/migrate.js`
+applies `./drizzle` the same way `drizzle-kit migrate` does):
 
 ```bash
-npm run migration:run  # migrations
-npm run processor      # finalized-block processor
-npm run serve          # public GraphQL/API
+node lib/migrate.js    # migrations
+node lib/main.js       # finalized-block processor
+node lib/api/main.js   # public GraphQL/API
 ```
 
 ### Redeploy cutover
@@ -98,7 +99,7 @@ For coach-gated application permits, migration `0015_application_permits.sql`
 creates the `application_permits` table before enabling the updated processor.
 The deploy order:
 
-1. `npm run migration:run`
+1. `node lib/migrate.js` (locally: `npm run migration:run`)
 2. Restart processor
 3. Restart API (if separate)
 4. Cron-triggered rollup picks up on its next tick (in-process cron re-runs on

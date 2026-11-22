@@ -34,7 +34,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-    command: ["npm", "run", "migrate"]
+    command: ["dist/src/migrate.js"]
 
   seed:
     build:
@@ -55,7 +55,7 @@ services:
         condition: service_healthy
       migrate:
         condition: service_completed_successfully
-    command: ["npm", "run", "seed"]
+    command: ["dist/src/seed.js"]
 
   voucher-backend:
     build:
